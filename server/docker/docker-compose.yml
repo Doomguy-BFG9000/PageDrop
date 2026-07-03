@@ -13,7 +13,7 @@ services:
     mem_limit: "${WORKER_MEMORY_LIMIT:-3g}"
     cpus: "${WORKER_CPU_LIMIT:-1.0}"
     ports:
-      - "8080:8080"
+      - "9090:8080"
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8080')"]
       interval: 30s
