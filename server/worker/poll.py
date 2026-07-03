@@ -288,6 +288,36 @@ async def process_job(job: dict) -> dict:
             pass
 
 
+async def health_server(host: str = "0.0.0.0", port: int = 8080):
+    """Minimal HTTP health endpoint for Coolify health checks."""
+    started_at = datetime.now(timezone.utc)
+
+    async def handler(reader, writer):
+        stats = {
+            "status": "healthy",
+            "service": "pagedrop-worker",
+            "started_at": started_at.isoformat(),
+        }
+        body = json.dumps(stats)
+        response = (
+            "HTTP/1.1 200 OK\r\n"
+            "Content-Type: application/json\r\n"
+            f"Content-Length: {len(body)}\r\n"
+            "Connection: close\r\n"
+            "\r\n"
+            f"{body}"
+        )
+        writer.write(response.encode())
+        await writer.drain()
+        writer.close()
+        await writer.wait_closed()
+
+    server = await asyncio.start_server(handler, host, port)
+    print(f"[health] Listening on {host}:{port}")
+    async with server:
+        await server.serve_forever()
+
+
 async def poll_loop():
     """Main loop: poll Supabase for pending jobs, process them."""
     ARTIFACT_DIR.mkdir(parents=True, exist_ok=True)
@@ -297,7 +327,6 @@ async def poll_loop():
     async def claim_and_process():
         """Atomically claim a pending job and process it."""
         async with semaphore:
-            # Find next pending job
             params = {
                 "status": "eq.pending",
                 "order": "created_at.asc",
@@ -310,15 +339,12 @@ async def poll_loop():
             job = jobs[0]
             job_id = job["id"]
 
-            # Claim it atomically
             supabase_patch(f"/jobs?id=eq.{job_id}&status=eq.pending", {
                 "status": "processing",
                 "started_at": datetime.now(timezone.utc).isoformat(),
             })
 
             result = await process_job(job)
-
-            # Update job with result
             supabase_patch(f"/jobs?id=eq.{job_id}", result)
 
     while True:
@@ -336,7 +362,13 @@ def main():
     print(f"[worker] Max concurrent: {MAX_CONCURRENT}")
     print(f"[worker] Job timeout: {JOB_TIMEOUT}s")
 
-    asyncio.run(poll_loop())
+    async def run_all():
+        await asyncio.gather(
+            poll_loop(),
+            health_server(),
+        )
+
+    asyncio.run(run_all())
 
 
 if __name__ == "__main__":
