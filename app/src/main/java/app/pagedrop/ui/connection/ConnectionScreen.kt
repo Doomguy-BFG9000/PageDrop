@@ -28,7 +28,6 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
@@ -50,7 +49,6 @@ import app.pagedrop.data.KindleSettings
 fun ConnectionScreen(
     modifier: Modifier = Modifier,
     onBack: () -> Unit = {},
-    settings: KindleSettings = hiltViewModel<ConnectionViewModel>().kindleSettings,
     viewModel: ConnectionViewModel = hiltViewModel()
 ) {
     val state by viewModel.state.collectAsState()
@@ -207,6 +205,111 @@ fun ConnectionScreen(
                         Column {
                             Text(
                                 if (result.isSuccess) "Connection successful" else "Connection failed",
+                                fontWeight = FontWeight.SemiBold
+                            )
+                            if (result.isFailure) {
+                                Text(
+                                    result.exceptionOrNull()?.localizedMessage ?: "Unknown error",
+                                    style = MaterialTheme.typography.bodySmall
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+
+            HorizontalDivider()
+
+            Text(
+                text = "Server-Assisted Conversion",
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.SemiBold
+            )
+            Text(
+                text = "Optional. PageDrop only uses this for heavy conversion and article formatting; the app still stores books and talks to your Kindle.",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Checkbox(
+                    checked = state.serverEnabled,
+                    onCheckedChange = viewModel::updateServerEnabled
+                )
+                Spacer(Modifier.width(8.dp))
+                Text(
+                    text = "Enable server-assisted conversion",
+                    style = MaterialTheme.typography.bodyMedium
+                )
+            }
+
+            OutlinedTextField(
+                value = state.supabaseUrl,
+                onValueChange = viewModel::updateSupabaseUrl,
+                label = { Text("Supabase URL") },
+                placeholder = { Text("https://project.supabase.co") },
+                singleLine = true,
+                enabled = state.serverEnabled,
+                modifier = Modifier.fillMaxWidth()
+            )
+
+            OutlinedTextField(
+                value = state.supabaseAnonKey,
+                onValueChange = viewModel::updateSupabaseAnonKey,
+                label = { Text("Supabase anon key") },
+                singleLine = true,
+                enabled = state.serverEnabled,
+                visualTransformation = PasswordVisualTransformation(),
+                modifier = Modifier.fillMaxWidth()
+            )
+
+            Button(
+                onClick = viewModel::testServer,
+                enabled = state.serverEnabled && !state.isTestingServer && state.supabaseUrl.isNotBlank() && state.supabaseAnonKey.isNotBlank(),
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(12.dp)
+            ) {
+                if (state.isTestingServer) {
+                    CircularProgressIndicator(
+                        modifier = Modifier.size(20.dp),
+                        strokeWidth = 2.dp,
+                        color = MaterialTheme.colorScheme.onPrimary
+                    )
+                    Spacer(Modifier.width(8.dp))
+                    Text("Testing server...")
+                } else {
+                    Text("Test Server")
+                }
+            }
+
+            state.serverTestResult?.let { result ->
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = CardDefaults.cardColors(
+                        containerColor = if (result.isSuccess)
+                            MaterialTheme.colorScheme.primaryContainer
+                        else
+                            MaterialTheme.colorScheme.errorContainer
+                    ),
+                    shape = RoundedCornerShape(12.dp)
+                ) {
+                    Row(
+                        modifier = Modifier.padding(16.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            if (result.isSuccess) Icons.Default.CheckCircle else Icons.Default.Error,
+                            null,
+                            tint = if (result.isSuccess) MaterialTheme.colorScheme.primary
+                            else MaterialTheme.colorScheme.error
+                        )
+                        Spacer(Modifier.width(12.dp))
+                        Column {
+                            Text(
+                                if (result.isSuccess) "Server connection successful" else "Server connection failed",
                                 fontWeight = FontWeight.SemiBold
                             )
                             if (result.isFailure) {

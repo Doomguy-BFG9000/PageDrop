@@ -24,10 +24,18 @@ interface CreateJobBody {
   title?: string;
   author?: string;
   url?: string; // only for article jobs
+  fileName?: string; // only for convert jobs
   fileSizeBytes?: number; // for pre-flight check
 }
 
 serve(async (req) => {
+  if (req.method === "OPTIONS") {
+    return new Response(null, {
+      status: 204,
+      headers: corsHeaders(),
+    });
+  }
+
   // 1. Get authenticated user
   const authHeader = req.headers.get("Authorization")?.replace("Bearer ", "");
   if (!authHeader) {
@@ -105,11 +113,22 @@ serve(async (req) => {
   }
 
   // 6. Create the job
+  const jobId = crypto.randomUUID();
+  const safeFileName = sanitizeFileName(body.fileName ?? "source.epub");
+  const sourceStoragePath = jobType === "convert"
+    ? `${user.id}/${jobId}/${safeFileName}`
+    : null;
+  const initialStatus = jobType === "convert" ? "awaiting_upload" : "pending";
+
   const { data: job, error: insertError } = await supabase
     .from("jobs")
     .insert({
+      id: jobId,
       user_id: user.id,
+      status: initialStatus,
       job_type: jobType,
+      source_storage_path: sourceStoragePath,
+      source_url: jobType === "article" ? body.url ?? null : null,
       target_format: body.targetFormat ?? "mobi",
       target_profile: body.targetProfile ?? "kindle-stock",
       title: body.title ?? null,
@@ -135,13 +154,32 @@ serve(async (req) => {
     JSON.stringify({
       jobId: job.id,
       status: job.status,
+      sourceStoragePath,
     }),
     {
       status: 201,
       headers: {
         "Content-Type": "application/json",
-        "Access-Control-Allow-Origin": "*",
+        ...corsHeaders(),
       },
     }
   );
 });
+
+function sanitizeFileName(name: string): string {
+  const cleaned = name
+    .split("/")
+    .pop()!
+    .replace(/[^A-Za-z0-9._ -]/g, "_")
+    .trim();
+  return cleaned.length > 0 ? cleaned : "source.epub";
+}
+
+function corsHeaders() {
+  return {
+    "Access-Control-Allow-Origin": "*",
+    "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
+    "Access-Control-Allow-Methods": "POST, OPTIONS",
+    "Content-Type": "application/json",
+  };
+}

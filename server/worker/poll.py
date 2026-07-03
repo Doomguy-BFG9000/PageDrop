@@ -17,6 +17,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 import httpx
+import trafilatura
 
 # ── Config ──────────────────────────────────────────────────────────────────
 
@@ -62,8 +63,9 @@ def supabase_upload(bucket: str, storage_path: str, file_bytes: bytes, content_t
         "Authorization": f"Bearer {SUPABASE_SERVICE_KEY}",
         "Content-Type": content_type,
     }
+    headers["x-upsert"] = "true"
     with httpx.Client() as c:
-        r = c.put(url, headers=headers, content=file_bytes)
+        r = c.post(url, headers=headers, content=file_bytes)
         r.raise_for_status()
     return storage_path
 
@@ -106,6 +108,53 @@ async def run_calibre(input_path: Path, output_path: Path, timeout: int = JOB_TI
         return -1, "", "Timed out"
 
 
+async def write_article_source(url: str, output_path: Path, timeout: int = JOB_TIMEOUT) -> tuple[bool, str | None, str | None]:
+    """Fetch and extract a readable article into a simple HTML file."""
+    try:
+        if not url.startswith(("http://", "https://")):
+            return False, None, "Only http/https URLs are supported"
+
+        downloaded = await asyncio.to_thread(trafilatura.fetch_url, url)
+        if not downloaded:
+            return False, None, "Failed to fetch URL"
+
+        metadata = trafilatura.extract_metadata(downloaded)
+        extracted = trafilatura.extract(
+            downloaded,
+            output_format="html",
+            include_comments=False,
+            include_tables=True,
+            include_images=True,
+        )
+        if not extracted:
+            return False, None, "Failed to extract readable article"
+
+        title = metadata.title if metadata and metadata.title else "Untitled Article"
+        author = metadata.author if metadata and metadata.author else None
+        html = (
+            "<html><head><meta charset=\"utf-8\"/>"
+            f"<title>{escape_html(title)}</title></head><body>"
+            f"<h1>{escape_html(title)}</h1>"
+        )
+        if author:
+            html += f"<p><em>By {escape_html(author)}</em></p>"
+        html += extracted
+        html += f"<hr/><p><small>Source: {escape_html(url)}</small></p></body></html>"
+        output_path.write_text(html, encoding="utf-8")
+        return True, title, author
+    except Exception as exc:
+        return False, None, str(exc)
+
+
+def escape_html(value: str) -> str:
+    return (
+        value.replace("&", "&amp;")
+        .replace("<", "&lt;")
+        .replace(">", "&gt;")
+        .replace('"', "&quot;")
+    )
+
+
 async def extract_cover(ebook_path: Path, output_path: Path) -> bool:
     """Extract cover image using ebook-meta."""
     cmd = ["ebook-meta", str(ebook_path), "--get-cover", str(output_path)]
@@ -119,7 +168,9 @@ async def process_job(job: dict) -> dict:
     job_id = job["id"]
     user_id = job["user_id"]
     source_path = job.get("source_storage_path")
+    source_url = job.get("source_url")
     target_fmt = job.get("target_format", "mobi")
+    job_type = job.get("job_type")
 
     log_lines = []
     warnings = []
@@ -132,14 +183,46 @@ async def process_job(job: dict) -> dict:
     try:
         # 1. Create temp workspace
         workdir = Path(tempfile.mkdtemp(prefix=f"pagedrop_{job_id}_"))
-        source_file = workdir / f"source.{Path(source_path or 'source').suffix or 'epub'}"
+        source_suffix = Path(source_path or "source.html").suffix or ".epub"
+        source_file = workdir / f"source{source_suffix}"
         output_file = workdir / f"output.{target_fmt}"
         cover_file = workdir / "cover.jpg"
 
-        # 2. Download source from Supabase Storage
-        log(f"Downloading source: {source_path}")
-        source_bytes = supabase_download("sources", source_path)
-        source_file.write_bytes(source_bytes)
+        # 2. Prepare source
+        if job_type == "article":
+            if not source_url:
+                return {
+                    "status": "failed",
+                    "error_message": "Article job has no source_url",
+                    "logs": log_lines,
+                    "completed_at": datetime.now(timezone.utc).isoformat(),
+                }
+            source_file = workdir / "article.html"
+            log(f"Extracting article: {source_url}")
+            ok, title, author_or_error = await write_article_source(source_url, source_file)
+            if not ok:
+                return {
+                    "status": "failed",
+                    "error_message": author_or_error or "Article extraction failed",
+                    "logs": log_lines,
+                    "completed_at": datetime.now(timezone.utc).isoformat(),
+                }
+            if title and not job.get("title"):
+                job["title"] = title
+            if author_or_error and not job.get("author"):
+                job["author"] = author_or_error
+        else:
+            if not source_path:
+                return {
+                    "status": "failed",
+                    "error_message": "Convert job has no source_storage_path",
+                    "logs": log_lines,
+                    "completed_at": datetime.now(timezone.utc).isoformat(),
+                }
+            log(f"Downloading source: {source_path}")
+            source_bytes = supabase_download("sources", source_path)
+            source_file.write_bytes(source_bytes)
+
         fingerprint = sha256_file(source_file)
 
         # 3. Run Calibre conversion
@@ -151,7 +234,7 @@ async def process_job(job: dict) -> dict:
             return {
                 "status": "failed",
                 "error_message": serr[:2000] if serr else f"Exit code {rc}",
-                "logs": json.dumps(log_lines),
+                "logs": log_lines,
                 "source_fingerprint": fingerprint,
                 "completed_at": datetime.now(timezone.utc).isoformat(),
             }
@@ -181,8 +264,10 @@ async def process_job(job: dict) -> dict:
             "result_storage_path": result_storage_path,
             "cover_storage_path": cover_storage_path,
             "source_fingerprint": fingerprint,
-            "warnings": json.dumps(warnings),
-            "logs": json.dumps(log_lines),
+            "title": job.get("title"),
+            "author": job.get("author"),
+            "warnings": warnings,
+            "logs": log_lines,
             "completed_at": datetime.now(timezone.utc).isoformat(),
         }
 
@@ -191,7 +276,7 @@ async def process_job(job: dict) -> dict:
         return {
             "status": "failed",
             "error_message": str(e)[:2000],
-            "logs": json.dumps(log_lines),
+            "logs": log_lines,
             "completed_at": datetime.now(timezone.utc).isoformat(),
         }
     finally:

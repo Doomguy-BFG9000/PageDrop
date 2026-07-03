@@ -16,13 +16,24 @@ class ServerSettings @Inject constructor(
         set(value) = prefs.edit().putBoolean("enabled", value).apply()
 
     var supabaseUrl: String
-        get() = prefs.getString("supabase_url", "https://bzvvpwykluklvvjyzytn.supabase.co") ?: ""
+        get() = prefs.getString("supabase_url", "") ?: ""
         set(value) = prefs.edit().putString("supabase_url", value).apply()
 
     var supabaseAnonKey: String
-        get() = prefs.getString("supabase_anon_key", "sb_publishable_JFKy2UrHhnIxZyXDDDUoAQ_JW5ApwbR") ?: ""
+        get() = prefs.getString("supabase_anon_key", "") ?: ""
         set(value) = prefs.edit().putString("supabase_anon_key", value).apply()
+
+    var accessToken: String
+        get() = prefs.getString("access_token", "") ?: ""
+        set(value) = prefs.edit().putString("access_token", value).apply()
+
+    var refreshToken: String
+        get() = prefs.getString("refresh_token", "") ?: ""
+        set(value) = prefs.edit().putString("refresh_token", value).apply()
 
     val isConfigured: Boolean
         get() = enabled && supabaseUrl.isNotBlank() && supabaseAnonKey.isNotBlank()
+
+    val isAuthenticated: Boolean
+        get() = accessToken.isNotBlank()
 }

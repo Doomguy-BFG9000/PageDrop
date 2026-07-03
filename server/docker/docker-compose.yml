@@ -1,16 +1,19 @@
-version: "3.9"
-
 services:
   worker:
     build:
       context: ../worker
       dockerfile: ../docker/Dockerfile
     environment:
-      SUPABASE_URL: "${SUPABASE_URL}"
-      SUPABASE_SERVICE_KEY: "${SUPABASE_SERVICE_KEY}"
-      POLL_INTERVAL: "5"
-      MAX_CONCURRENT: "1"
-      JOB_TIMEOUT: "300"
+      SUPABASE_URL: "${SUPABASE_URL:?Set your Supabase project URL}"
+      SUPABASE_SERVICE_KEY: "${SUPABASE_SERVICE_KEY:?Set your Supabase service role key}"
+      POLL_INTERVAL: "${POLL_INTERVAL:-5}"
+      MAX_CONCURRENT: "${MAX_CONCURRENT:-1}"
+      JOB_TIMEOUT: "${JOB_TIMEOUT:-300}"
     restart: unless-stopped
+    mem_limit: "${WORKER_MEMORY_LIMIT:-3g}"
+    cpus: "${WORKER_CPU_LIMIT:-1.0}"
     volumes:
-      - /tmp/pagedrop-artifacts:/tmp/pagedrop-artifacts
+      - pagedrop-artifacts:/tmp/pagedrop-artifacts
+
+volumes:
+  pagedrop-artifacts:

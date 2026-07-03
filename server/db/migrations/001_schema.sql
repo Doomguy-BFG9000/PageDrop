@@ -16,10 +16,12 @@ create table if not exists public.profiles (
 
 alter table public.profiles enable row level security;
 
+drop policy if exists "Users can read own profile" on public.profiles;
 create policy "Users can read own profile"
   on public.profiles for select
   using (auth.uid() = id);
 
+drop policy if exists "Users can update own profile" on public.profiles;
 create policy "Users can update own profile"
   on public.profiles for update
   using (auth.uid() = id);
@@ -43,9 +45,10 @@ create table if not exists public.jobs (
   id uuid primary key default gen_random_uuid(),
   user_id uuid not null references auth.users(id) on delete cascade,
   status text not null default 'pending'
-    check (status in ('pending', 'processing', 'complete', 'failed')),
+    check (status in ('awaiting_upload', 'pending', 'processing', 'complete', 'failed')),
   job_type text not null check (job_type in ('convert', 'article')),
   source_storage_path text,                                    -- path in Supabase Storage
+  source_url text,                                             -- URL for article jobs
   target_format text not null default 'mobi',
   target_profile text not null default 'kindle-stock',
   result_storage_path text,                                    -- path to converted artifact
@@ -56,26 +59,42 @@ create table if not exists public.jobs (
   warnings jsonb not null default '[]',
   logs jsonb not null default '[]',
   error_message text,
-  file_size_bytes int,
+  file_size_bytes bigint,
   created_at timestamptz not null default now(),
   started_at timestamptz,
   completed_at timestamptz
 );
 
-create index idx_jobs_status on public.jobs(status);
-create index idx_jobs_user_id on public.jobs(user_id);
-create index idx_jobs_created_at on public.jobs(created_at);
+alter table public.jobs
+  drop constraint if exists jobs_status_check;
+
+alter table public.jobs
+  add constraint jobs_status_check
+  check (status in ('awaiting_upload', 'pending', 'processing', 'complete', 'failed'));
+
+alter table public.jobs
+  add column if not exists source_url text;
+
+alter table public.jobs
+  alter column file_size_bytes type bigint;
+
+create index if not exists idx_jobs_status on public.jobs(status);
+create index if not exists idx_jobs_user_id on public.jobs(user_id);
+create index if not exists idx_jobs_created_at on public.jobs(created_at);
 
 alter table public.jobs enable row level security;
 
+drop policy if exists "Users can insert own jobs" on public.jobs;
 create policy "Users can insert own jobs"
   on public.jobs for insert
   with check (auth.uid() = user_id);
 
+drop policy if exists "Users can read own jobs" on public.jobs;
 create policy "Users can read own jobs"
   on public.jobs for select
   using (auth.uid() = user_id);
 
+drop policy if exists "Users can update own jobs" on public.jobs;
 create policy "Users can update own jobs"
   on public.jobs for update
   using (auth.uid() = user_id);
@@ -91,10 +110,11 @@ create table if not exists public.rate_limits (
   unique (user_id, date)
 );
 
-create index idx_rate_limits_user_date on public.rate_limits(user_id, date);
+create index if not exists idx_rate_limits_user_date on public.rate_limits(user_id, date);
 
 alter table public.rate_limits enable row level security;
 
+drop policy if exists "Users can read own rate limits" on public.rate_limits;
 create policy "Users can read own rate limits"
   on public.rate_limits for select
   using (auth.uid() = user_id);
@@ -108,14 +128,47 @@ create table if not exists public.storage_usage (
 
 alter table public.storage_usage enable row level security;
 
+drop policy if exists "Users can read own storage usage" on public.storage_usage;
 create policy "Users can read own storage usage"
   on public.storage_usage for select
   using (auth.uid() = user_id);
 
 -- 5. Storage bucket for artifacts
--- Run this in Supabase Dashboard → Storage:
--- Create bucket "artifacts" with public read access (files are user-isolated by path)
--- Create bucket "sources" with restricted access (only worker can read)
+-- Buckets can also be created in the Supabase Dashboard.
+insert into storage.buckets (id, name, public)
+values ('sources', 'sources', false)
+on conflict (id) do nothing;
+
+insert into storage.buckets (id, name, public)
+values ('artifacts', 'artifacts', false)
+on conflict (id) do nothing;
+
+drop policy if exists "Users can upload own sources" on storage.objects;
+create policy "Users can upload own sources"
+  on storage.objects for insert
+  with check (
+    bucket_id = 'sources'
+    and auth.role() = 'authenticated'
+    and (storage.foldername(name))[1] = auth.uid()::text
+  );
+
+drop policy if exists "Users can read own artifacts" on storage.objects;
+create policy "Users can read own artifacts"
+  on storage.objects for select
+  using (
+    bucket_id = 'artifacts'
+    and auth.role() = 'authenticated'
+    and (storage.foldername(name))[1] = auth.uid()::text
+  );
+
+drop policy if exists "Users can read own sources" on storage.objects;
+create policy "Users can read own sources"
+  on storage.objects for select
+  using (
+    bucket_id = 'sources'
+    and auth.role() = 'authenticated'
+    and (storage.foldername(name))[1] = auth.uid()::text
+  );
 
 -- 6. Helper: increment rate limit counter
 create or replace function public.increment_rate_limit(p_user_id uuid)

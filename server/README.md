@@ -4,7 +4,7 @@ Conversion worker that pairs with the PageDrop Android app. Handles heavy
 ebook conversion (Calibre CLI) and article extraction when the app decides
 it can't do the conversion locally.
 
-**Architecture:** Supabase (auth, DB, storage, API) + Worker (Calibre on Oracle free tier)
+**Architecture:** Supabase (auth, DB, storage, API) + Worker (Calibre on VPS/Coolify)
 
 ## Architecture
 
@@ -19,6 +19,51 @@ Android App → Supabase Edge Functions → Postgres queue → Worker (polls) �
 - **Calibre CLI** does the actual conversion
 
 ## Deploy
+
+### Coolify on the existing Ampere VPS
+
+Do **not** pick the Calibre Web or Calibre Web Automated template for the first
+worker deploy. Those are user-facing web-library services. PageDrop needs the
+thin conversion worker in this repo.
+
+In Coolify:
+
+1. Add Resource → Docker Compose / Git Repository.
+2. Select this repository.
+3. Set Base Directory to:
+
+```text
+/
+```
+
+4. Set Docker Compose Location to:
+
+```text
+/docker-compose.yml
+```
+
+The root compose file exists for Coolify's create screen. The equivalent compose
+definition also lives at `server/docker/docker-compose.yml` for server-specific
+work, but Coolify is easiest when pointed at the root default.
+
+5. Add environment variables:
+
+```bash
+SUPABASE_URL=https://bzvvpwykluklvvjyzytn.supabase.co
+SUPABASE_SERVICE_KEY=<service_role_key>
+POLL_INTERVAL=5
+MAX_CONCURRENT=1
+JOB_TIMEOUT=300
+WORKER_MEMORY_LIMIT=3g
+WORKER_CPU_LIMIT=1.0
+```
+
+6. Deploy and watch logs. The worker should claim pending jobs and update them
+to `complete` or `failed`.
+
+The existing Ampere A1 box is the right place for this because Calibre can use
+real RAM/CPU. Keep `MAX_CONCURRENT=1` so it coexists politely with other
+services.
 
 ### 1. Supabase Setup
 

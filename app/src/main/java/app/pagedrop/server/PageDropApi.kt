@@ -1,11 +1,13 @@
 package app.pagedrop.server
 
 import kotlinx.serialization.Serializable
+import kotlinx.serialization.json.JsonElement
 
 @Serializable
 data class JobResponse(
     val jobId: String,
-    val status: String
+    val status: String,
+    val sourceStoragePath: String? = null
 )
 
 @Serializable
@@ -19,8 +21,8 @@ data class JobStatus(
     val cover_storage_path: String? = null,
     val title: String? = null,
     val author: String? = null,
-    val warnings: String? = null,
-    val logs: String? = null,
+    val warnings: JsonElement? = null,
+    val logs: JsonElement? = null,
     val error_message: String? = null,
     val created_at: String? = null,
     val completed_at: String? = null
@@ -28,5 +30,8 @@ data class JobStatus(
 
 @Serializable
 data class SessionResponse(
-    val accessToken: String
+    val access_token: String,
+    val refresh_token: String? = null,
+    val token_type: String? = null,
+    val expires_in: Long? = null
 )

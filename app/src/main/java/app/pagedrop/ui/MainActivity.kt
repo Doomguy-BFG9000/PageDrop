@@ -25,6 +25,7 @@ import android.widget.Toast
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.core.content.ContextCompat
 import app.pagedrop.data.BookRepository
+import app.pagedrop.server.PageDropApiClient
 import app.pagedrop.share.ShareHandler
 import app.pagedrop.ui.theme.MyApplicationTheme
 import androidx.activity.ComponentActivity
@@ -45,6 +46,7 @@ import javax.inject.Inject
 class MainActivity : ComponentActivity() {
 
     @Inject lateinit var bookRepository: BookRepository
+    @Inject lateinit var pageDropApiClient: PageDropApiClient
 
     private val notificationPermissionLauncher = registerForActivityResult(
         ActivityResultContracts.RequestPermission()
@@ -85,7 +87,7 @@ class MainActivity : ComponentActivity() {
         if (action != Intent.ACTION_SEND && action != Intent.ACTION_SEND_MULTIPLE && action != Intent.ACTION_VIEW) return
 
         CoroutineScope(Dispatchers.Main).launch {
-            val result = ShareHandler.processSendIntent(intent, application, bookRepository)
+            val result = ShareHandler.processSendIntent(intent, application, bookRepository, pageDropApiClient)
             if (result.successCount > 0) {
                 Toast.makeText(
                     this@MainActivity,

@@ -8,6 +8,7 @@ import app.pagedrop.converter.BookConverter
 import app.pagedrop.data.BookRepository
 import app.pagedrop.data.DefaultBookRepository
 import app.pagedrop.data.local.database.Book
+import app.pagedrop.server.PageDropApiClient
 import app.pagedrop.tools.articles.ArticleExtractor
 import app.pagedrop.tools.articles.ArticleMobiConverter
 import kotlinx.coroutines.Dispatchers
@@ -25,7 +26,8 @@ object ShareHandler {
     suspend fun processSendIntent(
         intent: Intent,
         application: Application,
-        bookRepository: BookRepository
+        bookRepository: BookRepository,
+        pageDropApiClient: PageDropApiClient? = null
     ): ShareResult = withContext(Dispatchers.IO) {
         val errors = mutableListOf<String>()
         var successCount = 0
@@ -37,7 +39,7 @@ object ShareHandler {
                 intent.getStringExtra(Intent.EXTRA_TEXT)?.let { text ->
                     val firstUrl = text.trim().split("\\s+".toRegex()).firstOrNull { it.startsWith("http") }
                     if (firstUrl != null) {
-                        val ok = handleSharedUrl(firstUrl, application, bookRepository)
+                        val ok = handleSharedUrl(firstUrl, application, bookRepository, pageDropApiClient)
                         if (ok) successCount++ else errors.add("Failed to process URL")
                     } else {
                         val ok = handleSharedText(text, application, bookRepository)
@@ -93,8 +95,29 @@ object ShareHandler {
     private suspend fun handleSharedUrl(
         url: String,
         application: Application,
-        bookRepository: BookRepository
+        bookRepository: BookRepository,
+        pageDropApiClient: PageDropApiClient?
     ): Boolean {
+        if (pageDropApiClient?.isAvailable == true) {
+            val articlesDir = File(application.filesDir, "articles")
+            articlesDir.mkdirs()
+            val prepared = pageDropApiClient.convertArticleToLocalArtifact(url, articlesDir)
+            if (prepared != null) {
+                bookRepository.addBookFromFile(
+                    Book(
+                        title = prepared.title,
+                        author = prepared.author,
+                        fileName = prepared.file.name,
+                        filePath = prepared.file.absolutePath,
+                        format = prepared.format,
+                        fileSize = prepared.file.length(),
+                        coverPath = prepared.coverFile?.absolutePath
+                    )
+                )
+                return true
+            }
+        }
+
         val extractResult = ArticleExtractor.extract(url)
         if (extractResult.isFailure) return false
         val article = extractResult.getOrThrow()

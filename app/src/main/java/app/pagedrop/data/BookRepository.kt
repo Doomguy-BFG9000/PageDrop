@@ -26,6 +26,7 @@ import kotlinx.coroutines.withContext
 import app.pagedrop.data.local.database.Book
 import app.pagedrop.data.local.database.BookDao
 import app.pagedrop.converter.BookConverter
+import app.pagedrop.server.PageDropApiClient
 import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.withTimeout
 import java.io.File
@@ -43,7 +44,8 @@ interface BookRepository {
 }
 
 class DefaultBookRepository @Inject constructor(
-    private val bookDao: BookDao
+    private val bookDao: BookDao,
+    private val pageDropApiClient: PageDropApiClient? = null
 ) : BookRepository {
 
     companion object {
@@ -174,6 +176,11 @@ class DefaultBookRepository @Inject constructor(
             )
         }
 
+        if (pageDropApiClient?.shouldUseServer(format) == true) {
+            convertWithServer(context, uri, booksDir, displayName)?.let { return@withContext it }
+            Log.w(TAG, "Server conversion failed or timed out; falling back to local conversion for $displayName")
+        }
+
         val ext = displayName.substringAfterLast(".", "tmp").lowercase()
         val tempFile = File(booksDir, "_converting_${System.currentTimeMillis()}.$ext")
         try {
@@ -226,6 +233,41 @@ class DefaultBookRepository @Inject constructor(
         } finally {
             if (tempFile.exists()) tempFile.delete()
         }
+    }
+
+    private suspend fun convertWithServer(
+        context: Context,
+        uri: Uri,
+        booksDir: File,
+        displayName: String
+    ): Book? {
+        val baseName = displayName.substringBeforeLast(".")
+        val prepared = pageDropApiClient?.convertUriToLocalArtifact(
+            uri = uri,
+            outputDir = booksDir,
+            targetFormat = "mobi",
+            title = baseName
+        ) ?: return null
+
+        val coverPath = prepared.coverFile?.takeIf { it.exists() }?.let { coverFile ->
+            saveCoverBytes(context, coverFile.readBytes(), prepared.file.nameWithoutExtension).also {
+                coverFile.delete()
+            }
+        }
+
+        val book = Book(
+            title = prepared.title,
+            author = prepared.author,
+            fileName = prepared.file.name,
+            filePath = prepared.file.absolutePath,
+            format = prepared.format,
+            fileSize = prepared.file.length(),
+            coverPath = coverPath
+        )
+
+        val id = bookDao.insertBook(book)
+        Log.d(TAG, "Inserted server-converted book with id=$id: ${book.title}")
+        return book.copy(uid = id.toInt())
     }
 
     /**
