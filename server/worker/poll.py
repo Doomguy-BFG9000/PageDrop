@@ -92,9 +92,19 @@ def sha256_file(path: Path) -> str:
     return h.hexdigest()
 
 
-async def run_calibre(input_path: Path, output_path: Path, timeout: int = JOB_TIMEOUT) -> tuple[int, str, str]:
+async def run_calibre(
+    input_path: Path,
+    output_path: Path,
+    title: str | None = None,
+    author: str | None = None,
+    timeout: int = JOB_TIMEOUT,
+) -> tuple[int, str, str]:
     """Run ebook-convert, return (returncode, stdout, stderr)."""
     cmd = ["ebook-convert", str(input_path), str(output_path)]
+    if title and title.strip():
+        cmd.extend(["--title", title.strip()])
+    if author and author.strip():
+        cmd.extend(["--authors", author.strip()])
     proc = await asyncio.create_subprocess_exec(
         *cmd,
         stdout=asyncio.subprocess.PIPE,
@@ -106,6 +116,25 @@ async def run_calibre(input_path: Path, output_path: Path, timeout: int = JOB_TI
     except asyncio.TimeoutError:
         proc.kill()
         return -1, "", "Timed out"
+
+
+async def apply_metadata(ebook_path: Path, title: str | None, author: str | None) -> tuple[int, str]:
+    """Apply PageDrop's user-facing metadata to the converted ebook."""
+    cmd = ["ebook-meta", str(ebook_path)]
+    if title and title.strip():
+        cmd.extend(["--title", title.strip()])
+    if author and author.strip():
+        cmd.extend(["--authors", author.strip()])
+    if len(cmd) == 2:
+        return 0, ""
+
+    proc = await asyncio.create_subprocess_exec(
+        *cmd,
+        stdout=asyncio.subprocess.PIPE,
+        stderr=asyncio.subprocess.PIPE,
+    )
+    stdout, stderr = await proc.communicate()
+    return proc.returncode or 0, (stderr or stdout).decode()
 
 
 async def write_article_source(url: str, output_path: Path, timeout: int = JOB_TIMEOUT) -> tuple[bool, str | None, str | None]:
@@ -231,7 +260,12 @@ async def process_job(job: dict) -> dict:
 
         # 3. Run Calibre conversion
         log(f"Converting to {target_fmt}...")
-        rc, sout, serr = await run_calibre(source_file, output_file)
+        rc, sout, serr = await run_calibre(
+            source_file,
+            output_file,
+            title=job.get("title"),
+            author=job.get("author"),
+        )
 
         if rc != 0:
             log(f"Conversion failed (exit {rc})")
@@ -245,7 +279,26 @@ async def process_job(job: dict) -> dict:
 
         log(f"Conversion done: {output_file.stat().st_size} bytes")
 
-        # 4. Extract cover
+        # 4. Calibre otherwise keeps metadata from the source document (often a PDF's
+        # table-of-contents title), which is not the title PageDrop shows to the user.
+        metadata_rc, metadata_output = await apply_metadata(
+            output_file,
+            job.get("title"),
+            job.get("author"),
+        )
+        if metadata_rc != 0:
+            log(f"Metadata update failed (exit {metadata_rc})")
+            return {
+                "status": "failed",
+                "error_message": metadata_output[:2000] or "Calibre could not update ebook metadata",
+                "logs": log_lines,
+                "source_fingerprint": fingerprint,
+                "completed_at": datetime.now(timezone.utc).isoformat(),
+            }
+        if job.get("title") or job.get("author"):
+            log("Applied PageDrop metadata")
+
+        # 5. Extract cover
         cover_storage_path = None
         if await extract_cover(output_file, cover_file):
             log(f"Cover extracted: {cover_file.stat().st_size} bytes")
@@ -255,7 +308,7 @@ async def process_job(job: dict) -> dict:
         else:
             log("No cover extracted")
 
-        # 5. Upload result to Storage
+        # 6. Upload result to Storage
         result_bytes = output_file.read_bytes()
         result_storage_path = supabase_upload(
             "artifacts", f"{user_id}/{job_id}/output.{target_fmt}", result_bytes

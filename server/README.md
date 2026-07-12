@@ -181,11 +181,34 @@ The worker is a Python script (`server/worker/poll.py`) that:
 1. Polls Supabase for `pending` jobs (oldest first)
 2. Atomically claims a job (sets status to `processing`)
 3. Downloads the source file from Supabase Storage
-4. Runs `ebook-convert` to the target format
-5. Extracts cover with `ebook-meta --get-cover`
-6. Uploads results to Supabase Storage
-7. Updates job status to `complete` or `failed`
-8. Sleeps 5 seconds, repeats
+4. Runs `ebook-convert` to the target format with PageDrop's title and author
+5. Reapplies that metadata with `ebook-meta`, preventing source-PDF metadata
+   from becoming the title shown by a Kindle or KOReader
+6. Extracts the embedded cover with `ebook-meta --get-cover`
+7. Uploads results to Supabase Storage
+8. Updates job status to `complete` or `failed`
+9. Sleeps 5 seconds, repeats
 
 Concurrent jobs are limited to 1 by default to stay within free-tier
 Oracle limits.
+
+## Metadata Ownership
+
+The Android app is the metadata control plane. It sends the title and author
+selected by the user with every conversion job. The worker passes those values
+to `ebook-convert` and applies them again to the finished book with
+`ebook-meta`; source-file metadata is never authoritative.
+
+The next metadata contract should add optional, app-owned fields for a supplied
+cover image, language, publisher, description, ISBN, tags, series, and series
+index. PageDrop should look those up on-device, show the proposed values for
+confirmation, and upload an explicitly selected cover with the job. The worker
+then supplies the cover to both `ebook-convert --cover` and `ebook-meta --cover`
+so the embedded first page, ebook metadata, and Kindle thumbnail all use the
+same artwork.
+
+For PDFs, keep the Calibre PDF engine as the default because it supports
+automatic header/footer removal. Expose advanced options only when needed:
+header/footer removal, line unwrapping, and a Kindle output profile. Complex,
+scanned, multi-column, mathematical, or right-to-left PDFs should remain PDF
+unless the user explicitly accepts a reflowed conversion preview.
