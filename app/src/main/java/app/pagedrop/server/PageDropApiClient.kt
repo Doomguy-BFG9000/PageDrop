@@ -173,6 +173,9 @@ class PageDropApiClient @Inject constructor(
     ): PreparedArtifact? = withContext(Dispatchers.IO) {
         val job = createConvertJob(uri, targetFormat, title, author) ?: return@withContext null
         val status = pollJob(job.jobId) ?: return@withContext null
+        if (status.status == "failed") {
+            throw IllegalStateException(status.error_message ?: "PageDrop server conversion failed")
+        }
         if (status.status != "complete" || status.result_storage_path.isNullOrBlank()) return@withContext null
 
         outputDir.mkdirs()

@@ -158,7 +158,11 @@ def escape_html(value: str) -> str:
 async def extract_cover(ebook_path: Path, output_path: Path) -> bool:
     """Extract cover image using ebook-meta."""
     cmd = ["ebook-meta", str(ebook_path), "--get-cover", str(output_path)]
-    proc = await asyncio.create_subprocess_exec(*cmd, stdout=asyncio.PIPE, stderr=asyncio.PIPE)
+    proc = await asyncio.create_subprocess_exec(
+        *cmd,
+        stdout=asyncio.subprocess.PIPE,
+        stderr=asyncio.subprocess.PIPE,
+    )
     stdout, stderr = await proc.communicate()
     return output_path.exists() and output_path.stat().st_size > 0
 

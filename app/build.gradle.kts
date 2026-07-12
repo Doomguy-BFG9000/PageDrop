@@ -30,8 +30,8 @@ android {
         applicationId = "app.pagedrop"
         minSdk = 26
         targetSdk = 36
-        versionCode = 9
-        versionName = "0.6.7"
+        versionCode = 10
+        versionName = "0.6.8"
 
         testInstrumentationRunner = "app.pagedrop.HiltTestRunner"
         vectorDrawables {
