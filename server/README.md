@@ -199,13 +199,25 @@ selected by the user with every conversion job. The worker passes those values
 to `ebook-convert` and applies them again to the finished book with
 `ebook-meta`; source-file metadata is never authoritative.
 
+When a field is missing, the app parses embedded data and filename hints, then
+looks up the ISBN first or normalized title plus author second. It uses catalog
+APIs rather than scraping arbitrary web pages: Google Books is the primary
+candidate source and Open Library fills cover or identifier gaps. The app shows
+candidate editions and the user must select one or edit the details manually;
+low-confidence data is never silently applied.
+
 The next metadata contract should add optional, app-owned fields for a supplied
 cover image, language, publisher, description, ISBN, tags, series, and series
-index. PageDrop should look those up on-device, show the proposed values for
-confirmation, and upload an explicitly selected cover with the job. The worker
-then supplies the cover to both `ebook-convert --cover` and `ebook-meta --cover`
-so the embedded first page, ebook metadata, and Kindle thumbnail all use the
-same artwork.
+index. The app stores the confirmed values locally and uploads an explicitly
+selected cover with the job. The worker then supplies the cover to both
+`ebook-convert --cover` and `ebook-meta --cover` so the embedded first page,
+ebook metadata, and Kindle thumbnail all use the same artwork. Existing books
+use a metadata-only job that updates the existing artifact without a reflow
+conversion.
+
+References: [Google Books Volumes API](https://developers.google.com/books/docs/v1/reference/volumes),
+[Open Library Search API](https://openlibrary.org/dev/docs/api/search), and
+[Open Library Covers API](https://openlibrary.org/dev/docs/api/covers).
 
 For PDFs, keep the Calibre PDF engine as the default because it supports
 automatic header/footer removal. Expose advanced options only when needed:
