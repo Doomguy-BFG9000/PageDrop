@@ -9,6 +9,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.put
@@ -98,8 +99,9 @@ class PageDropApiClient @Inject constructor(
 
             client.newCall(req).execute().use { response ->
                 if (!response.isSuccessful) {
+                    val responseBody = response.body?.string().orEmpty()
                     return@withContext Result.failure(
-                        IllegalStateException("Anonymous sign-in failed: HTTP ${response.code}")
+                        IllegalStateException(anonymousSignInErrorMessage(response.code, responseBody))
                     )
                 }
                 val responseBody = response.body?.string()
@@ -370,5 +372,24 @@ class PageDropApiClient @Inject constructor(
         if (!serverSettings.isConfigured) return false
         val nativeFormats = setOf("AZW3", "MOBI", "PRC")
         return format.uppercase() !in nativeFormats
+    }
+}
+
+internal fun anonymousSignInErrorMessage(statusCode: Int, responseBody: String): String {
+    val error = runCatching {
+        Json.parseToJsonElement(responseBody).jsonObject
+    }.getOrNull()
+    val code = error?.get("error_code")?.jsonPrimitive?.contentOrNull
+        ?: error?.get("code")?.jsonPrimitive?.contentOrNull
+    val message = error?.get("msg")?.jsonPrimitive?.contentOrNull
+        ?: error?.get("message")?.jsonPrimitive?.contentOrNull
+
+    if (code == "anonymous_provider_disabled") {
+        return "PageDrop server setup is incomplete. In Supabase, enable Authentication > Settings > Allow anonymous sign-ins."
+    }
+
+    return buildString {
+        append("Anonymous sign-in failed: HTTP $statusCode")
+        message?.takeIf { it.isNotBlank() }?.let { append(" ($it)") }
     }
 }

@@ -30,8 +30,8 @@ android {
         applicationId = "app.pagedrop"
         minSdk = 26
         targetSdk = 36
-        versionCode = 7
-        versionName = "0.6.5"
+        versionCode = 8
+        versionName = "0.6.6"
 
         testInstrumentationRunner = "app.pagedrop.HiltTestRunner"
         vectorDrawables {
@@ -40,9 +40,9 @@ android {
 
         // These are release/build-time settings. They are never entered by an app user.
         val pageDropSupabaseUrl = providers.gradleProperty("PAGEDROP_SUPABASE_URL").orNull
-            ?: "https://tsicuxaqeutfukyeyvsa.supabase.co"
+            ?: "https://bzvvpwykluklvvjyzytn.supabase.co"
         val pageDropSupabaseAnonKey = providers.gradleProperty("PAGEDROP_SUPABASE_ANON_KEY").orNull
-            ?: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InRzaWN1eGFxZXV0ZnVreWV5dnNhIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODMzMDgyNTEsImV4cCI6MjA5ODg4NDI1MX0.mgQCowbrP-cVQ8tWmGzueMioaQ57mQWcpoXbTDEqebg"
+            ?: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImJ6dnZwd3lrbHVrbHZ2anl6eXRuIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODI5MDU1MDcsImV4cCI6MjA5ODQ4MTUwN30.NZB8HgGm_W6b3A6-QTbIlEOuCiIT1uCrAUYgG_CcGZI"
         buildConfigField("String", "PAGEDROP_SUPABASE_URL", "\"$pageDropSupabaseUrl\"")
         buildConfigField("String", "PAGEDROP_SUPABASE_ANON_KEY", "\"$pageDropSupabaseAnonKey\"")
     }

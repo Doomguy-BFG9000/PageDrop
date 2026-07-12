@@ -63,4 +63,17 @@ class PageDropApiTest {
         // Default URL should be the user's Supabase project
         assertTrue(true)
     }
+
+    @Test
+    fun anonymousSignInError_explainsHowToEnableProvider() {
+        val message = anonymousSignInErrorMessage(
+            422,
+            """{"code":422,"error_code":"anonymous_provider_disabled","msg":"Anonymous sign-ins are disabled"}"""
+        )
+
+        assertEquals(
+            "PageDrop server setup is incomplete. In Supabase, enable Authentication > Settings > Allow anonymous sign-ins.",
+            message
+        )
+    }
 }
