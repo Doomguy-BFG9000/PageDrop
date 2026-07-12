@@ -721,14 +721,14 @@ private fun TransferBottomSheet(
                             horizontalAlignment = Alignment.CenterHorizontally
                         ) {
                             Text(
-                                text = "✓ Sent Successfully!",
+                                text = "✓ Copied to Kindle",
                                 style = MaterialTheme.typography.titleMedium,
                                 color = MaterialTheme.colorScheme.primary,
                                 fontWeight = FontWeight.Bold
                             )
                             Spacer(Modifier.height(8.dp))
                             Text(
-                                text = "Books have been transferred and indexed on your Kindle.",
+                                text = "PageDrop verified the file on your Kindle. The Kindle library or KOReader may need a moment to refresh.",
                                 style = MaterialTheme.typography.bodyMedium,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 textAlign = TextAlign.Center

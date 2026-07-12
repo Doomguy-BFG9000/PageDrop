@@ -78,6 +78,13 @@ class KindleSftpClientTest {
     }
 
     @Test
+    fun kindleFileName_usesKoreaderCompatibleAzwExtension() {
+        assertEquals("book.azw", KindleSftpClient.kindleFileName("book.azw3"))
+        assertEquals("book.azw", KindleSftpClient.kindleFileName("book.AZW3"))
+        assertEquals("book.mobi", KindleSftpClient.kindleFileName("book.mobi"))
+    }
+
+    @Test
     fun progressCallback_invokedDuringTransfer() = runBlocking {
         var invoked = false
         val book = Book(

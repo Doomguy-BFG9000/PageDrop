@@ -15,6 +15,9 @@ object KindleSftpClient {
     private const val TAG = "KindleSftpClient"
     private const val THUMBNAILS_DIR = "/mnt/us/system/thumbnails"
 
+    internal fun kindleFileName(fileName: String): String =
+        fileName.replace(Regex("\\.azw3$", RegexOption.IGNORE_CASE), ".azw")
+
     /**
      * Tests connection to the Kindle SSH/SFTP server.
      */
@@ -93,10 +96,21 @@ object KindleSftpClient {
                 if (!file.exists()) {
                     throw java.io.FileNotFoundException("File not found: ${book.filePath}")
                 }
+                // This KOReader branch registers the KF8 provider as `.azw`, but not `.azw3`.
+                // The payload is unchanged; the compatible extension lets its file browser list it.
+                val remoteFileName = kindleFileName(book.fileName)
 
                 destinationDirectories.forEach { destinationDirectory ->
+                    val remotePath = "$destinationDirectory/$remoteFileName"
                     file.inputStream().use { inputStream ->
-                        sftpChannel.put(inputStream, "$destinationDirectory/${book.fileName}")
+                        sftpChannel.put(inputStream, remotePath)
+                    }
+
+                    val remoteSize = sftpChannel.stat(remotePath).size
+                    if (remoteSize != file.length()) {
+                        throw IllegalStateException(
+                            "Kindle could not verify $remoteFileName in $destinationDirectory"
+                        )
                     }
                 }
 
@@ -115,10 +129,31 @@ object KindleSftpClient {
                 }
             }
 
+            onProgress(books.size, books.size, "Finalizing files on Kindle...")
+            val syncChannel = session.openChannel("exec") as ChannelExec
+            syncChannel.setCommand("sync")
+            syncChannel.connect()
+            var syncElapsed = 0
+            while (!syncChannel.isClosed && syncElapsed < 5000) {
+                Thread.sleep(100)
+                syncElapsed += 100
+            }
+            if (!syncChannel.isClosed || syncChannel.exitStatus != 0) {
+                syncChannel.disconnect()
+                throw IllegalStateException("Kindle did not finish saving the transferred files")
+            }
+            syncChannel.disconnect()
+
             if (triggerRescan) {
-                onProgress(books.size, books.size, "Triggering Kindle library rescan...")
+                onProgress(books.size, books.size, "Requesting Kindle library refresh...")
                 val execChannel = session.openChannel("exec") as ChannelExec
-                execChannel.setCommand("lipc-set-prop com.lab126.amznAssetsMgrService reScan 1")
+                execChannel.setCommand(
+                    "if initctl status framework 2>/dev/null | grep -q 'start/running'; then " +
+                        "if lipc-probe -l 2>/dev/null | grep -q 'com.lab126.amznAssetsMgrService'; then " +
+                        "lipc-set-prop com.lab126.amznAssetsMgrService reScan 1; " +
+                        "else lipc-set-prop -i com.lab126.indexer updateIndexerState 1; fi; " +
+                        "fi"
+                )
                 execChannel.connect()
                 var elapsed = 0
                 while (!execChannel.isClosed && elapsed < 2000) {
@@ -128,7 +163,7 @@ object KindleSftpClient {
                 execChannel.disconnect()
             }
 
-            onProgress(books.size, books.size, "Transfer completed successfully!")
+            onProgress(books.size, books.size, "Files copied and verified on Kindle.")
             Result.success(Unit)
         } catch (e: Exception) {
             Log.e(TAG, "SFTP transfer failed: ${e.message}", e)
