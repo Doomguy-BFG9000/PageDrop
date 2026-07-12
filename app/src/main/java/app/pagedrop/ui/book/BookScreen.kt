@@ -55,6 +55,7 @@ import androidx.compose.material.icons.filled.Build
 import androidx.compose.material.icons.filled.Send
 import androidx.compose.material.icons.outlined.MenuBook
 import androidx.compose.material.icons.rounded.Delete
+import androidx.compose.material.icons.rounded.Edit
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -112,6 +113,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import app.pagedrop.data.DefaultBookRepository
 import app.pagedrop.converter.BookConverter
 import app.pagedrop.data.local.database.Book
+import app.pagedrop.metadata.BookMetadataCandidate
 import kotlinx.coroutines.launch
 
 // ─────────────────────────────────────────────────────────────
@@ -140,6 +142,7 @@ fun BookScreen(
     val isTestingConnection by viewModel.isTestingConnection.collectAsStateWithLifecycle()
     val connectionTestResult by viewModel.connectionTestResult.collectAsStateWithLifecycle()
     val transferState by viewModel.transferState.collectAsStateWithLifecycle()
+    val metadataLookupState by viewModel.metadataLookupState.collectAsStateWithLifecycle()
 
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -152,11 +155,22 @@ fun BookScreen(
     var pendingConvertUri by remember { mutableStateOf<Uri?>(null) }
     var pendingConvertFormat by remember { mutableStateOf("") }
     var pendingConvertTitle by remember { mutableStateOf("") }
+    var pendingConvertCoverUri by remember { mutableStateOf<Uri?>(null) }
     val convertSheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
 
     // State for the transfer bottom sheet
     var showTransferSheet by remember { mutableStateOf(false) }
     val transferSheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+    var metadataEditingBook by remember { mutableStateOf<Book?>(null) }
+    var selectedCoverUri by remember { mutableStateOf<Uri?>(null) }
+    val coverPickerLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.OpenDocument(),
+    ) { uri -> selectedCoverUri = uri }
+    val conversionCoverPickerLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.OpenDocument(),
+    ) { uri ->
+        pendingConvertCoverUri = uri
+    }
 
     val filePickerLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.OpenDocument()
@@ -201,20 +215,36 @@ fun BookScreen(
             sheetState = convertSheetState,
             initialTitle = pendingConvertTitle,
             serverConversionAvailable = viewModel.isServerConversionAvailable,
+            lookupState = metadataLookupState,
+            onSearch = viewModel::searchBookMetadata,
+            selectedCoverUri = pendingConvertCoverUri,
+            onPickCover = { conversionCoverPickerLauncher.launch(arrayOf("image/*")) },
             onConvertToMobi = { outputTitle ->
                 pendingConvertUri?.let { uri ->
                     viewModel.addBookWithConversion(context, uri, outputTitle)
                 }
                 pendingConvertUri = null
                 pendingConvertFormat = ""
+                pendingConvertCoverUri = null
+                viewModel.clearMetadataLookup()
                 scope.launch { convertSheetState.hide() }
             },
-            onConvertOnServer = { outputTitle, targetFormat ->
+            onConvertOnServer = { outputTitle, outputAuthor, targetFormat, coverUrl ->
                 pendingConvertUri?.let { uri ->
-                    viewModel.addBookWithServerConversion(context, uri, outputTitle, targetFormat)
+                    viewModel.addBookWithServerConversion(
+                        context,
+                        uri,
+                        outputTitle,
+                        outputAuthor,
+                        targetFormat,
+                        pendingConvertCoverUri,
+                        coverUrl,
+                    )
                 }
                 pendingConvertUri = null
                 pendingConvertFormat = ""
+                pendingConvertCoverUri = null
+                viewModel.clearMetadataLookup()
                 scope.launch { convertSheetState.hide() }
             },
             onSendAsIs = {
@@ -223,11 +253,14 @@ fun BookScreen(
                 }
                 pendingConvertUri = null
                 pendingConvertFormat = ""
+                pendingConvertCoverUri = null
                 scope.launch { convertSheetState.hide() }
             },
             onDismiss = {
                 pendingConvertUri = null
                 pendingConvertFormat = ""
+                pendingConvertCoverUri = null
+                viewModel.clearMetadataLookup()
             },
         )
     }
@@ -264,6 +297,27 @@ fun BookScreen(
         )
     }
 
+    metadataEditingBook?.let { book ->
+        BookDetailsBottomSheet(
+            book = book,
+            lookupState = metadataLookupState,
+            selectedCoverUri = selectedCoverUri,
+            onSearch = viewModel::searchBookMetadata,
+            onPickCover = { coverPickerLauncher.launch(arrayOf("image/*")) },
+            onSave = { title, author, coverUrl ->
+                viewModel.updateBookMetadata(book, title, author, selectedCoverUri, coverUrl)
+                metadataEditingBook = null
+                selectedCoverUri = null
+                viewModel.clearMetadataLookup()
+            },
+            onDismiss = {
+                metadataEditingBook = null
+                selectedCoverUri = null
+                viewModel.clearMetadataLookup()
+            },
+        )
+    }
+
     LibraryScreenContent(
         uiState = uiState,
         transferQueue = transferQueue,
@@ -283,6 +337,11 @@ fun BookScreen(
         },
         onToggleQueued = viewModel::toggleQueued,
         onDeleteBook = viewModel::deleteBook,
+        onEditBook = { book ->
+            metadataEditingBook = book
+            selectedCoverUri = null
+            viewModel.clearMetadataLookup()
+        },
         onOpenTransferSheet = {
             showTransferSheet = true
         },
@@ -302,13 +361,19 @@ private fun FormatOptionsBottomSheet(
     sheetState: androidx.compose.material3.SheetState,
     initialTitle: String,
     serverConversionAvailable: Boolean,
+    lookupState: BookViewModel.MetadataLookupState,
+    onSearch: (String, String) -> Unit,
+    selectedCoverUri: Uri?,
+    onPickCover: () -> Unit,
     onConvertToMobi: (String) -> Unit,
-    onConvertOnServer: (String, String) -> Unit,
+    onConvertOnServer: (String, String, String, String?) -> Unit,
     onSendAsIs: () -> Unit,
     onDismiss: () -> Unit,
 ) {
     val canConvert = BookConverter.canConvert(format)
     var outputTitle by remember(initialTitle) { mutableStateOf(initialTitle) }
+    var outputAuthor by remember { mutableStateOf("Unknown Author") }
+    var selectedCoverUrl by remember { mutableStateOf<String?>(null) }
     var serverOutputFormat by remember { mutableStateOf("MOBI") }
     var outputFormatMenuExpanded by remember { mutableStateOf(false) }
     val description = when (format) {
@@ -327,7 +392,8 @@ private fun FormatOptionsBottomSheet(
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(horizontal = 24.dp)
-                .padding(bottom = 36.dp),
+                .padding(bottom = 36.dp)
+                .verticalScroll(rememberScrollState()),
         ) {
             Text(
                 text = "$format File",
@@ -352,6 +418,60 @@ private fun FormatOptionsBottomSheet(
                 singleLine = true,
                 modifier = Modifier.fillMaxWidth(),
             )
+
+            OutlinedTextField(
+                value = outputAuthor,
+                onValueChange = { outputAuthor = it },
+                label = { Text("Author") },
+                singleLine = true,
+                modifier = Modifier.fillMaxWidth(),
+            )
+
+            OutlinedButton(
+                onClick = { onSearch(outputTitle, outputAuthor) },
+                enabled = !lookupState.isSearching && outputTitle.isNotBlank(),
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                if (lookupState.isSearching) {
+                    CircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp)
+                    Spacer(Modifier.width(8.dp))
+                    Text("Searching Google Books")
+                } else {
+                    Text("Search Google Books")
+                }
+            }
+
+            lookupState.error?.let { error ->
+                Text(error, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
+            }
+            lookupState.candidates.forEach { candidate ->
+                FilledTonalButton(
+                    onClick = {
+                        outputTitle = candidate.title
+                        outputAuthor = candidate.author
+                        selectedCoverUrl = candidate.coverUrl
+                    },
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Column(modifier = Modifier.fillMaxWidth()) {
+                        Text(candidate.title, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        Text(candidate.author, style = MaterialTheme.typography.bodySmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    }
+                }
+            }
+
+            OutlinedButton(
+                onClick = onPickCover,
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                Text(
+                    when {
+                        selectedCoverUri != null -> "Custom cover selected"
+                        selectedCoverUrl != null -> "Google Books cover selected"
+                        else -> "Choose cover"
+                    }
+                )
+            }
 
             if (serverConversionAvailable) {
                 Spacer(Modifier.height(12.dp))
@@ -389,7 +509,9 @@ private fun FormatOptionsBottomSheet(
                         onClick = {
                             onConvertOnServer(
                                 outputTitle.trim().ifBlank { initialTitle },
+                                outputAuthor.trim().ifBlank { "Unknown Author" },
                                 serverOutputFormat.lowercase(),
+                                selectedCoverUrl,
                             )
                         },
                         modifier = Modifier
@@ -787,6 +909,124 @@ private fun TransferBottomSheet(
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun BookDetailsBottomSheet(
+    book: Book,
+    lookupState: BookViewModel.MetadataLookupState,
+    selectedCoverUri: Uri?,
+    onSearch: (String, String) -> Unit,
+    onPickCover: () -> Unit,
+    onSave: (String, String, String?) -> Unit,
+    onDismiss: () -> Unit,
+) {
+    var title by remember(book.uid) { mutableStateOf(book.title) }
+    var author by remember(book.uid) { mutableStateOf(book.author) }
+    var selectedCoverUrl by remember(book.uid) { mutableStateOf<String?>(null) }
+    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+
+    ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        sheetState = sheetState,
+        containerColor = MaterialTheme.colorScheme.surface,
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 24.dp)
+                .padding(bottom = 36.dp)
+                .verticalScroll(rememberScrollState()),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            Text(
+                text = "Book details",
+                style = MaterialTheme.typography.titleLarge,
+                fontWeight = FontWeight.Bold,
+            )
+
+            OutlinedTextField(
+                value = title,
+                onValueChange = { title = it },
+                label = { Text("Title") },
+                singleLine = true,
+                modifier = Modifier.fillMaxWidth(),
+            )
+            OutlinedTextField(
+                value = author,
+                onValueChange = { author = it },
+                label = { Text("Author") },
+                singleLine = true,
+                modifier = Modifier.fillMaxWidth(),
+            )
+
+            OutlinedButton(
+                onClick = { onSearch(title, author) },
+                enabled = !lookupState.isSearching && title.isNotBlank(),
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                if (lookupState.isSearching) {
+                    CircularProgressIndicator(
+                        modifier = Modifier.size(18.dp),
+                        strokeWidth = 2.dp,
+                    )
+                    Spacer(Modifier.width(8.dp))
+                    Text("Searching Google Books")
+                } else {
+                    Text("Search Google Books")
+                }
+            }
+
+            lookupState.error?.let { error ->
+                Text(
+                    text = error,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.error,
+                )
+            }
+            lookupState.candidates.forEach { candidate ->
+                FilledTonalButton(
+                    onClick = {
+                        title = candidate.title
+                        author = candidate.author
+                        selectedCoverUrl = candidate.coverUrl
+                    },
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Column(modifier = Modifier.fillMaxWidth()) {
+                        Text(candidate.title, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        Text(
+                            text = candidate.author,
+                            style = MaterialTheme.typography.bodySmall,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                        candidate.isbn?.let { isbn ->
+                            Text("ISBN $isbn", style = MaterialTheme.typography.labelSmall)
+                        }
+                    }
+                }
+            }
+
+            OutlinedButton(
+                onClick = onPickCover,
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                Text(if (selectedCoverUri != null) "Custom cover selected" else "Choose cover")
+            }
+
+            Button(
+                onClick = { onSave(title, author, selectedCoverUrl) },
+                enabled = title.isNotBlank(),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(48.dp),
+            ) {
+                Text("Save details")
+            }
+        }
+    }
+}
+
 // ─────────────────────────────────────────────────────────────
 // Pure UI content (preview-friendly)
 // ─────────────────────────────────────────────────────────────
@@ -801,6 +1041,7 @@ internal fun LibraryScreenContent(
     onAddBookClick: () -> Unit,
     onToggleQueued: (Book) -> Unit,
     onDeleteBook: (Book) -> Unit,
+    onEditBook: (Book) -> Unit = {},
     onOpenTransferSheet: () -> Unit,
     onNavigateToTools: () -> Unit = {},
     modifier: Modifier = Modifier,
@@ -937,6 +1178,7 @@ internal fun LibraryScreenContent(
                             transferQueue = transferQueue,
                             onToggleQueued = onToggleQueued,
                             onDelete = onDeleteBook,
+                            onEdit = onEditBook,
                             contentPadding = innerPadding,
                         )
                     }
@@ -1004,6 +1246,7 @@ private fun BookList(
     transferQueue: List<Book>,
     onToggleQueued: (Book) -> Unit,
     onDelete: (Book) -> Unit,
+    onEdit: (Book) -> Unit,
     contentPadding: PaddingValues,
 ) {
     LazyColumn(
@@ -1027,6 +1270,7 @@ private fun BookList(
                 isQueued = isQueued,
                 onTap = { onToggleQueued(book) },
                 onDelete = { onDelete(book) },
+                onEdit = { onEdit(book) },
                 modifier = Modifier.animateItem(
                     fadeInSpec = spring(stiffness = Spring.StiffnessMediumLow),
                     fadeOutSpec = spring(stiffness = Spring.StiffnessMediumLow),
@@ -1047,6 +1291,7 @@ private fun BookCard(
     isQueued: Boolean,
     onTap: () -> Unit,
     onDelete: () -> Unit,
+    onEdit: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     var showMenu by remember { mutableStateOf(false) }
@@ -1132,6 +1377,16 @@ private fun BookCard(
                 expanded = showMenu,
                 onDismissRequest = { showMenu = false },
             ) {
+                DropdownMenuItem(
+                    text = { Text("Edit details") },
+                    onClick = {
+                        showMenu = false
+                        onEdit()
+                    },
+                    leadingIcon = {
+                        Icon(Icons.Rounded.Edit, contentDescription = null)
+                    },
+                )
                 DropdownMenuItem(
                     text = { Text("Delete") },
                     onClick = {

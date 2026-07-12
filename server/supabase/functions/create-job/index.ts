@@ -16,6 +16,7 @@ const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
 const MAX_FILE_SIZE = 100 * 1024 * 1024; // 100 MB
+const MAX_COVER_SIZE = 15 * 1024 * 1024; // 15 MB
 
 interface CreateJobBody {
   jobType: "convert" | "article";
@@ -25,6 +26,8 @@ interface CreateJobBody {
   author?: string;
   url?: string; // only for article jobs
   fileName?: string; // only for convert jobs
+  coverFileName?: string; // optional, only for convert jobs
+  coverSizeBytes?: number;
   fileSizeBytes?: number; // for pre-flight check
 }
 
@@ -94,7 +97,7 @@ serve(async (req) => {
 
     const used = storageUsage?.bytes_used ?? 0;
     const quota = profileQuota?.storage_quota_bytes ?? 500 * 1024 * 1024;
-    const estimatedSize = body.fileSizeBytes ?? 0;
+    const estimatedSize = (body.fileSizeBytes ?? 0) + (body.coverSizeBytes ?? 0);
 
     if (used + estimatedSize > quota) {
       return new Response(
@@ -111,12 +114,21 @@ serve(async (req) => {
       { status: 413, headers: { "Content-Type": "application/json" } }
     );
   }
+  if (body.coverSizeBytes && body.coverSizeBytes > MAX_COVER_SIZE) {
+    return new Response(
+      JSON.stringify({ error: "Cover image exceeds maximum size of 15MB" }),
+      { status: 413, headers: { "Content-Type": "application/json" } }
+    );
+  }
 
   // 6. Create the job
   const jobId = crypto.randomUUID();
   const safeFileName = sanitizeFileName(body.fileName ?? "source.epub");
   const sourceStoragePath = jobType === "convert"
     ? `${user.id}/${jobId}/${safeFileName}`
+    : null;
+  const inputCoverStoragePath = jobType === "convert" && body.coverFileName
+    ? `${user.id}/${jobId}/cover_${sanitizeFileName(body.coverFileName)}`
     : null;
   const initialStatus = jobType === "convert" ? "awaiting_upload" : "pending";
 
@@ -128,6 +140,7 @@ serve(async (req) => {
       status: initialStatus,
       job_type: jobType,
       source_storage_path: sourceStoragePath,
+      input_cover_storage_path: inputCoverStoragePath,
       source_url: jobType === "article" ? body.url ?? null : null,
       target_format: body.targetFormat ?? "mobi",
       target_profile: body.targetProfile ?? "kindle-stock",
@@ -155,6 +168,7 @@ serve(async (req) => {
       jobId: job.id,
       status: job.status,
       sourceStoragePath,
+      inputCoverStoragePath,
     }),
     {
       status: 201,

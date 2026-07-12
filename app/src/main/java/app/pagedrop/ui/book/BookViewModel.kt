@@ -22,6 +22,7 @@ import android.graphics.BitmapFactory
 import android.net.Uri
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import dagger.hilt.android.qualifiers.ApplicationContext
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -35,6 +36,8 @@ import kotlinx.coroutines.launch
 import app.pagedrop.data.BookRepository
 import app.pagedrop.data.KindleSettings
 import app.pagedrop.data.local.database.Book
+import app.pagedrop.metadata.BookMetadataCandidate
+import app.pagedrop.metadata.BookMetadataLookup
 import app.pagedrop.server.PageDropApiClient
 import app.pagedrop.transfer.sftp.KindleSftpClient
 import app.pagedrop.ui.book.LibraryUiState.Error
@@ -43,9 +46,12 @@ import app.pagedrop.ui.book.LibraryUiState.Success
 import java.io.ByteArrayOutputStream
 import java.io.File
 import javax.inject.Inject
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 
 @HiltViewModel
 class BookViewModel @Inject constructor(
+    @ApplicationContext private val appContext: Context,
     private val bookRepository: BookRepository,
     private val kindleSettings: KindleSettings,
     private val pageDropApiClient: PageDropApiClient? = null,
@@ -112,6 +118,15 @@ class BookViewModel @Inject constructor(
     val isServerConversionAvailable: Boolean
         get() = pageDropApiClient?.isAvailable == true
 
+    data class MetadataLookupState(
+        val isSearching: Boolean = false,
+        val candidates: List<BookMetadataCandidate> = emptyList(),
+        val error: String? = null,
+    )
+
+    private val _metadataLookupState = MutableStateFlow(MetadataLookupState())
+    val metadataLookupState: StateFlow<MetadataLookupState> = _metadataLookupState.asStateFlow()
+
     fun addBook(context: Context, uri: Uri) {
         viewModelScope.launch {
             try {
@@ -140,7 +155,10 @@ class BookViewModel @Inject constructor(
         context: Context,
         uri: Uri,
         outputTitle: String? = null,
-        targetFormat: String = "mobi"
+        outputAuthor: String? = null,
+        targetFormat: String = "mobi",
+        coverUri: Uri? = null,
+        coverUrl: String? = null,
     ) {
         viewModelScope.launch {
             _isConverting.value = true
@@ -155,7 +173,10 @@ class BookViewModel @Inject constructor(
                     uri = uri,
                     outputDir = File(context.filesDir, "server-conversions"),
                     title = outputTitle,
-                    targetFormat = targetFormat
+                    author = outputAuthor,
+                    targetFormat = targetFormat,
+                    coverUri = coverUri,
+                    coverUrl = coverUrl,
                 ) ?: throw IllegalStateException("The PageDrop conversion service could not convert this file")
 
                 bookRepository.addBookFromFile(
@@ -181,11 +202,69 @@ class BookViewModel @Inject constructor(
         _conversionError.value = null
     }
 
+    fun searchBookMetadata(title: String, author: String) {
+        viewModelScope.launch {
+            _metadataLookupState.value = MetadataLookupState(isSearching = true)
+            val result = BookMetadataLookup.search(title, author)
+            _metadataLookupState.value = result.fold(
+                onSuccess = { candidates ->
+                    MetadataLookupState(
+                        candidates = candidates,
+                        error = if (candidates.isEmpty()) "No Google Books matches found" else null,
+                    )
+                },
+                onFailure = { error -> MetadataLookupState(error = error.localizedMessage ?: "Metadata search failed") },
+            )
+        }
+    }
+
+    fun clearMetadataLookup() {
+        _metadataLookupState.value = MetadataLookupState()
+    }
+
+    fun updateBookMetadata(
+        book: Book,
+        title: String,
+        author: String,
+        coverUri: Uri? = null,
+        coverUrl: String? = null,
+    ) {
+        viewModelScope.launch {
+            try {
+                val coverPath = withContext(Dispatchers.IO) {
+                    saveSelectedCover(book, coverUri, coverUrl) ?: book.coverPath
+                }
+                bookRepository.updateBookMetadata(book, title, author, coverPath)
+                _conversionError.value = null
+            } catch (error: Exception) {
+                _conversionError.value = error.localizedMessage ?: "Could not update book details"
+            }
+        }
+    }
+
     fun deleteBook(book: Book) {
         viewModelScope.launch {
             // Also remove from transfer queue if queued
             _transferQueue.update { queue -> queue.filter { it.uid != book.uid } }
             bookRepository.deleteBook(book)
+        }
+    }
+
+    private fun saveSelectedCover(book: Book, coverUri: Uri?, coverUrl: String?): String? {
+        if (coverUri == null && coverUrl.isNullOrBlank()) return null
+        val coversDir = File(appContext.filesDir, "covers")
+        if (!coversDir.exists()) coversDir.mkdirs()
+        val coverFile = File(coversDir, "metadata_${book.uid}.jpg")
+        val saved = when {
+            coverUri != null -> appContext.contentResolver.openInputStream(coverUri)?.use { input ->
+                coverFile.outputStream().use(input::copyTo)
+                coverFile.length() > 0
+            } ?: false
+            else -> BookMetadataLookup.downloadCover(coverUrl!!, coverFile)
+        }
+        return coverFile.absolutePath.takeIf { saved } ?: run {
+            coverFile.delete()
+            throw IllegalStateException("Could not save the selected cover")
         }
     }
 

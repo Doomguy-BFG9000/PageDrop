@@ -58,4 +58,7 @@ interface BookDao {
 
     @Query("UPDATE book SET coverPath = :coverPath, kindleUuid = :kindleUuid WHERE uid = :uid")
     suspend fun updateCoverAndUuid(uid: Int, coverPath: String?, kindleUuid: String)
+
+    @Query("UPDATE book SET title = :title, author = :author, coverPath = :coverPath WHERE uid = :uid")
+    suspend fun updateMetadata(uid: Int, title: String, author: String, coverPath: String?)
 }

@@ -118,5 +118,7 @@ private class FakeBookDao : BookDao {
         transferredUids.add(uid)
     }
 
+    override suspend fun updateMetadata(uid: Int, title: String, author: String, coverPath: String?) {}
+
     override suspend fun updateCoverAndUuid(uid: Int, coverPath: String?, kindleUuid: String) {}
 }

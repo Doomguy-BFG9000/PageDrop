@@ -97,6 +97,7 @@ async def run_calibre(
     output_path: Path,
     title: str | None = None,
     author: str | None = None,
+    cover_path: Path | None = None,
     timeout: int = JOB_TIMEOUT,
 ) -> tuple[int, str, str]:
     """Run ebook-convert, return (returncode, stdout, stderr)."""
@@ -105,6 +106,8 @@ async def run_calibre(
         cmd.extend(["--title", title.strip()])
     if author and author.strip():
         cmd.extend(["--authors", author.strip()])
+    if cover_path and cover_path.exists():
+        cmd.extend(["--cover", str(cover_path)])
     proc = await asyncio.create_subprocess_exec(
         *cmd,
         stdout=asyncio.subprocess.PIPE,
@@ -118,13 +121,20 @@ async def run_calibre(
         return -1, "", "Timed out"
 
 
-async def apply_metadata(ebook_path: Path, title: str | None, author: str | None) -> tuple[int, str]:
+async def apply_metadata(
+    ebook_path: Path,
+    title: str | None,
+    author: str | None,
+    cover_path: Path | None = None,
+) -> tuple[int, str]:
     """Apply PageDrop's user-facing metadata to the converted ebook."""
     cmd = ["ebook-meta", str(ebook_path)]
     if title and title.strip():
         cmd.extend(["--title", title.strip()])
     if author and author.strip():
         cmd.extend(["--authors", author.strip()])
+    if cover_path and cover_path.exists():
+        cmd.extend(["--cover", str(cover_path)])
     if len(cmd) == 2:
         return 0, ""
 
@@ -201,6 +211,7 @@ async def process_job(job: dict) -> dict:
     job_id = job["id"]
     user_id = job["user_id"]
     source_path = job.get("source_storage_path")
+    input_cover_path = job.get("input_cover_storage_path")
     source_url = job.get("source_url")
     target_fmt = job.get("target_format", "mobi")
     job_type = job.get("job_type")
@@ -220,6 +231,7 @@ async def process_job(job: dict) -> dict:
         source_file = workdir / f"source{source_suffix}"
         output_file = workdir / f"output.{target_fmt}"
         cover_file = workdir / "cover.jpg"
+        requested_cover_file = workdir / "requested_cover"
 
         # 2. Prepare source
         if job_type == "article":
@@ -256,6 +268,12 @@ async def process_job(job: dict) -> dict:
             source_bytes = supabase_download("sources", source_path)
             source_file.write_bytes(source_bytes)
 
+        if input_cover_path:
+            log(f"Downloading selected cover: {input_cover_path}")
+            requested_cover_file.write_bytes(supabase_download("sources", input_cover_path))
+        else:
+            requested_cover_file = None
+
         fingerprint = sha256_file(source_file)
 
         # 3. Run Calibre conversion
@@ -265,6 +283,7 @@ async def process_job(job: dict) -> dict:
             output_file,
             title=job.get("title"),
             author=job.get("author"),
+            cover_path=requested_cover_file,
         )
 
         if rc != 0:
@@ -285,6 +304,7 @@ async def process_job(job: dict) -> dict:
             output_file,
             job.get("title"),
             job.get("author"),
+            requested_cover_file,
         )
         if metadata_rc != 0:
             log(f"Metadata update failed (exit {metadata_rc})")

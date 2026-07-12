@@ -41,6 +41,7 @@ interface BookRepository {
     suspend fun getBookById(id: Int): Book?
     suspend fun markTransferred(uid: Int)
     suspend fun markTransferredBookIds(uids: List<Int>)
+    suspend fun updateBookMetadata(book: Book, title: String, author: String, coverPath: String?): Book
 }
 
 class DefaultBookRepository @Inject constructor(
@@ -308,6 +309,13 @@ class DefaultBookRepository @Inject constructor(
         uids.forEach { uid ->
             bookDao.updateLastTransferred(uid, timestamp)
         }
+    }
+
+    override suspend fun updateBookMetadata(book: Book, title: String, author: String, coverPath: String?): Book {
+        val normalizedTitle = title.trim().ifBlank { book.title }
+        val normalizedAuthor = author.trim().ifBlank { "Unknown Author" }
+        bookDao.updateMetadata(book.uid, normalizedTitle, normalizedAuthor, coverPath)
+        return book.copy(title = normalizedTitle, author = normalizedAuthor, coverPath = coverPath)
     }
 
     override suspend fun addBookFromFile(book: Book): Long {

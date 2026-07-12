@@ -129,7 +129,9 @@ class PageDropApiClient @Inject constructor(
         uri: Uri,
         targetFormat: String = "mobi",
         title: String? = null,
-        author: String? = null
+        author: String? = null,
+        coverUri: Uri? = null,
+        coverUrl: String? = null,
     ): JobResponse? = withContext(Dispatchers.IO) {
         try {
             val base = baseUrl ?: return@withContext null
@@ -141,6 +143,16 @@ class PageDropApiClient @Inject constructor(
             val fileName = safeFileName(
                 getDisplayName(uri) ?: uri.lastPathSegment ?: "upload_${System.currentTimeMillis()}"
             )
+            val coverBytes = when {
+                coverUri != null -> context.contentResolver.openInputStream(coverUri)?.use { it.readBytes() }
+                !coverUrl.isNullOrBlank() -> downloadBytes(coverUrl)
+                else -> null
+            }
+            val coverFileName = when {
+                coverUri != null -> safeFileName(getDisplayName(coverUri) ?: "cover.jpg")
+                coverBytes != null -> "google_books_cover.jpg"
+                else -> null
+            }
 
             val body = buildJsonObject {
                 put("jobType", "convert")
@@ -148,6 +160,8 @@ class PageDropApiClient @Inject constructor(
                 put("fileName", fileName)
                 title?.let { put("title", it) }
                 author?.let { put("author", it) }
+                coverFileName?.let { put("coverFileName", it) }
+                coverBytes?.let { put("coverSizeBytes", it.size.toLong()) }
                 put("fileSizeBytes", sourceBytes.size.toLong())
             }.toString()
 
@@ -155,6 +169,9 @@ class PageDropApiClient @Inject constructor(
             val sourcePath = job.sourceStoragePath ?: return@withContext null
 
             if (!uploadSource(base, key, token, sourcePath, sourceBytes)) return@withContext null
+            if (coverBytes != null && job.inputCoverStoragePath != null &&
+                !uploadSource(base, key, token, job.inputCoverStoragePath, coverBytes)
+            ) return@withContext null
             if (!markJobPending(base, key, token, job.jobId)) return@withContext null
 
             job.copy(status = "pending")
@@ -169,9 +186,11 @@ class PageDropApiClient @Inject constructor(
         outputDir: File,
         targetFormat: String = "mobi",
         title: String? = null,
-        author: String? = null
+        author: String? = null,
+        coverUri: Uri? = null,
+        coverUrl: String? = null,
     ): PreparedArtifact? = withContext(Dispatchers.IO) {
-        val job = createConvertJob(uri, targetFormat, title, author) ?: return@withContext null
+        val job = createConvertJob(uri, targetFormat, title, author, coverUri, coverUrl) ?: return@withContext null
         val status = pollJob(job.jobId) ?: return@withContext null
         if (status.status == "failed") {
             throw IllegalStateException(status.error_message ?: "PageDrop server conversion failed")
@@ -223,6 +242,13 @@ class PageDropApiClient @Inject constructor(
             .build()
         client.newCall(req).execute().use { return it.isSuccessful }
     }
+
+    private fun downloadBytes(url: String): ByteArray? = runCatching {
+        client.newCall(Request.Builder().url(url).build()).execute().use { response ->
+            if (!response.isSuccessful) return null
+            response.body?.bytes()
+        }
+    }.getOrNull()
 
     private fun markJobPending(base: String, key: String, token: String, jobId: String): Boolean {
         val body = buildJsonObject {

@@ -7,7 +7,8 @@ import kotlinx.serialization.json.JsonElement
 data class JobResponse(
     val jobId: String,
     val status: String,
-    val sourceStoragePath: String? = null
+    val sourceStoragePath: String? = null,
+    val inputCoverStoragePath: String? = null,
 )
 
 @Serializable

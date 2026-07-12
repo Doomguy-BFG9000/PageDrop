@@ -17,6 +17,7 @@
 package app.pagedrop.ui.book
 
 import android.content.Context
+import android.content.ContextWrapper
 import android.net.Uri
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
@@ -36,14 +37,14 @@ class BookViewModelTest {
 
     @Test
     fun uiState_initiallyLoading() = runTest {
-        val viewModel = BookViewModel(FakeBookRepository(), KindleSettings())
+        val viewModel = BookViewModel(ContextWrapper(null), FakeBookRepository(), KindleSettings())
         assertEquals(LibraryUiState.Loading, viewModel.uiState.first())
     }
 
     @Test
     fun transferQueue_toggleQueued_addsBook() = runTest {
         val repo = FakeBookRepository()
-        val viewModel = BookViewModel(repo, KindleSettings())
+        val viewModel = BookViewModel(ContextWrapper(null), repo, KindleSettings())
         val book = Book(uid = 1, title = "T", author = "A", fileName = "f.mobi", filePath = "/p/f.mobi", format = "MOBI", fileSize = 100)
         repo.addBookToTest(book)
 
@@ -56,7 +57,7 @@ class BookViewModelTest {
     @Test
     fun transferQueue_toggleQueued_removesBook() = runTest {
         val repo = FakeBookRepository()
-        val viewModel = BookViewModel(repo, KindleSettings())
+        val viewModel = BookViewModel(ContextWrapper(null), repo, KindleSettings())
         val book = Book(uid = 2, title = "T2", author = "A2", fileName = "f2.mobi", filePath = "/p/f2.mobi", format = "MOBI", fileSize = 200)
         repo.addBookToTest(book)
         viewModel.toggleQueued(book)
@@ -68,7 +69,7 @@ class BookViewModelTest {
     @Test
     fun isQueued_returnsTrueForQueuedBook() = runTest {
         val repo = FakeBookRepository()
-        val viewModel = BookViewModel(repo, KindleSettings())
+        val viewModel = BookViewModel(ContextWrapper(null), repo, KindleSettings())
         val book = Book(uid = 3, title = "T3", author = "A3", fileName = "f3.mobi", filePath = "/p/f3.mobi", format = "MOBI", fileSize = 300)
         repo.addBookToTest(book)
         viewModel.toggleQueued(book)
@@ -78,7 +79,7 @@ class BookViewModelTest {
     @Test
     fun transferState_startsIdle() = runTest {
         val repo = FakeBookRepository()
-        val viewModel = BookViewModel(repo, KindleSettings())
+        val viewModel = BookViewModel(ContextWrapper(null), repo, KindleSettings())
         assertEquals(BookViewModel.TransferState.Idle, viewModel.transferState.first())
     }
 }
@@ -118,4 +119,7 @@ private class FakeBookRepository : BookRepository {
     override suspend fun markTransferred(uid: Int) {}
 
     override suspend fun markTransferredBookIds(uids: List<Int>) {}
+
+    override suspend fun updateBookMetadata(book: Book, title: String, author: String, coverPath: String?): Book =
+        book.copy(title = title, author = author, coverPath = coverPath)
 }

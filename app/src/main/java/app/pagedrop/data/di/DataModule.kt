@@ -70,6 +70,10 @@ class FakeBookRepository @Inject constructor() : BookRepository {
         throw NotImplementedError()
     }
 
+    override suspend fun updateBookMetadata(book: Book, title: String, author: String, coverPath: String?): Book {
+        throw NotImplementedError()
+    }
+
     override suspend fun addBookFromFile(book: Book): Long {
         throw NotImplementedError()
     }
