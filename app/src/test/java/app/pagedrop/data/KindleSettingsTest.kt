@@ -39,6 +39,16 @@ class KindleSettingsTest {
     }
 
     @Test
+    fun targetDirectories_preservesPrimaryAndAdditionalPaths() {
+        val settings = KindleSettings()
+
+        settings.targetDirectories = listOf("/mnt/us/documents", "/mnt/us/koreader/books")
+
+        assertEquals(listOf("/mnt/us/documents", "/mnt/us/koreader/books"), settings.targetDirectories)
+        assertEquals("/mnt/us/documents", settings.targetDirectory)
+    }
+
+    @Test
     fun detectFormat_knownFormats() {
         assertEquals("MOBI", DefaultBookRepository.detectFormat("book.mobi"))
         assertEquals("AZW3", DefaultBookRepository.detectFormat("book.AZW3"))

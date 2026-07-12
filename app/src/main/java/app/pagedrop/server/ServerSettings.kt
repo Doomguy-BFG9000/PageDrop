@@ -1,6 +1,7 @@
 package app.pagedrop.server
 
 import android.content.Context
+import app.pagedrop.BuildConfig
 import dagger.hilt.android.qualifiers.ApplicationContext
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -11,17 +12,11 @@ class ServerSettings @Inject constructor(
 ) {
     private val prefs = context.getSharedPreferences("pagedrop_server", Context.MODE_PRIVATE)
 
-    var enabled: Boolean
-        get() = prefs.getBoolean("enabled", false)
-        set(value) = prefs.edit().putBoolean("enabled", value).apply()
+    val supabaseUrl: String
+        get() = BuildConfig.PAGEDROP_SUPABASE_URL.trim().removeSuffix("/")
 
-    var supabaseUrl: String
-        get() = prefs.getString("supabase_url", "") ?: ""
-        set(value) = prefs.edit().putString("supabase_url", value).apply()
-
-    var supabaseAnonKey: String
-        get() = prefs.getString("supabase_anon_key", "") ?: ""
-        set(value) = prefs.edit().putString("supabase_anon_key", value).apply()
+    val supabaseAnonKey: String
+        get() = BuildConfig.PAGEDROP_SUPABASE_ANON_KEY.trim()
 
     var accessToken: String
         get() = prefs.getString("access_token", "") ?: ""
@@ -32,7 +27,7 @@ class ServerSettings @Inject constructor(
         set(value) = prefs.edit().putString("refresh_token", value).apply()
 
     val isConfigured: Boolean
-        get() = enabled && supabaseUrl.isNotBlank() && supabaseAnonKey.isNotBlank()
+        get() = supabaseUrl.isNotBlank() && supabaseAnonKey.isNotBlank()
 
     val isAuthenticated: Boolean
         get() = accessToken.isNotBlank()

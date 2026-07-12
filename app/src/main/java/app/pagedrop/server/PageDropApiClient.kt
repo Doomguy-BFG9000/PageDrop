@@ -50,6 +50,30 @@ class PageDropApiClient @Inject constructor(
     private val anonKey: String? get() = serverSettings.supabaseAnonKey.takeIf { it.isNotBlank() }
     private val accessToken: String? get() = serverSettings.accessToken.takeIf { it.isNotBlank() }
 
+    suspend fun testConnection(): Result<Unit> = withContext(Dispatchers.IO) {
+        try {
+            val base = baseUrl ?: return@withContext Result.failure(
+                IllegalStateException("PageDrop conversion service is not configured in this build")
+            )
+            val key = anonKey ?: return@withContext Result.failure(
+                IllegalStateException("PageDrop conversion service is not configured in this build")
+            )
+            val token = signInAnonymously().getOrElse { return@withContext Result.failure(it) }
+            val req = Request.Builder()
+                .url("$base/auth/v1/user")
+                .header("apikey", key)
+                .header("Authorization", "Bearer $token")
+                .get()
+                .build()
+            client.newCall(req).execute().use { response ->
+                if (response.isSuccessful) Result.success(Unit)
+                else Result.failure(IllegalStateException("PageDrop conversion service returned HTTP ${response.code}"))
+            }
+        } catch (e: Exception) {
+            Result.failure(IllegalStateException("Could not reach the PageDrop conversion service: ${e.localizedMessage ?: "unknown error"}", e))
+        }
+    }
+
     suspend fun signInAnonymously(): Result<String> = withContext(Dispatchers.IO) {
         try {
             val base = baseUrl ?: return@withContext Result.failure(IllegalStateException("Server URL is not configured"))

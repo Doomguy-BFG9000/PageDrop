@@ -134,7 +134,7 @@ fun BookScreen(
     val kindlePort by viewModel.kindlePort.collectAsStateWithLifecycle()
     val kindleUsername by viewModel.kindleUsername.collectAsStateWithLifecycle()
     val kindlePassword by viewModel.kindlePassword.collectAsStateWithLifecycle()
-    val kindleDirectory by viewModel.kindleDirectory.collectAsStateWithLifecycle()
+    val kindleDirectories by viewModel.kindleDirectories.collectAsStateWithLifecycle()
     val triggerRescan by viewModel.triggerRescan.collectAsStateWithLifecycle()
 
     val isTestingConnection by viewModel.isTestingConnection.collectAsStateWithLifecycle()
@@ -197,9 +197,18 @@ fun BookScreen(
         FormatOptionsBottomSheet(
             format = pendingConvertFormat,
             sheetState = convertSheetState,
+            serverConversionAvailable = viewModel.isServerConversionAvailable,
             onConvertToMobi = {
                 pendingConvertUri?.let { uri ->
                     viewModel.addBookWithConversion(context, uri)
+                }
+                pendingConvertUri = null
+                pendingConvertFormat = ""
+                scope.launch { convertSheetState.hide() }
+            },
+            onConvertOnServer = {
+                pendingConvertUri?.let { uri ->
+                    viewModel.addBookWithServerConversion(context, uri)
                 }
                 pendingConvertUri = null
                 pendingConvertFormat = ""
@@ -228,7 +237,7 @@ fun BookScreen(
             kindlePort = kindlePort,
             kindleUsername = kindleUsername,
             kindlePassword = kindlePassword,
-            kindleDirectory = kindleDirectory,
+            kindleDirectories = kindleDirectories,
             triggerRescan = triggerRescan,
             isTestingConnection = isTestingConnection,
             connectionTestResult = connectionTestResult,
@@ -238,7 +247,7 @@ fun BookScreen(
             onPortChange = viewModel::updateKindlePort,
             onUsernameChange = viewModel::updateKindleUsername,
             onPasswordChange = viewModel::updateKindlePassword,
-            onDirectoryChange = viewModel::updateKindleDirectory,
+            onDirectoriesChange = viewModel::updateKindleDirectories,
             onTriggerRescanChange = viewModel::updateTriggerRescan,
             onTestConnection = viewModel::testConnection,
             onClearTestResult = viewModel::clearConnectionTestResult,
@@ -288,7 +297,9 @@ fun BookScreen(
 private fun FormatOptionsBottomSheet(
     format: String,
     sheetState: androidx.compose.material3.SheetState,
+    serverConversionAvailable: Boolean,
     onConvertToMobi: () -> Unit,
+    onConvertOnServer: () -> Unit,
     onSendAsIs: () -> Unit,
     onDismiss: () -> Unit,
 ) {
@@ -329,6 +340,40 @@ private fun FormatOptionsBottomSheet(
 
             // Primary action: Convert to MOBI
             if (canConvert) {
+                if (serverConversionAvailable) {
+                    Button(
+                        onClick = onConvertOnServer,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(48.dp),
+                        shape = RoundedCornerShape(12.dp),
+                    ) {
+                        Text("Convert with PageDrop server")
+                    }
+
+                    Spacer(Modifier.height(12.dp))
+                } else {
+                    OutlinedButton(
+                        onClick = {},
+                        enabled = false,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(48.dp),
+                        shape = RoundedCornerShape(12.dp),
+                    ) {
+                        Text("Convert with PageDrop server")
+                    }
+
+                    Spacer(Modifier.height(4.dp))
+                    Text(
+                        text = "PageDrop server conversion is not connected in this build.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+
+                    Spacer(Modifier.height(12.dp))
+                }
+
                 Button(
                     onClick = onConvertToMobi,
                     modifier = Modifier
@@ -368,7 +413,7 @@ private fun TransferBottomSheet(
     kindlePort: String,
     kindleUsername: String,
     kindlePassword: String,
-    kindleDirectory: String,
+    kindleDirectories: List<String>,
     triggerRescan: Boolean,
     isTestingConnection: Boolean,
     connectionTestResult: Result<Unit>?,
@@ -378,7 +423,7 @@ private fun TransferBottomSheet(
     onPortChange: (String) -> Unit,
     onUsernameChange: (String) -> Unit,
     onPasswordChange: (String) -> Unit,
-    onDirectoryChange: (String) -> Unit,
+    onDirectoriesChange: (List<String>) -> Unit,
     onTriggerRescanChange: (Boolean) -> Unit,
     onTestConnection: () -> Unit,
     onClearTestResult: () -> Unit,
@@ -452,14 +497,44 @@ private fun TransferBottomSheet(
                 )
             }
 
-            // Target Directory
-            OutlinedTextField(
-                value = kindleDirectory,
-                onValueChange = onDirectoryChange,
-                label = { Text("Kindle Documents Directory") },
-                singleLine = true,
-                modifier = Modifier.fillMaxWidth()
+            Text(
+                text = "Send to paths",
+                style = MaterialTheme.typography.titleSmall,
+                fontWeight = FontWeight.SemiBold,
+                color = MaterialTheme.colorScheme.onSurface
             )
+            kindleDirectories.forEachIndexed { index, path ->
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    OutlinedTextField(
+                        value = path,
+                        onValueChange = { value ->
+                            onDirectoriesChange(kindleDirectories.toMutableList().also { it[index] = value })
+                        },
+                        label = { Text(if (index == 0) "Kindle Documents Directory" else "Additional Kindle Path") },
+                        singleLine = true,
+                        modifier = Modifier.weight(1f)
+                    )
+                    if (kindleDirectories.size > 1) {
+                        IconButton(onClick = {
+                            onDirectoriesChange(kindleDirectories.filterIndexed { itemIndex, _ -> itemIndex != index })
+                        }) {
+                            Icon(Icons.Rounded.Delete, contentDescription = "Remove path")
+                        }
+                    }
+                }
+            }
+            OutlinedButton(
+                onClick = { onDirectoriesChange(kindleDirectories + "/mnt/us/documents") },
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(18.dp))
+                Spacer(Modifier.width(8.dp))
+                Text("Add path")
+            }
 
             // Trigger Library Rescan Checkbox
             Row(

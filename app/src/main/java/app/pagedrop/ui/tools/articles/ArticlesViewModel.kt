@@ -100,7 +100,7 @@ class ArticlesViewModel @Inject constructor(
                 port = kindleSettings.port,
                 user = kindleSettings.username,
                 pass = kindleSettings.password,
-                directory = kindleSettings.targetDirectory,
+                directories = kindleSettings.targetDirectories,
                 triggerRescan = kindleSettings.triggerRescan
             ) { _, _, message ->
                 _state.update { it.copy(progressMessage = message) }
@@ -144,7 +144,7 @@ class ArticlesViewModel @Inject constructor(
             port = kindleSettings.port,
             user = kindleSettings.username,
             pass = kindleSettings.password,
-            directory = kindleSettings.targetDirectory,
+            directories = kindleSettings.targetDirectories,
             triggerRescan = kindleSettings.triggerRescan
         ) { _, _, message ->
             _state.update { it.copy(progressMessage = message) }

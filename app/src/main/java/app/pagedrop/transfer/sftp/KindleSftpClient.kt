@@ -56,7 +56,7 @@ object KindleSftpClient {
         port: Int,
         user: String,
         pass: String,
-        directory: String,
+        directories: List<String>,
         triggerRescan: Boolean,
         thumbnailBytes: Map<Int, ByteArray> = emptyMap(),
         onProgress: (Int, Int, String) -> Unit
@@ -79,7 +79,13 @@ object KindleSftpClient {
             sftpChannel = session.openChannel("sftp") as ChannelSftp
             sftpChannel.connect(10000)
 
-            val destDir = if (directory.endsWith("/")) directory else "$directory/"
+            val destinationDirectories = directories
+                .map { it.trim().removeSuffix("/") }
+                .filter { it.isNotBlank() }
+                .distinct()
+            if (destinationDirectories.isEmpty()) {
+                throw IllegalArgumentException("Add at least one Kindle destination path")
+            }
 
             books.forEachIndexed { index, book ->
                 onProgress(index, books.size, "Sending: ${book.title}")
@@ -88,8 +94,10 @@ object KindleSftpClient {
                     throw java.io.FileNotFoundException("File not found: ${book.filePath}")
                 }
 
-                file.inputStream().use { inputStream ->
-                    sftpChannel.put(inputStream, destDir + book.fileName)
+                destinationDirectories.forEach { destinationDirectory ->
+                    file.inputStream().use { inputStream ->
+                        sftpChannel.put(inputStream, "$destinationDirectory/${book.fileName}")
+                    }
                 }
 
                 thumbnailBytes[book.uid]?.let { tBytes ->

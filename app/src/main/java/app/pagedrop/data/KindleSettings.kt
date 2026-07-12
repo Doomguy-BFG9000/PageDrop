@@ -44,6 +44,21 @@ class KindleSettings @Inject constructor(
         get() = prefs.getString("target_directory", "/mnt/us/documents") ?: "/mnt/us/documents"
         set(value) = prefs.edit().putString("target_directory", value).apply()
 
+    var targetDirectories: List<String>
+        get() = listOf(targetDirectory) + (prefs.getStringSet("target_directories", null)
+            ?.map { it.trim() }
+            ?.filter { it.isNotBlank() }
+            ?.filter { it != targetDirectory }
+            .orEmpty())
+        set(value) {
+            val paths = value.map { it.trim() }.filter { it.isNotBlank() }.distinct()
+                .ifEmpty { listOf("/mnt/us/documents") }
+            prefs.edit()
+                .putStringSet("target_directories", paths.toSet())
+                .putString("target_directory", paths.first())
+                .apply()
+        }
+
     var triggerRescan: Boolean
         get() = prefs.getBoolean("trigger_rescan", true)
         set(value) = prefs.edit().putBoolean("trigger_rescan", value).apply()
@@ -53,7 +68,8 @@ internal class NullSharedPreferences : SharedPreferences {
     private val map = mutableMapOf<String, Any?>()
     override fun getAll(): MutableMap<String, *> = map
     override fun getString(key: String?, defValue: String?): String? = (map[key] as? String) ?: defValue
-    override fun getStringSet(key: String?, defValues: MutableSet<String>?): MutableSet<String>? = null
+    override fun getStringSet(key: String?, defValues: MutableSet<String>?): MutableSet<String>? =
+        (map[key] as? Set<*>)?.filterIsInstance<String>()?.toMutableSet() ?: defValues
     override fun getInt(key: String?, defValue: Int): Int = (map[key] as? Int) ?: defValue
     override fun getLong(key: String?, defValue: Long): Long = (map[key] as? Long) ?: defValue
     override fun getFloat(key: String?, defValue: Float): Float = (map[key] as? Float) ?: defValue
@@ -66,7 +82,10 @@ internal class NullSharedPreferences : SharedPreferences {
 
 internal class NullEditor(private val map: MutableMap<String, Any?>) : SharedPreferences.Editor {
     override fun putString(key: String?, value: String?): SharedPreferences.Editor { if (key != null) map[key] = value; return this }
-    override fun putStringSet(key: String?, values: MutableSet<String>?): SharedPreferences.Editor = this
+    override fun putStringSet(key: String?, values: MutableSet<String>?): SharedPreferences.Editor {
+        if (key != null) map[key] = values
+        return this
+    }
     override fun putInt(key: String?, value: Int): SharedPreferences.Editor { if (key != null) map[key] = value; return this }
     override fun putLong(key: String?, value: Long): SharedPreferences.Editor { if (key != null) map[key] = value; return this }
     override fun putFloat(key: String?, value: Float): SharedPreferences.Editor { if (key != null) map[key] = value; return this }

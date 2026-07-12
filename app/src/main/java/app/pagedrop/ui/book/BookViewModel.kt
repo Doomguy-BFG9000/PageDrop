@@ -35,6 +35,7 @@ import kotlinx.coroutines.launch
 import app.pagedrop.data.BookRepository
 import app.pagedrop.data.KindleSettings
 import app.pagedrop.data.local.database.Book
+import app.pagedrop.server.PageDropApiClient
 import app.pagedrop.transfer.sftp.KindleSftpClient
 import app.pagedrop.ui.book.LibraryUiState.Error
 import app.pagedrop.ui.book.LibraryUiState.Loading
@@ -47,6 +48,7 @@ import javax.inject.Inject
 class BookViewModel @Inject constructor(
     private val bookRepository: BookRepository,
     private val kindleSettings: KindleSettings,
+    private val pageDropApiClient: PageDropApiClient? = null,
 ) : ViewModel() {
 
     val uiState: StateFlow<LibraryUiState> = bookRepository
@@ -101,8 +103,14 @@ class BookViewModel @Inject constructor(
     private val _kindleDirectory = MutableStateFlow(kindleSettings.targetDirectory)
     val kindleDirectory: StateFlow<String> = _kindleDirectory.asStateFlow()
 
+    private val _kindleDirectories = MutableStateFlow(kindleSettings.targetDirectories)
+    val kindleDirectories: StateFlow<List<String>> = _kindleDirectories.asStateFlow()
+
     private val _triggerRescan = MutableStateFlow(kindleSettings.triggerRescan)
     val triggerRescan: StateFlow<Boolean> = _triggerRescan.asStateFlow()
+
+    val isServerConversionAvailable: Boolean
+        get() = pageDropApiClient?.isAvailable == true
 
     fun addBook(context: Context, uri: Uri) {
         viewModelScope.launch {
@@ -122,6 +130,40 @@ class BookViewModel @Inject constructor(
                 bookRepository.convertAndAddBook(context, uri)
             } catch (e: Exception) {
                 _conversionError.value = e.localizedMessage ?: "Conversion failed"
+            } finally {
+                _isConverting.value = false
+            }
+        }
+    }
+
+    fun addBookWithServerConversion(context: Context, uri: Uri) {
+        viewModelScope.launch {
+            _isConverting.value = true
+            _conversionError.value = null
+            try {
+                val server = pageDropApiClient
+                    ?: throw IllegalStateException("PageDrop conversion service is unavailable")
+                val connection = server.testConnection()
+                if (connection.isFailure) throw connection.exceptionOrNull()!!
+
+                val prepared = server.convertUriToLocalArtifact(
+                    uri = uri,
+                    outputDir = File(context.filesDir, "server-conversions")
+                ) ?: throw IllegalStateException("The PageDrop conversion service could not convert this file")
+
+                bookRepository.addBookFromFile(
+                    Book(
+                        title = prepared.title,
+                        author = prepared.author,
+                        fileName = prepared.file.name,
+                        filePath = prepared.file.absolutePath,
+                        format = prepared.format,
+                        fileSize = prepared.file.length(),
+                        coverPath = prepared.coverFile?.absolutePath
+                    )
+                )
+            } catch (e: Exception) {
+                _conversionError.value = e.localizedMessage ?: "Server conversion failed"
             } finally {
                 _isConverting.value = false
             }
@@ -189,6 +231,17 @@ class BookViewModel @Inject constructor(
     fun updateKindleDirectory(value: String) {
         _kindleDirectory.value = value
         kindleSettings.targetDirectory = value
+        updateKindleDirectories(_kindleDirectories.value.toMutableList().also {
+            if (it.isEmpty()) it.add(value) else it[0] = value
+        })
+    }
+
+    fun updateKindleDirectories(value: List<String>) {
+        val normalized = value.map { it.trim() }.filter { it.isNotBlank() }
+            .ifEmpty { listOf("/mnt/us/documents") }
+        _kindleDirectories.value = normalized
+        _kindleDirectory.value = normalized.first()
+        kindleSettings.targetDirectories = normalized
     }
 
     fun updateTriggerRescan(value: Boolean) {
@@ -235,6 +288,21 @@ class BookViewModel @Inject constructor(
         viewModelScope.launch {
             _transferState.value = TransferState.Idle
 
+            val hostVal = _kindleIp.value
+            val portVal = _kindlePort.value.toIntOrNull() ?: 22
+            val userVal = _kindleUsername.value
+            val passVal = _kindlePassword.value
+            val directoriesVal = _kindleDirectories.value
+            val rescanVal = _triggerRescan.value
+
+            _transferState.value = TransferState.Progress(0, booksToTransfer.size, "Checking Kindle connection...")
+            val connection = KindleSftpClient.testConnection(hostVal, portVal, userVal, passVal)
+            if (connection.isFailure) {
+                val detail = connection.exceptionOrNull()?.localizedMessage ?: "unknown error"
+                _transferState.value = TransferState.Error("Can't reach your Kindle at $hostVal:$portVal. Check that it is on the same network and SSH is running. $detail")
+                return@launch
+            }
+
             // Prepare thumbnail bytes from cover files
             val thumbs = mutableMapOf<Int, ByteArray>()
             for (book in booksToTransfer) {
@@ -256,20 +324,13 @@ class BookViewModel @Inject constructor(
                 }
             }
 
-            val hostVal = _kindleIp.value
-            val portVal = _kindlePort.value.toIntOrNull() ?: 22
-            val userVal = _kindleUsername.value
-            val passVal = _kindlePassword.value
-            val dirVal = _kindleDirectory.value
-            val rescanVal = _triggerRescan.value
-
             val result = KindleSftpClient.transferBooks(
                 books = booksToTransfer,
                 host = hostVal,
                 port = portVal,
                 user = userVal,
                 pass = passVal,
-                directory = dirVal,
+                directories = directoriesVal,
                 triggerRescan = rescanVal,
                 thumbnailBytes = thumbs
             ) { current, total, message ->

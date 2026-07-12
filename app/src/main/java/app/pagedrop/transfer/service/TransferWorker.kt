@@ -51,13 +51,13 @@ class TransferWorker(
             val port = kindleSettings.port
             val user = kindleSettings.username
             val pass = kindleSettings.password
-            val dir = kindleSettings.targetDirectory
+            val directories = kindleSettings.targetDirectories
             val rescan = kindleSettings.triggerRescan
 
             val result = KindleSftpClient.transferBooks(
                 books = books,
                 host = host, port = port, user = user, pass = pass,
-                directory = dir, triggerRescan = rescan,
+                directories = directories, triggerRescan = rescan,
                 thumbnailBytes = thumbs
             ) { _: Int, _: Int, _: String -> }
 

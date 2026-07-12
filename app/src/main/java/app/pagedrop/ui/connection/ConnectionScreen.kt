@@ -231,58 +231,31 @@ fun ConnectionScreen(
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
 
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Checkbox(
-                    checked = state.serverEnabled,
-                    onCheckedChange = viewModel::updateServerEnabled
-                )
-                Spacer(Modifier.width(8.dp))
-                Text(
-                    text = "Enable server-assisted conversion",
-                    style = MaterialTheme.typography.bodyMedium
-                )
-            }
-
-            OutlinedTextField(
-                value = state.supabaseUrl,
-                onValueChange = viewModel::updateSupabaseUrl,
-                label = { Text("Supabase URL") },
-                placeholder = { Text("https://project.supabase.co") },
-                singleLine = true,
-                enabled = state.serverEnabled,
-                modifier = Modifier.fillMaxWidth()
-            )
-
-            OutlinedTextField(
-                value = state.supabaseAnonKey,
-                onValueChange = viewModel::updateSupabaseAnonKey,
-                label = { Text("Supabase anon key") },
-                singleLine = true,
-                enabled = state.serverEnabled,
-                visualTransformation = PasswordVisualTransformation(),
-                modifier = Modifier.fillMaxWidth()
-            )
-
-            Button(
-                onClick = viewModel::testServer,
-                enabled = state.serverEnabled && !state.isTestingServer && state.supabaseUrl.isNotBlank() && state.supabaseAnonKey.isNotBlank(),
-                modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(12.dp)
-            ) {
-                if (state.isTestingServer) {
-                    CircularProgressIndicator(
-                        modifier = Modifier.size(20.dp),
-                        strokeWidth = 2.dp,
-                        color = MaterialTheme.colorScheme.onPrimary
-                    )
-                    Spacer(Modifier.width(8.dp))
-                    Text("Testing server...")
-                } else {
-                    Text("Test Server")
+            if (state.serverAvailable) {
+                Button(
+                    onClick = viewModel::testServer,
+                    enabled = !state.isTestingServer,
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(12.dp)
+                ) {
+                    if (state.isTestingServer) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(20.dp),
+                            strokeWidth = 2.dp,
+                            color = MaterialTheme.colorScheme.onPrimary
+                        )
+                        Spacer(Modifier.width(8.dp))
+                        Text("Testing service...")
+                    } else {
+                        Text("Test PageDrop server")
+                    }
                 }
+            } else {
+                Text(
+                    text = "Server conversion is not available in this build yet.",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
             }
 
             state.serverTestResult?.let { result ->

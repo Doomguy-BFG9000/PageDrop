@@ -27,7 +27,7 @@ class KindleSftpClientTest {
             port = 22,
             user = "root",
             pass = "",
-            directory = "/mnt/us/documents",
+            directories = listOf("/mnt/us/documents"),
             triggerRescan = false
         ) { _, _, _ -> }
         assertTrue(result.isFailure)
@@ -43,7 +43,7 @@ class KindleSftpClientTest {
             port = 22,
             user = "root",
             pass = "password",
-            directory = "/mnt/us/documents",
+            directories = listOf("/mnt/us/documents"),
             triggerRescan = false
         ) { _, _, _ -> }
         // Will fail because no real SSH connection
@@ -64,7 +64,7 @@ class KindleSftpClientTest {
             port = 22,
             user = "root",
             pass = "pass",
-            directory = "/mnt/us/documents",
+            directories = listOf("/mnt/us/documents"),
             triggerRescan = false,
             thumbnailBytes = thumbs
         ) { _, _, _ -> }
@@ -91,7 +91,7 @@ class KindleSftpClientTest {
             port = 22,
             user = "root",
             pass = "test",
-            directory = "/mnt/us/documents",
+            directories = listOf("/mnt/us/documents"),
             triggerRescan = true
         ) { _, _, _ -> invoked = true }
         // No real connection, but progress callback may or may not fire before failure

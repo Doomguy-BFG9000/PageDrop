@@ -28,9 +28,7 @@ class ConnectionViewModel @Inject constructor(
         val password: String = "",
         val targetDirectory: String = "/mnt/us/documents",
         val triggerRescan: Boolean = true,
-        val serverEnabled: Boolean = false,
-        val supabaseUrl: String = "",
-        val supabaseAnonKey: String = "",
+        val serverAvailable: Boolean = false,
         val isTestingServer: Boolean = false,
         val serverTestResult: Result<Unit>? = null,
         val isTesting: Boolean = false,
@@ -45,9 +43,7 @@ class ConnectionViewModel @Inject constructor(
             password = kindleSettings.password,
             targetDirectory = kindleSettings.targetDirectory,
             triggerRescan = kindleSettings.triggerRescan,
-            serverEnabled = serverSettings.enabled,
-            supabaseUrl = serverSettings.supabaseUrl,
-            supabaseAnonKey = serverSettings.supabaseAnonKey
+            serverAvailable = serverSettings.supabaseUrl.isNotBlank() && serverSettings.supabaseAnonKey.isNotBlank()
         )
     )
     val state: StateFlow<ConnectionState> = _state.asStateFlow()
@@ -58,20 +54,6 @@ class ConnectionViewModel @Inject constructor(
     fun updatePassword(value: String) { _state.update { it.copy(password = value) }; kindleSettings.password = value }
     fun updateTargetDirectory(value: String) { _state.update { it.copy(targetDirectory = value) }; kindleSettings.targetDirectory = value }
     fun updateTriggerRescan(value: Boolean) { _state.update { it.copy(triggerRescan = value) }; kindleSettings.triggerRescan = value }
-    fun updateServerEnabled(value: Boolean) { _state.update { it.copy(serverEnabled = value) }; serverSettings.enabled = value }
-    fun updateSupabaseUrl(value: String) {
-        _state.update { it.copy(supabaseUrl = value, serverTestResult = null) }
-        serverSettings.supabaseUrl = value.trim().removeSuffix("/")
-        serverSettings.accessToken = ""
-        serverSettings.refreshToken = ""
-    }
-    fun updateSupabaseAnonKey(value: String) {
-        _state.update { it.copy(supabaseAnonKey = value, serverTestResult = null) }
-        serverSettings.supabaseAnonKey = value.trim()
-        serverSettings.accessToken = ""
-        serverSettings.refreshToken = ""
-    }
-
     fun testConnection() {
         viewModelScope.launch {
             _state.update { it.copy(isTesting = true, testResult = null) }
@@ -87,7 +69,7 @@ class ConnectionViewModel @Inject constructor(
     fun testServer() {
         viewModelScope.launch {
             _state.update { it.copy(isTestingServer = true, serverTestResult = null) }
-            val result = pageDropApiClient.signInAnonymously().map { Unit }
+            val result = pageDropApiClient.testConnection()
             _state.update { it.copy(isTestingServer = false, serverTestResult = result) }
         }
     }
