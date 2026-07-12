@@ -122,12 +122,12 @@ class BookViewModel @Inject constructor(
         }
     }
 
-    fun addBookWithConversion(context: Context, uri: Uri) {
+    fun addBookWithConversion(context: Context, uri: Uri, outputTitle: String? = null) {
         viewModelScope.launch {
             _isConverting.value = true
             _conversionError.value = null
             try {
-                bookRepository.convertAndAddBook(context, uri)
+                bookRepository.convertAndAddBook(context, uri, outputTitle)
             } catch (e: Exception) {
                 _conversionError.value = e.localizedMessage ?: "Conversion failed"
             } finally {
@@ -136,7 +136,12 @@ class BookViewModel @Inject constructor(
         }
     }
 
-    fun addBookWithServerConversion(context: Context, uri: Uri) {
+    fun addBookWithServerConversion(
+        context: Context,
+        uri: Uri,
+        outputTitle: String? = null,
+        targetFormat: String = "mobi"
+    ) {
         viewModelScope.launch {
             _isConverting.value = true
             _conversionError.value = null
@@ -148,7 +153,9 @@ class BookViewModel @Inject constructor(
 
                 val prepared = server.convertUriToLocalArtifact(
                     uri = uri,
-                    outputDir = File(context.filesDir, "server-conversions")
+                    outputDir = File(context.filesDir, "server-conversions"),
+                    title = outputTitle,
+                    targetFormat = targetFormat
                 ) ?: throw IllegalStateException("The PageDrop conversion service could not convert this file")
 
                 bookRepository.addBookFromFile(

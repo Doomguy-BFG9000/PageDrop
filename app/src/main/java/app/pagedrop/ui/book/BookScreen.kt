@@ -151,6 +151,7 @@ fun BookScreen(
     // State for the conversion bottom sheet (for convertible formats)
     var pendingConvertUri by remember { mutableStateOf<Uri?>(null) }
     var pendingConvertFormat by remember { mutableStateOf("") }
+    var pendingConvertTitle by remember { mutableStateOf("") }
     val convertSheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
 
     // State for the transfer bottom sheet
@@ -177,6 +178,7 @@ fun BookScreen(
                 // We can convert this format (EPUB, PDF, TXT) → show bottom sheet
                 pendingConvertUri = it
                 pendingConvertFormat = format.uppercase()
+                pendingConvertTitle = (displayName ?: "Untitled").substringBeforeLast(".")
             } else {
                 // Unknown format: add as-is
                 viewModel.addBook(context, it)
@@ -197,18 +199,19 @@ fun BookScreen(
         FormatOptionsBottomSheet(
             format = pendingConvertFormat,
             sheetState = convertSheetState,
+            initialTitle = pendingConvertTitle,
             serverConversionAvailable = viewModel.isServerConversionAvailable,
-            onConvertToMobi = {
+            onConvertToMobi = { outputTitle ->
                 pendingConvertUri?.let { uri ->
-                    viewModel.addBookWithConversion(context, uri)
+                    viewModel.addBookWithConversion(context, uri, outputTitle)
                 }
                 pendingConvertUri = null
                 pendingConvertFormat = ""
                 scope.launch { convertSheetState.hide() }
             },
-            onConvertOnServer = {
+            onConvertOnServer = { outputTitle, targetFormat ->
                 pendingConvertUri?.let { uri ->
-                    viewModel.addBookWithServerConversion(context, uri)
+                    viewModel.addBookWithServerConversion(context, uri, outputTitle, targetFormat)
                 }
                 pendingConvertUri = null
                 pendingConvertFormat = ""
@@ -297,13 +300,17 @@ fun BookScreen(
 private fun FormatOptionsBottomSheet(
     format: String,
     sheetState: androidx.compose.material3.SheetState,
+    initialTitle: String,
     serverConversionAvailable: Boolean,
-    onConvertToMobi: () -> Unit,
-    onConvertOnServer: () -> Unit,
+    onConvertToMobi: (String) -> Unit,
+    onConvertOnServer: (String, String) -> Unit,
     onSendAsIs: () -> Unit,
     onDismiss: () -> Unit,
 ) {
     val canConvert = BookConverter.canConvert(format)
+    var outputTitle by remember(initialTitle) { mutableStateOf(initialTitle) }
+    var serverOutputFormat by remember { mutableStateOf("MOBI") }
+    var outputFormatMenuExpanded by remember { mutableStateOf(false) }
     val description = when (format) {
         "EPUB" -> "EPUBs aren\u2019t natively supported on older Kindles. Convert to MOBI for compatibility."
         "PDF" -> "Extract text and convert to MOBI. Layout and images will not be preserved."
@@ -336,13 +343,55 @@ private fun FormatOptionsBottomSheet(
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
 
+            Spacer(Modifier.height(16.dp))
+
+            OutlinedTextField(
+                value = outputTitle,
+                onValueChange = { outputTitle = it },
+                label = { Text("Converted book title") },
+                singleLine = true,
+                modifier = Modifier.fillMaxWidth(),
+            )
+
+            if (serverConversionAvailable) {
+                Spacer(Modifier.height(12.dp))
+
+                Box {
+                    OutlinedButton(
+                        onClick = { outputFormatMenuExpanded = true },
+                        modifier = Modifier.fillMaxWidth(),
+                    ) {
+                        Text("Server output: $serverOutputFormat")
+                    }
+                    DropdownMenu(
+                        expanded = outputFormatMenuExpanded,
+                        onDismissRequest = { outputFormatMenuExpanded = false },
+                    ) {
+                        serverOutputFormats.forEach { outputFormat ->
+                            DropdownMenuItem(
+                                text = { Text(outputFormat) },
+                                onClick = {
+                                    serverOutputFormat = outputFormat
+                                    outputFormatMenuExpanded = false
+                                },
+                            )
+                        }
+                    }
+                }
+            }
+
             Spacer(Modifier.height(24.dp))
 
             // Primary action: Convert to MOBI
             if (canConvert) {
                 if (serverConversionAvailable) {
                     Button(
-                        onClick = onConvertOnServer,
+                        onClick = {
+                            onConvertOnServer(
+                                outputTitle.trim().ifBlank { initialTitle },
+                                serverOutputFormat.lowercase(),
+                            )
+                        },
                         modifier = Modifier
                             .fillMaxWidth()
                             .height(48.dp),
@@ -375,7 +424,7 @@ private fun FormatOptionsBottomSheet(
                 }
 
                 Button(
-                    onClick = onConvertToMobi,
+                    onClick = { onConvertToMobi(outputTitle.trim().ifBlank { initialTitle }) },
                     modifier = Modifier
                         .fillMaxWidth()
                         .height(48.dp),
@@ -400,6 +449,11 @@ private fun FormatOptionsBottomSheet(
         }
     }
 }
+
+private val serverOutputFormats = listOf(
+    "AZW3", "EPUB", "MOBI", "DOCX", "FB2", "HTMLZ", "KEPUB", "LIT", "LRF", "PDB",
+    "PDF", "PMLZ", "RB", "RTF", "SNB", "TCR", "TXT", "TXTZ", "ZIP",
+)
 
 // ─────────────────────────────────────────────────────────────
 // Transfer / Settings Bottom Sheet

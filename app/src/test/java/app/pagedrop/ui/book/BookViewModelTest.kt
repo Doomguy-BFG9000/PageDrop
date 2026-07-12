@@ -109,7 +109,7 @@ private class FakeBookRepository : BookRepository {
         return book.uid.toLong()
     }
 
-    override suspend fun convertAndAddBook(context: Context, uri: Uri): Book = addBook(context, uri)
+    override suspend fun convertAndAddBook(context: Context, uri: Uri, outputTitle: String?): Book = addBook(context, uri)
 
     override suspend fun deleteBook(book: Book) { data.removeAll { it.uid == book.uid } }
 

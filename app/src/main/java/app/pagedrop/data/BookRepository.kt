@@ -36,7 +36,7 @@ interface BookRepository {
     fun getBooks(): Flow<List<Book>>
     suspend fun addBook(context: Context, uri: Uri): Book
     suspend fun addBookFromFile(book: Book): Long
-    suspend fun convertAndAddBook(context: Context, uri: Uri): Book
+    suspend fun convertAndAddBook(context: Context, uri: Uri, outputTitle: String? = null): Book
     suspend fun deleteBook(book: Book)
     suspend fun getBookById(id: Int): Book?
     suspend fun markTransferred(uid: Int)
@@ -162,11 +162,20 @@ class DefaultBookRepository @Inject constructor(
      * MOBI file to the library. The intermediate source copy is deleted.
      * Supports EPUB, PDF, and TXT formats.
      */
-    override suspend fun convertAndAddBook(context: Context, uri: Uri): Book = withContext(Dispatchers.IO) {
+    override suspend fun convertAndAddBook(
+        context: Context,
+        uri: Uri,
+        outputTitle: String?
+    ): Book = withContext(Dispatchers.IO) {
         val booksDir = File(context.filesDir, BOOKS_DIR)
         if (!booksDir.exists()) booksDir.mkdirs()
 
-        val displayName = getDisplayName(context, uri) ?: "unknown_${System.currentTimeMillis()}"
+        val sourceDisplayName = getDisplayName(context, uri) ?: "unknown_${System.currentTimeMillis()}"
+        val displayName = outputTitle
+            ?.trim()
+            ?.takeIf { it.isNotBlank() }
+            ?.let { "$it.${sourceDisplayName.substringAfterLast('.', "tmp")}" }
+            ?: sourceDisplayName
         val format = detectFormat(displayName)
         Log.d(TAG, "Converting $format: $displayName")
 

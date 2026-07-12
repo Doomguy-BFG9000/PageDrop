@@ -2,6 +2,7 @@ package app.pagedrop.server
 
 import android.content.Context
 import android.net.Uri
+import android.provider.OpenableColumns
 import android.util.Log
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.Dispatchers
@@ -137,7 +138,9 @@ class PageDropApiClient @Inject constructor(
 
             val sourceBytes = context.contentResolver.openInputStream(uri)?.use { it.readBytes() }
                 ?: return@withContext null
-            val fileName = safeFileName(uri.lastPathSegment ?: "upload_${System.currentTimeMillis()}")
+            val fileName = safeFileName(
+                getDisplayName(uri) ?: uri.lastPathSegment ?: "upload_${System.currentTimeMillis()}"
+            )
 
             val body = buildJsonObject {
                 put("jobType", "convert")
@@ -238,6 +241,13 @@ class PageDropApiClient @Inject constructor(
             .replace(Regex("[^A-Za-z0-9._ -]"), "_")
             .trim()
         return cleaned.ifBlank { "pagedrop_${UUID.randomUUID()}" }
+    }
+
+    private fun getDisplayName(uri: Uri): String? {
+        return context.contentResolver.query(uri, null, null, null, null)?.use { cursor ->
+            val nameIndex = cursor.getColumnIndex(OpenableColumns.DISPLAY_NAME)
+            if (cursor.moveToFirst() && nameIndex >= 0) cursor.getString(nameIndex) else null
+        }
     }
 
     private fun uniqueFile(dir: File, name: String): File {

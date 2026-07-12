@@ -46,7 +46,11 @@ class FakeBookRepository @Inject constructor() : BookRepository {
         throw NotImplementedError()
     }
 
-    override suspend fun convertAndAddBook(context: android.content.Context, uri: android.net.Uri): Book {
+    override suspend fun convertAndAddBook(
+        context: android.content.Context,
+        uri: android.net.Uri,
+        outputTitle: String?
+    ): Book {
         throw NotImplementedError()
     }
 
