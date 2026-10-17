@@ -26,6 +26,10 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
+import androidx.activity.compose.BackHandler
+import app.pagedrop.ui.book.BookViewModel
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
@@ -63,13 +67,42 @@ fun KindleScreen(
     onOpenSync: () -> Unit,
     onOpenConnection: () -> Unit,
     onOpenSetup: () -> Unit,
-    viewModel: DashboardViewModel = hiltViewModel()
+    onOpenInLibrary: () -> Unit = {},
+    viewModel: DashboardViewModel = hiltViewModel(),
+    bookViewModel: BookViewModel = hiltViewModel()
 ) {
     val state by viewModel.state.collectAsState()
     var confirmReboot by remember { mutableStateOf(false) }
     var confirmRepair by remember { mutableStateOf<DeviceCommandRunner.RepairRecipe?>(null) }
 
+    val sendingIds by bookViewModel.sendingIds.collectAsState()
+    val transferState by bookViewModel.transferState.collectAsState()
+    val transferBusy = sendingIds.isNotEmpty() || transferState is BookViewModel.TransferState.Progress
+    val busyHint: String? = when {
+        state.isChecking -> "Wait for the Kindle check to finish."
+        state.isDeleting -> "Deleting from your Kindle\u2026"
+        state.savingKey != null -> "Saving a book to your library\u2026"
+        transferBusy -> "A book is being sent to your Kindle. Try again when it's done."
+        else -> null
+    }
+
+    val snackbarHostState = remember { SnackbarHostState() }
+    var sheetKey by remember { mutableStateOf<String?>(null) }
+    var selectedKeys by remember { mutableStateOf(emptySet<String>()) }
+    var deleteKeys by remember { mutableStateOf<List<String>?>(null) }
+    val groups = remember(state.libraryReport) {
+        state.libraryReport?.let { KindleLibraryMatcher.group(it) }.orEmpty()
+    }
+    val selectionMode = selectedKeys.isNotEmpty()
+    BackHandler(enabled = selectionMode) { selectedKeys = emptySet() }
+
     LaunchedEffect(Unit) { viewModel.refresh() }
+    LaunchedEffect(viewModel) { viewModel.messages.collect { snackbarHostState.showSnackbar(it) } }
+    // Selections vanish with the books they point at (after a delete and re-check).
+    LaunchedEffect(groups) {
+        val keys = groups.map { it.key }.toSet()
+        selectedKeys = selectedKeys.filter { it in keys }.toSet()
+    }
 
     Scaffold(
         modifier = modifier,
@@ -85,6 +118,18 @@ fun KindleScreen(
                 )
             )
         },
+        snackbarHost = { SnackbarHost(snackbarHostState) },
+        bottomBar = {
+            if (selectionMode) {
+                KindleSelectionBar(
+                    count = selectedKeys.size,
+                    deleteEnabled = busyHint == null,
+                    busyHint = busyHint,
+                    onDelete = { deleteKeys = selectedKeys.toList() },
+                    onCancel = { selectedKeys = emptySet() }
+                )
+            }
+        },
         containerColor = MaterialTheme.colorScheme.background
     ) { innerPadding ->
         Column(
@@ -98,7 +143,18 @@ fun KindleScreen(
             StatusCard(state, viewModel.host, viewModel.port, onRefresh = viewModel::refresh, onSetup = onOpenSetup)
 
             if (state.isConfigured) {
-                LibraryCheckCard(state, viewModel.port)
+                LibraryCheckCard(
+                    state = state,
+                    port = viewModel.port,
+                    groups = groups,
+                    selectionMode = selectionMode,
+                    selectedKeys = selectedKeys,
+                    onRowClick = { key ->
+                        if (selectionMode) selectedKeys = if (key in selectedKeys) selectedKeys - key else selectedKeys + key
+                        else sheetKey = key
+                    },
+                    onRowLongClick = { key -> if (busyHint == null) selectedKeys = selectedKeys + key }
+                )
 
                 state.lastResult?.let { result ->
                     val ok = result.exitCode == 0
@@ -115,7 +171,7 @@ fun KindleScreen(
                         if (state.isChecking) "Checking..." else "Check Kindle library",
                         viewModel::triggerRescan,
                         Modifier.weight(1f),
-                        enabled = state.reachable == true && !state.isChecking
+                        enabled = state.reachable == true && !state.isBusy && !transferBusy
                     )
                     OutlineButton("Restart Kindle", { confirmReboot = true }, Modifier.weight(1f), enabled = state.reachable == true)
                 }
@@ -146,6 +202,36 @@ fun KindleScreen(
         }
     }
 
+    val sheetGroup = groups.firstOrNull { it.key == sheetKey }
+    if (sheetGroup != null) {
+        KindleBookSheet(
+            group = sheetGroup,
+            inLibrary = sheetGroup.inLibrary || sheetGroup.key in state.savedKeys,
+            saving = state.savingKey == sheetGroup.key,
+            busyHint = busyHint.takeIf { state.savingKey != sheetGroup.key },
+            onSave = { viewModel.saveToLibrary(sheetGroup) },
+            onOpenInLibrary = { sheetKey = null; onOpenInLibrary() },
+            onDelete = { sheetKey = null; deleteKeys = listOf(sheetGroup.key) },
+            onDismiss = { sheetKey = null }
+        )
+    }
+    deleteKeys?.let { keys ->
+        val targets = groups.filter { it.key in keys }
+        if (targets.isEmpty()) {
+            deleteKeys = null
+        } else {
+            KindleDeleteDialog(
+                groups = targets,
+                onConfirm = { home, ko, sidecars ->
+                    deleteKeys = null
+                    selectedKeys = emptySet()
+                    viewModel.deleteFromKindle(targets, home, ko, sidecars)
+                },
+                onDismiss = { deleteKeys = null }
+            )
+        }
+    }
+
     if (confirmReboot) {
         AlertDialog(
             onDismissRequest = { confirmReboot = false },
@@ -173,20 +259,31 @@ fun KindleScreen(
 }
 
 @Composable
-private fun LibraryCheckCard(state: DashboardViewModel.DashboardState, port: Int) {
+private fun LibraryCheckCard(
+    state: DashboardViewModel.DashboardState,
+    port: Int,
+    groups: List<KindleBookGroup>,
+    selectionMode: Boolean,
+    selectedKeys: Set<String>,
+    onRowClick: (String) -> Unit,
+    onRowLongClick: (String) -> Unit
+) {
     val report = state.libraryReport
     val error = state.libraryError
-    if (!state.isChecking && report == null && error == null) return
+    if (!state.isChecking && !state.isDeleting && report == null && error == null) return
     var expanded by remember { mutableStateOf(false) }
     HairlineCard(Modifier.fillMaxWidth()) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             when {
-                state.isChecking -> Row(
+                state.isChecking || state.isDeleting -> Row(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
                     CircularProgressIndicator(Modifier.size(20.dp), strokeWidth = 2.dp)
-                    Text("Checking what's on your Kindle...", style = MaterialTheme.typography.bodyMedium)
+                    Text(
+                        if (state.isDeleting) "Deleting from your Kindle..." else "Checking what's on your Kindle...",
+                        style = MaterialTheme.typography.bodyMedium
+                    )
                 }
                 error != null -> {
                     val hint = ConnectionHints.explain(error, port)
@@ -209,37 +306,30 @@ private fun LibraryCheckCard(state: DashboardViewModel.DashboardState, port: Int
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                     }
-                    if (report.files.isNotEmpty()) {
+                    if (groups.isNotEmpty()) {
                         TextButton(onClick = { expanded = !expanded }) {
                             Text(if (expanded) "Hide \"On your Kindle\"" else "On your Kindle", color = MaterialTheme.colorScheme.onSurface)
                         }
                     }
-                    if (expanded) {
-                        FileGroup("Home screen (documents)", report.files.filter { it.path.startsWith(KindleSftpClient.KINDLE_HOME_DIR) }, report)
-                        FileGroup("KOReader (Books)", report.files.filter { !it.path.startsWith(KindleSftpClient.KINDLE_HOME_DIR) }, report)
+                    if (expanded || selectionMode) {
+                        Text(
+                            "Tap a book to manage it. Press and hold to select several.",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        groups.forEach { g ->
+                            KindleBookRow(
+                                group = g,
+                                inLibrary = g.inLibrary || g.key in state.savedKeys,
+                                selectionMode = selectionMode,
+                                selected = g.key in selectedKeys,
+                                onClick = { onRowClick(g.key) },
+                                onLongClick = { onRowLongClick(g.key) }
+                            )
+                        }
                     }
                 }
             }
-        }
-    }
-}
-
-@Composable
-private fun FileGroup(title: String, files: List<DeviceCommandRunner.KindleFile>, report: KindleLibraryReport) {
-    if (files.isEmpty()) return
-    Text(title, style = MaterialTheme.typography.labelLarge)
-    files.sortedBy { it.name.lowercase() }.forEach { f ->
-        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            Text(
-                f.name + if (f.path in report.pageDropPaths) "  \u2022 PageDrop" else "",
-                style = MaterialTheme.typography.bodySmall,
-                modifier = Modifier.weight(1f)
-            )
-            Text(
-                formatSize(f.sizeBytes),
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
         }
     }
 }

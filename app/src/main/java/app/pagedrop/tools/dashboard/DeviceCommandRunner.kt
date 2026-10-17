@@ -196,6 +196,30 @@ object DeviceCommandRunner {
         }
     }
 
+    /**
+     * Deletes books (and optionally their `.sdr` reading-progress folders) in one SSH exec. Every path is validated
+     * on the phone first and must be in [allowedPaths] (the latest listing). Fails with a plain-English message
+     * when nothing could be sent; partial failures come back in [KindleDelete.Outcome].
+     */
+    suspend fun deleteFromKindle(
+        host: String, port: Int, user: String, pass: String,
+        paths: List<String>,
+        deleteSidecars: Boolean,
+        allowedPaths: Set<String>,
+        thumbnailIds: List<String> = emptyList()
+    ): Result<KindleDelete.Outcome> {
+        val script = try {
+            KindleDelete.buildScript(paths, deleteSidecars, allowedPaths, thumbnailIds)
+        } catch (e: IllegalArgumentException) {
+            return Result.failure(e)
+        }
+        val result = runCommand(host, port, user, pass, script, timeoutMs = 30_000)
+        if (result.exitCode == -1 && result.stdout.isBlank()) {
+            return Result.failure(IllegalStateException(result.stderr.ifBlank { "The Kindle didn't answer." }))
+        }
+        return Result.success(KindleDelete.parseOutput(result.stdout, paths))
+    }
+
     suspend fun rebootDevice(
         host: String, port: Int, user: String, pass: String
     ): CommandResult = runCommand(

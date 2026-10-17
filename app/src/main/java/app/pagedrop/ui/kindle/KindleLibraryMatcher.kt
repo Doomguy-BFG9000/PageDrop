@@ -2,6 +2,7 @@ package app.pagedrop.ui.kindle
 
 import app.pagedrop.data.local.database.Book
 import app.pagedrop.tools.dashboard.DeviceCommandRunner.KindleFile
+import app.pagedrop.tools.dashboard.KindleDelete
 import app.pagedrop.tools.dashboard.DeviceCommandRunner.KindleLibraryScan
 import app.pagedrop.transfer.sftp.KindleSftpClient
 
@@ -13,11 +14,26 @@ data class KindleLibraryReport(
     val files: List<KindleFile>,
     /** Paths of [files] that belong to a PageDrop library book. */
     val pageDropPaths: Set<String>,
+    /** Library book id for each path in [pageDropPaths]. */
+    val pageDropBookIds: Map<String, Int> = emptyMap(),
     /** Distinct books on the Kindle (the same title in both folders counts once). */
     val bookCount: Int,
     /** Library books found on the Kindle. */
     val pageDropCount: Int
 )
+
+/** One book on the Kindle: the same title in the home-screen and KOReader folders is a single group. */
+data class KindleBookGroup(
+    val key: String,
+    val title: String,
+    val files: List<KindleFile>,
+    val libraryBookId: Int?
+) {
+    val homeFiles: List<KindleFile> get() = files.filter { it.path.startsWith(KindleDelete.HOME_DIR + "/") }
+    val koreaderFiles: List<KindleFile> get() = files.filter { !it.path.startsWith(KindleDelete.HOME_DIR + "/") }
+    val sizeBytes: Long get() = files.maxOfOrNull { it.sizeBytes } ?: 0L
+    val inLibrary: Boolean get() = libraryBookId != null
+}
 
 /** Pure matching of the app library against what is on the Kindle. */
 object KindleLibraryMatcher {
@@ -94,8 +110,23 @@ object KindleLibraryMatcher {
             koreaderRunning = scan.koreaderRunning,
             files = files,
             pageDropPaths = matches.values.flatten().map { it.path }.toSet(),
+            pageDropBookIds = matches.flatMap { (uid, fs) -> fs.map { it.path to uid } }.toMap(),
             bookCount = bookCount,
             pageDropCount = matches.size
         )
     }
+
+    /** Groups [KindleLibraryReport.files] by normalized name (so one book in both folders shows once). */
+    fun group(report: KindleLibraryReport): List<KindleBookGroup> =
+        report.files.groupBy { normalize(stem(it.name)).ifEmpty { it.name.lowercase() } }
+            .map { (key, fs) ->
+                val sorted = fs.sortedBy { it.path }
+                KindleBookGroup(
+                    key = key,
+                    title = stem(sorted.first().name),
+                    files = sorted,
+                    libraryBookId = sorted.firstNotNullOfOrNull { report.pageDropBookIds[it.path] }
+                )
+            }
+            .sortedBy { it.title.lowercase() }
 }

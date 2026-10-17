@@ -90,3 +90,26 @@ class KindleLibraryMatcherTest {
         assertTrue(r.koreaderRunning)
     }
 }
+
+class KindleGroupingTest {
+    private fun f(path: String) = app.pagedrop.tools.dashboard.DeviceCommandRunner.KindleFile(
+        path, path.substringBeforeLast('/'), path.substringAfterLast('/'), 100
+    )
+
+    @org.junit.Test
+    fun sameBookInBothFoldersShowsOnce() {
+        val files = listOf(
+            f("/mnt/us/documents/The Hunger Games.azw"),
+            f("/mnt/us/Books/The Hunger Games.azw"),
+            f("/mnt/us/Books/Dune.epub")
+        )
+        val report = KindleLibraryReport(null, false, files, setOf(files[1].path), mapOf(files[1].path to 7), 2, 1)
+        val groups = KindleLibraryMatcher.group(report)
+        org.junit.Assert.assertEquals(2, groups.size)
+        val hg = groups.first { it.title.startsWith("The Hunger") }
+        org.junit.Assert.assertEquals(1, hg.homeFiles.size)
+        org.junit.Assert.assertEquals(1, hg.koreaderFiles.size)
+        org.junit.Assert.assertEquals(7, hg.libraryBookId)
+        org.junit.Assert.assertFalse(groups.first { it.title == "Dune" }.inLibrary)
+    }
+}

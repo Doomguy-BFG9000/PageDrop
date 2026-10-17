@@ -73,7 +73,8 @@ fun MainShell(
                     onOpenSettings = onOpenSettings,
                     onOpenSync = onOpenSync,
                     onOpenConnection = onOpenConnection,
-                    onOpenSetup = onOpenSetup
+                    onOpenSetup = onOpenSetup,
+                    onOpenInLibrary = { tabIndex = Tab.Library.ordinal }
                 )
                 Tab.Extras -> ExtrasScreen(
                     onNavigateToScreensaver = onOpenScreensaver,

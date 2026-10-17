@@ -189,4 +189,41 @@ object KindleSftpClient {
             session?.disconnect()
         }
     }
+
+    /** Downloads [remotePath] from the Kindle into [target] over SFTP (read-only on the Kindle). */
+    suspend fun downloadFile(
+        host: String,
+        port: Int,
+        user: String,
+        pass: String,
+        remotePath: String,
+        target: File
+    ): Result<File> = withContext(Dispatchers.IO) {
+        var session: Session? = null
+        var sftpChannel: ChannelSftp? = null
+        try {
+            val jsch = JSch()
+            session = jsch.getSession(user, host, port)
+            session.setPassword(pass)
+            session.setConfig("StrictHostKeyChecking", "no")
+            session.connect(10000)
+            sftpChannel = session.openChannel("sftp") as ChannelSftp
+            sftpChannel.connect(10000)
+            target.parentFile?.mkdirs()
+            val expected = sftpChannel.stat(remotePath).size
+            target.outputStream().use { out -> sftpChannel.get(remotePath, out) }
+            if (target.length() != expected) {
+                target.delete()
+                throw IllegalStateException("The file didn't copy completely.")
+            }
+            Result.success(target)
+        } catch (e: Exception) {
+            Log.e(TAG, "SFTP download failed: ${e.message}", e)
+            target.delete()
+            Result.failure(e)
+        } finally {
+            sftpChannel?.disconnect()
+            session?.disconnect()
+        }
+    }
 }
