@@ -29,7 +29,14 @@ object EpubToMobiConverter {
      * @param mobiFile target MOBI file (will be created)
      * @return [ConversionResult] with success status, cover bytes, and Kindle UUID
      */
-    suspend fun convert(epubFile: File, mobiFile: File, fallbackTitle: String? = null): ConversionResult = withContext(Dispatchers.IO) {
+    suspend fun convert(
+        epubFile: File,
+        mobiFile: File,
+        fallbackTitle: String? = null,
+        titleOverride: String? = null,
+        authorOverride: String? = null,
+        coverOverride: ByteArray? = null,
+    ): ConversionResult = withContext(Dispatchers.IO) {
         try {
             Log.d(TAG, "Starting conversion: ${epubFile.name} → ${mobiFile.name}")
 
@@ -40,10 +47,11 @@ object EpubToMobiConverter {
 
             // 2. Extract metadata
             val metadata = epub.metadata
-            val title = metadata.firstTitle?.takeIf { it.isNotBlank() }
+            val title = titleOverride?.takeIf { it.isNotBlank() }
+                ?: metadata.firstTitle?.takeIf { it.isNotBlank() }
                 ?: fallbackTitle
                 ?: mobiFile.nameWithoutExtension
-            val author = metadata.authors.firstOrNull()?.let { a ->
+            val author = authorOverride?.takeIf { it.isNotBlank() } ?: metadata.authors.firstOrNull()?.let { a ->
                 buildString {
                     if (a.firstname?.isNotBlank() == true) append(a.firstname)
                     if (a.lastname?.isNotBlank() == true) {
@@ -59,7 +67,7 @@ object EpubToMobiConverter {
             val htmlContent = buildHtmlDocument(title, epub)
 
             // 4. Extract cover image
-            val coverImage = extractCoverImage(epub)
+            val coverImage = coverOverride ?: extractCoverImage(epub)
 
             // 5. Write MOBI
             val writer = MobiWriter(

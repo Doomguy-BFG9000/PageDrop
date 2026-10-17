@@ -9,6 +9,7 @@ import asyncio
 import hashlib
 import json
 import os
+import re
 import subprocess
 import tempfile
 import time
@@ -92,6 +93,96 @@ def sha256_file(path: Path) -> str:
     return h.hexdigest()
 
 
+# Page furniture left in the text by Calibre's PDF engine (which feeds the pipeline <br>-separated
+# lines with an <hr/> per page): "N | P a g e ..." running headers and lines that are only a page number.
+PDF_PAGE_LABEL_RE = r"\d{1,4}\s*\|\s*P\s*a\s*g\s*e[^<]*|Page\s+\d{1,4}\s+of\s+\d{1,4}"
+# A bare page number is only removed as the LAST line of a page, i.e. one followed (past blank lines)
+# by the page's <hr/>; sr1 has already removed running footers/headers by then. A lone chapter number such as "1" above
+# a chapter title mid-page is not followed by <hr/> and survives.
+PDF_PAGE_END_LOOKAHEAD = r"(?=(?:[ \t]*(?:<br\s*/?>)?[ \t]*\n)*[ \t]*<hr\s*/?>)"
+PDF_PAGE_NUMBER_LINE_RE = (
+    r"(?m)^[ \t]*\d{1,4}[ \t]*<br\s*/?>[ \t]*\n" + PDF_PAGE_END_LOOKAHEAD
+    + r"|<p[^>]*>\s*\d{1,4}\s*</p>\s*" + PDF_PAGE_END_LOOKAHEAD
+)
+# Per-page <hr/> and page anchors otherwise end up between the two halves of a paragraph that crosses a page and block unwrapping.
+PDF_PAGE_BREAK_RE = r"<hr\s*/?>|<a\s+id=\"p\d+\"\s*></a>"
+# Between words a running line may be split across lines or paragraphs ("...Planet eBook.com<br>11").
+PDF_WORD_GAP_RE = r"(?:\s|</?p[^>]*>|<br\s*/?>)+"
+
+
+def is_pdf(path: Path) -> bool:
+    return path.suffix.lower() == ".pdf"
+
+
+def find_repeated_pdf_lines(pdf_path: Path, max_lines: int = 6) -> list[str]:
+    """Find running headers/footers: short lines (digits ignored) that recur on many pages."""
+    try:
+        out = subprocess.run(
+            ["pdftotext", "-layout", str(pdf_path), "-"],
+            capture_output=True, text=True, timeout=60, check=True,
+        ).stdout
+    except Exception:
+        return []
+    pages = [p for p in out.split("\f") if p.strip()]
+    if len(pages) < 6:
+        return []
+    counts: dict[str, int] = {}
+    for page in pages:
+        lines = [ln.strip() for ln in page.splitlines() if ln.strip()]
+        # Headers/footers live in the first or last few lines of a page.
+        seen = {re.sub(r"\d+", "#", " ".join(ln.split())) for ln in lines[:3] + lines[-3:]}
+        for key in seen:
+            counts[key] = counts.get(key, 0) + 1
+    repeated = [
+        key for key, n in counts.items()
+        if n >= max(4, len(pages) * 0.3) and 3 <= len(key) <= 120 and re.search(r"[A-Za-z]{3}", key)
+    ]
+    return sorted(repeated, key=lambda k: -counts[k])[:max_lines]
+
+
+def running_line_pattern(lines: list[str]) -> str:
+    """Regex for the given running lines in Calibre's HTML; page numbers are optional and may sit in their own paragraph.
+
+    Every alternative must be a whole standalone line (start of line, after <br>, <p> or a page anchor, and
+    followed by <br>, </p> or end of line), so the same words inside body sentences are never touched.
+    """
+    parts = []
+    for line in lines:
+        words = line.split()
+        lead = r"(?:\d+" + PDF_WORD_GAP_RE + ")?" if words[0] == "#" else ""
+        trail = "(?:" + PDF_WORD_GAP_RE + r"\d+)?" if words[-1] == "#" else ""
+        core = [r"\d+".join(re.escape(piece) for piece in w.split("#")) for w in words if w != "#"]
+        if core:
+            parts.append(lead + PDF_WORD_GAP_RE.join(core) + trail)
+    if not parts:
+        return ""
+    # Lookbehinds are fixed-width, hence one per allowed predecessor.
+    start = r"(?:^|(?<=<br>)|(?<=<br/>)|(?<=<br />)|(?<=></a>)|(?<=<hr/>)|(?<=<p>)|(?<=<p/>))[ \t]*"
+    end = r"[ \t]*(?:<br\s*/?>|(?=</p>|$))"
+    return r"(?m)" + start + "(?:" + "|".join(parts) + ")" + end
+
+
+def pdf_convert_args(pdf_path: Path) -> list[str]:
+    """Extra ebook-convert options that turn Calibre's page-oriented PDF HTML into a reflowable book."""
+    running = find_repeated_pdf_lines(pdf_path)
+    # sr1: detected repeated header/footer text, sr2: "N | P a g e" labels and bare page-number
+    # lines, sr3: per-page <hr/> breaks and page anchors.
+    sr1 = running_line_pattern(running) or PDF_PAGE_LABEL_RE
+    return [
+        "--output-profile", "kindle_pw",  # 758x1024 Paperwhite screen
+        "--minimum-line-height", "0",   # forced line-height makes older Kindle readers clip lines at page edges
+        "--enable-heuristics",         # master switch; unwrap, blank-paragraph removal and dehyphenation are on by default
+        "--unwrap-factor", "0.40",      # join hard-wrapped PDF lines and paragraphs split at page breaks
+        "--remove-paragraph-spacing",   # no blank gap between paragraphs, indent instead
+        "--remove-paragraph-spacing-indent-size", "1.5",
+        "--sr1-search", sr1, "--sr1-replace", "",
+        "--sr2-search", PDF_PAGE_NUMBER_LINE_RE + "|" + PDF_PAGE_LABEL_RE, "--sr2-replace", "",
+        "--sr3-search", PDF_PAGE_BREAK_RE, "--sr3-replace", "",
+        "--comments", "",               # source PDF subject/keywords often carry site spam
+        "--tags", "",
+    ]
+
+
 async def run_calibre(
     input_path: Path,
     output_path: Path,
@@ -99,6 +190,7 @@ async def run_calibre(
     author: str | None = None,
     cover_path: Path | None = None,
     timeout: int = JOB_TIMEOUT,
+    extra_args: list[str] | None = None,
 ) -> tuple[int, str, str]:
     """Run ebook-convert, return (returncode, stdout, stderr)."""
     cmd = ["ebook-convert", str(input_path), str(output_path)]
@@ -108,6 +200,8 @@ async def run_calibre(
         cmd.extend(["--authors", author.strip()])
     if cover_path and cover_path.exists():
         cmd.extend(["--cover", str(cover_path)])
+    if extra_args:
+        cmd.extend(extra_args)
     proc = await asyncio.create_subprocess_exec(
         *cmd,
         stdout=asyncio.subprocess.PIPE,
@@ -278,12 +372,17 @@ async def process_job(job: dict) -> dict:
 
         # 3. Run Calibre conversion
         log(f"Converting to {target_fmt}...")
+        extra_args = None
+        if is_pdf(source_file):
+            extra_args = await asyncio.to_thread(pdf_convert_args, source_file)
+            log("PDF source: applying reflow heuristics and header/footer cleanup")
         rc, sout, serr = await run_calibre(
             source_file,
             output_file,
             title=job.get("title"),
             author=job.get("author"),
             cover_path=requested_cover_file,
+            extra_args=extra_args,
         )
 
         if rc != 0:

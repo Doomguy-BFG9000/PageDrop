@@ -24,12 +24,16 @@ object TxtToMobiConverter {
      * @param txtFile source .txt file
      * @param mobiFile target MOBI file (will be created)
      * @param title optional title override; defaults to the filename without extension
+     * @param author optional author; defaults to "Unknown Author"
+     * @param coverImage optional cover (JPEG/PNG bytes) embedded in the MOBI
      * @return [ConversionResult] with success status and Kindle UUID (TXT has no cover)
      */
     suspend fun convert(
         txtFile: File,
         mobiFile: File,
-        title: String? = null
+        title: String? = null,
+        author: String? = null,
+        coverImage: ByteArray? = null,
     ): ConversionResult = withContext(Dispatchers.IO) {
         try {
             val bookTitle = title?.takeIf { it.isNotBlank() } ?: txtFile.nameWithoutExtension
@@ -49,15 +53,16 @@ object TxtToMobiConverter {
             // 3. Write MOBI
             val writer = MobiWriter(
                 title = bookTitle,
-                author = "Unknown Author",
+                author = author?.takeIf { it.isNotBlank() } ?: "Unknown Author",
                 htmlContent = htmlContent.toByteArray(Charsets.UTF_8),
+                coverImage = coverImage,
             )
             writer.write(mobiFile)
 
             Log.d(TAG, "Conversion complete: ${mobiFile.length()} bytes")
             ConversionResult(
                 success = true,
-                coverBytes = null,
+                coverBytes = coverImage,
                 kindleUuid = writer.kindleUuid
             )
         } catch (e: Exception) {

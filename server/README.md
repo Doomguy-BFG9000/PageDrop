@@ -181,7 +181,13 @@ The worker is a Python script (`server/worker/poll.py`) that:
 1. Polls Supabase for `pending` jobs (oldest first)
 2. Atomically claims a job (sets status to `processing`)
 3. Downloads the source file from Supabase Storage
-4. Runs `ebook-convert` to the target format with PageDrop's title and author
+4. Runs `ebook-convert` to the target format with PageDrop's title and author.
+   PDF sources additionally get reflow options: heuristic processing (unwrap
+   lines, merge paragraphs split at page breaks, dehyphenate, drop blank
+   paragraphs), no paragraph spacing with a 1.5em indent, the `kindle` output
+   profile, cleared comments/tags, and search-and-replace rules that strip page
+   anchors/breaks, bare page-number lines, `N | P a g e` labels, and running
+   headers/footers detected by `pdftotext` (short lines repeating on many pages)
 5. Reapplies that metadata with `ebook-meta`, preventing source-PDF metadata
    from becoming the title shown by a Kindle or KOReader
 6. Extracts the embedded cover with `ebook-meta --get-cover`

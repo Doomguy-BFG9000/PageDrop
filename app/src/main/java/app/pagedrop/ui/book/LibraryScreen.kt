@@ -1,0 +1,278 @@
+package app.pagedrop.ui.book
+
+import androidx.compose.foundation.Image
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.Add
+import androidx.compose.material.icons.outlined.Link
+import androidx.compose.material3.AssistChip
+import androidx.compose.material3.AssistChipDefaults
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.ExtendedFloatingActionButton
+import androidx.compose.material3.FloatingActionButtonDefaults
+import androidx.compose.material3.Icon
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.unit.dp
+import app.pagedrop.R
+import app.pagedrop.data.local.database.Book
+import app.pagedrop.ui.components.OverBackgroundSurfaceAlpha
+
+/** Everything the library screen shows, as plain values and callbacks (preview friendly). */
+internal data class LibraryActions(
+    val onAddBook: () -> Unit,
+    val onOpenArticle: () -> Unit,
+    val onOpenSettings: () -> Unit,
+    val onStatusClick: () -> Unit,
+    val onSetUp: () -> Unit,
+    val onFilterChange: (LibraryFilter) -> Unit,
+    val onViewModeChange: (LibraryViewMode) -> Unit,
+    val onBookClick: (Book) -> Unit,
+    val onBookLongClick: (Book) -> Unit,
+    val onClearSelection: () -> Unit,
+    val onSelectAll: () -> Unit,
+    val onSendSelected: () -> Unit,
+    val onDeleteSelected: () -> Unit,
+)
+
+@Composable
+internal fun LibraryScreenContent(
+    uiState: LibraryUiState,
+    kindleStatus: KindleStatus,
+    filter: LibraryFilter,
+    viewMode: LibraryViewMode,
+    selectedIds: Set<Int>,
+    sendingIds: Set<Int>,
+    failedIds: Set<Int>,
+    isConverting: Boolean,
+    isSending: Boolean,
+    transferProgress: BookViewModel.TransferState.Progress?,
+    snackbarHostState: SnackbarHostState,
+    actions: LibraryActions,
+    modifier: Modifier = Modifier,
+) {
+    val selectionMode = selectedIds.isNotEmpty()
+    val books = (uiState as? LibraryUiState.Success)?.data.orEmpty()
+    val visibleCount = books.count(filter::matches)
+    val isEmptyLibrary = uiState is LibraryUiState.Success && books.isEmpty()
+
+    Box(modifier = modifier.fillMaxSize()) {
+        // Background image — full-bleed, Kindle aesthetic
+        Image(
+            painter = painterResource(id = R.drawable.bezos_bg),
+            contentDescription = null,
+            modifier = Modifier.fillMaxSize(),
+            contentScale = ContentScale.Crop,
+            alpha = 0.85f,
+        )
+
+        // Gradient overlay — fades from transparent at top to surface at bottom
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(
+                    Brush.verticalGradient(
+                        colors = listOf(
+                            Color.Transparent,
+                            Color.Transparent,
+                            MaterialTheme.colorScheme.surface.copy(alpha = 0.50f),
+                            MaterialTheme.colorScheme.surface.copy(alpha = 0.85f),
+                            MaterialTheme.colorScheme.surface,
+                        ),
+                    )
+                )
+        )
+
+        Scaffold(
+            modifier = Modifier.fillMaxSize(),
+            // The shell applies system-bar and bottom-navigation padding to this screen.
+            contentWindowInsets = WindowInsets(0, 0, 0, 0),
+            containerColor = Color.Transparent,
+            topBar = {
+                if (selectionMode) {
+                    SelectionTopBar(
+                        selectedCount = selectedIds.size,
+                        totalCount = visibleCount,
+                        onClear = actions.onClearSelection,
+                        onSelectAll = actions.onSelectAll,
+                    )
+                } else {
+                    LibraryTopBar(onOpenSettings = actions.onOpenSettings)
+                }
+            },
+            bottomBar = {
+                if (selectionMode) {
+                    SelectionBar(
+                        selectedCount = selectedIds.size,
+                        sending = isSending && sendingIds.containsAll(selectedIds),
+                        deleteBlocked = sendingIds.any { it in selectedIds },
+                        onSend = actions.onSendSelected,
+                        onDelete = actions.onDeleteSelected,
+                    )
+                }
+            },
+            floatingActionButton = {
+                if (!selectionMode && !isEmptyLibrary && uiState is LibraryUiState.Success) {
+                    AddFab(onAddBook = actions.onAddBook, onOpenArticle = actions.onOpenArticle)
+                }
+            },
+            snackbarHost = { SnackbarHost(snackbarHostState) },
+        ) { innerPadding ->
+            when (uiState) {
+                is LibraryUiState.Loading -> Box(
+                    Modifier.fillMaxSize().padding(innerPadding),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    CircularProgressIndicator(color = MaterialTheme.colorScheme.onSurface)
+                }
+
+                is LibraryUiState.Error -> Box(
+                    Modifier.fillMaxSize().padding(innerPadding).padding(16.dp),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Text(
+                        text = "Something went wrong.\n${uiState.throwable.localizedMessage}",
+                        color = MaterialTheme.colorScheme.error,
+                        style = MaterialTheme.typography.bodyLarge,
+                    )
+                }
+
+                is LibraryUiState.Success -> {
+                    if (isEmptyLibrary) {
+                        Column(Modifier.fillMaxSize().padding(innerPadding)) {
+                            LibraryHeader(
+                                kindleStatus = kindleStatus,
+                                filter = filter,
+                                viewMode = viewMode,
+                                isConverting = isConverting,
+                                transferProgress = transferProgress,
+                                onStatusClick = actions.onStatusClick,
+                                onSetUp = actions.onSetUp,
+                                onFilterChange = actions.onFilterChange,
+                                onViewModeChange = actions.onViewModeChange,
+                                modifier = Modifier.padding(horizontal = 16.dp),
+                                showControls = false,
+                            )
+                            EmptyLibraryState(
+                                onAddBook = actions.onAddBook,
+                                modifier = Modifier.weight(1f).fillMaxWidth(),
+                            )
+                        }
+                    } else {
+                        val visible = books.filter(filter::matches).map { book ->
+                            BookItemState(
+                                book = book,
+                                transfer = when (book.uid) {
+                                    in sendingIds -> BookTransfer.Sending
+                                    in failedIds -> BookTransfer.Failed
+                                    else -> BookTransfer.Idle
+                                },
+                                selected = book.uid in selectedIds,
+                            )
+                        }
+                        val header: @Composable () -> Unit = {
+                            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                LibraryHeader(
+                                    kindleStatus = kindleStatus,
+                                    filter = filter,
+                                    viewMode = viewMode,
+                                    isConverting = isConverting,
+                                    transferProgress = transferProgress,
+                                    onStatusClick = actions.onStatusClick,
+                                    onSetUp = actions.onSetUp,
+                                    onFilterChange = actions.onFilterChange,
+                                    onViewModeChange = actions.onViewModeChange,
+                                )
+                                if (visible.isEmpty()) {
+                                    Text(
+                                        text = "No books match this filter",
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .background(
+                                                MaterialTheme.colorScheme.surface.copy(alpha = OverBackgroundSurfaceAlpha),
+                                                MaterialTheme.shapes.small,
+                                            )
+                                            .padding(16.dp),
+                                    )
+                                }
+                            }
+                        }
+                        val padding = PaddingValues(
+                            start = 16.dp,
+                            end = 16.dp,
+                            top = innerPadding.calculateTopPadding() + 4.dp,
+                            bottom = innerPadding.calculateBottomPadding() + 120.dp,
+                        )
+                        when (viewMode) {
+                            LibraryViewMode.List -> BookList(
+                                items = visible,
+                                selectionMode = selectionMode,
+                                onClick = actions.onBookClick,
+                                onLongClick = actions.onBookLongClick,
+                                header = header,
+                                contentPadding = padding,
+                                modifier = Modifier.fillMaxSize(),
+                            )
+                            LibraryViewMode.Grid -> BookGrid(
+                                items = visible,
+                                selectionMode = selectionMode,
+                                onClick = actions.onBookClick,
+                                onLongClick = actions.onBookLongClick,
+                                header = header,
+                                contentPadding = padding,
+                                modifier = Modifier.fillMaxSize(),
+                            )
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+/** Extended "Add book" button with a small labelled "Send article from URL" action above it. */
+@Composable
+private fun AddFab(onAddBook: () -> Unit, onOpenArticle: () -> Unit) {
+    Column(horizontalAlignment = Alignment.End, verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        AssistChip(
+            onClick = onOpenArticle,
+            label = { Text("Send article from URL") },
+            leadingIcon = { Icon(Icons.Outlined.Link, contentDescription = null, modifier = Modifier.size(18.dp)) },
+            shape = MaterialTheme.shapes.extraSmall,
+            colors = AssistChipDefaults.assistChipColors(
+                containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.92f),
+            ),
+            border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
+        )
+        ExtendedFloatingActionButton(
+            onClick = onAddBook,
+            icon = { Icon(Icons.Outlined.Add, contentDescription = null) },
+            text = { Text("Add book") },
+            shape = MaterialTheme.shapes.small,
+            containerColor = MaterialTheme.colorScheme.primary,
+            contentColor = MaterialTheme.colorScheme.onPrimary,
+            elevation = FloatingActionButtonDefaults.elevation(0.dp, 0.dp, 0.dp, 0.dp),
+        )
+    }
+}

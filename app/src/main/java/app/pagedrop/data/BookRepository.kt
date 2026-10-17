@@ -26,6 +26,9 @@ import kotlinx.coroutines.withContext
 import app.pagedrop.data.local.database.Book
 import app.pagedrop.data.local.database.BookDao
 import app.pagedrop.converter.BookConverter
+import app.pagedrop.metadata.BookFileMetadataEmbedder
+import app.pagedrop.metadata.BookNameCleaner
+import app.pagedrop.metadata.CoverImages
 import app.pagedrop.server.PageDropApiClient
 import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.withTimeout
@@ -42,6 +45,41 @@ interface BookRepository {
     suspend fun markTransferred(uid: Int)
     suspend fun markTransferredBookIds(uids: List<Int>)
     suspend fun updateBookMetadata(book: Book, title: String, author: String, coverPath: String?): Book
+
+    /**
+     * Single entry point for "this is the real title/author/cover": updates the database row AND embeds
+     * the metadata into the stored file (MOBI/AZW3/AZW EXTH + cover, PDF Info dictionary) and renames the file
+     * to "Title - Author.ext". Embedding failures never lose the DB update; the book keeps its old file.
+     * Safe to call from any dispatcher (does its own IO). Default: DB only.
+     */
+    suspend fun applyMetadata(book: Book, title: String, author: String, coverPath: String?): Book =
+        updateBookMetadata(book, title, author, coverPath)
+
+    /** [addBook] then [applyMetadata] when any of [title]/[author]/[coverPath] is given. */
+    suspend fun addBookWithMetadata(
+        context: Context,
+        uri: Uri,
+        title: String? = null,
+        author: String? = null,
+        coverPath: String? = null,
+    ): Book {
+        val book = addBook(context, uri)
+        if (title.isNullOrBlank() && author.isNullOrBlank() && coverPath == null) return book
+        return applyMetadata(book, title?.takeIf { it.isNotBlank() } ?: book.title, author?.takeIf { it.isNotBlank() } ?: book.author, coverPath ?: book.coverPath)
+    }
+
+    /** [convertAndAddBook] with the chosen metadata baked into the new MOBI (title, author, cover). */
+    suspend fun convertAndAddBookWithMetadata(
+        context: Context,
+        uri: Uri,
+        title: String? = null,
+        author: String? = null,
+        coverPath: String? = null,
+    ): Book {
+        val book = convertAndAddBook(context, uri, title)
+        if (author.isNullOrBlank() && coverPath == null) return book
+        return applyMetadata(book, book.title, author?.takeIf { it.isNotBlank() } ?: book.author, coverPath ?: book.coverPath)
+    }
 }
 
 class DefaultBookRepository @Inject constructor(
@@ -167,7 +205,26 @@ class DefaultBookRepository @Inject constructor(
         context: Context,
         uri: Uri,
         outputTitle: String?
+    ): Book = convertAndAddInternal(context, uri, outputTitle, null, null)
+
+    override suspend fun convertAndAddBookWithMetadata(
+        context: Context,
+        uri: Uri,
+        title: String?,
+        author: String?,
+        coverPath: String?
+    ): Book = convertAndAddInternal(context, uri, title, author, coverPath)
+
+    private suspend fun convertAndAddInternal(
+        context: Context,
+        uri: Uri,
+        outputTitle: String?,
+        outputAuthor: String?,
+        chosenCoverPath: String?
     ): Book = withContext(Dispatchers.IO) {
+        val chosenAuthor = outputAuthor?.trim()?.takeIf { it.isNotEmpty() && !BookNameCleaner.isPlaceholderAuthor(it) }
+        val chosenCover = chosenCoverPath?.let { File(it) }?.takeIf { it.isFile }?.readBytes()
+            ?.takeIf { CoverImages.isImage(it) }
         val booksDir = File(context.filesDir, BOOKS_DIR)
         if (!booksDir.exists()) booksDir.mkdirs()
 
@@ -175,7 +232,11 @@ class DefaultBookRepository @Inject constructor(
         val displayName = outputTitle
             ?.trim()
             ?.takeIf { it.isNotBlank() }
-            ?.let { "$it.${sourceDisplayName.substringAfterLast('.', "tmp")}" }
+            ?.let {
+                val ext = sourceDisplayName.substringAfterLast('.', "tmp")
+                // "Title - Author.ext" so the Kindle filename carries both even if embedding fails
+                BookFileMetadataEmbedder.fileNameFor(it, chosenAuthor.orEmpty(), ext)
+            }
             ?: sourceDisplayName
         val format = detectFormat(displayName)
         Log.d(TAG, "Converting $format: $displayName")
@@ -187,7 +248,16 @@ class DefaultBookRepository @Inject constructor(
         }
 
         if (pageDropApiClient?.shouldUseServer(format) == true) {
-            convertWithServer(context, uri, booksDir, displayName)?.let { return@withContext it }
+            convertWithServer(context, uri, booksDir, displayName)?.let { served ->
+                // The server's own metadata may be wrong too; embed what the user chose.
+                if (outputTitle.isNullOrBlank() && chosenAuthor == null && chosenCoverPath == null) return@withContext served
+                return@withContext applyMetadata(
+                    served,
+                    outputTitle?.trim()?.takeIf { it.isNotEmpty() } ?: served.title,
+                    chosenAuthor ?: served.author,
+                    chosenCoverPath ?: served.coverPath,
+                )
+            }
             Log.w(TAG, "Server conversion failed or timed out; falling back to local conversion for $displayName")
         }
 
@@ -204,7 +274,12 @@ class DefaultBookRepository @Inject constructor(
 
             val result = try {
                 withTimeout(120_000L) {
-                    BookConverter.convertToMobi(context, tempFile, mobiFile)
+                    BookConverter.convertToMobi(
+                        context, tempFile, mobiFile,
+                        title = outputTitle?.trim()?.takeIf { it.isNotEmpty() },
+                        author = chosenAuthor,
+                        coverImage = chosenCover,
+                    )
                 }
             } catch (e: TimeoutCancellationException) {
                 Log.e(TAG, "Conversion timed out after 120s for: $displayName")
@@ -217,14 +292,16 @@ class DefaultBookRepository @Inject constructor(
             }
 
             // Save cover image if extracted
-            val coverPath = result.coverBytes?.let { bytes ->
+            val coverPath = if (chosenCover != null) chosenCoverPath else result.coverBytes?.let { bytes ->
                 saveCoverBytes(context, bytes, baseName)
             }
 
             val fileSize = mobiFile.length()
             Log.d(TAG, "Converted: $displayName → ${mobiFile.name} (${formatFileSize(fileSize)})")
 
-            val (title, author) = parseBookNameAndAuthor(baseName)
+            val (parsedTitle, parsedAuthor) = parseBookNameAndAuthor(baseName)
+            val title = outputTitle?.trim()?.takeIf { it.isNotEmpty() } ?: parsedTitle
+            val author = chosenAuthor ?: if (outputTitle.isNullOrBlank()) parsedAuthor else "Unknown Author"
 
             val book = Book(
                 title = title,
@@ -317,6 +394,56 @@ class DefaultBookRepository @Inject constructor(
         bookDao.updateMetadata(book.uid, normalizedTitle, normalizedAuthor, coverPath)
         return book.copy(title = normalizedTitle, author = normalizedAuthor, coverPath = coverPath)
     }
+
+    override suspend fun applyMetadata(book: Book, title: String, author: String, coverPath: String?): Book =
+        withContext(Dispatchers.IO) {
+            val normalizedTitle = title.trim().ifBlank { book.title }
+            val normalizedAuthor = author.trim().ifBlank { "Unknown Author" }
+
+            // 1. Embed into the stored file (copy + validate + swap; any failure leaves the file untouched).
+            val file = File(book.filePath)
+            val coverBytes = coverPath?.let { File(it) }?.takeIf { it.isFile }?.readBytes()?.takeIf { CoverImages.isImage(it) }
+            val outcome = BookFileMetadataEmbedder.embed(file, book.format, normalizedTitle, normalizedAuthor, coverBytes)
+            if (outcome.status == BookFileMetadataEmbedder.Status.FAILED) {
+                Log.w(TAG, "Could not embed metadata into ${file.name}: ${outcome.detail}")
+            }
+
+            // 2. Rename to "Title - Author.ext" (only after a successful embed, so a failed embed keeps the old name).
+            var target = file
+            if (outcome.embedded && file.isFile) {
+                val wanted = BookFileMetadataEmbedder.fileNameFor(normalizedTitle, normalizedAuthor, file.extension.ifEmpty { book.format })
+                if (wanted != file.name) {
+                    val dest = generateUniqueFile(file.parentFile ?: file.absoluteFile.parentFile, wanted)
+                    if (file.renameTo(dest)) target = dest
+                }
+            }
+
+            // 3. Database.
+            val size = if (target.isFile) target.length() else book.fileSize
+            val updated = book.copy(
+                title = normalizedTitle,
+                author = normalizedAuthor,
+                coverPath = coverPath,
+                fileName = target.name,
+                filePath = target.absolutePath,
+                fileSize = size,
+            )
+            try {
+                bookDao.updateFileAndMetadata(
+                    uid = book.uid,
+                    fileName = target.name,
+                    filePath = target.absolutePath,
+                    fileSize = size,
+                    title = normalizedTitle,
+                    author = normalizedAuthor,
+                    coverPath = coverPath,
+                )
+            } catch (e: Exception) {
+                if (target != file) target.renameTo(file)
+                throw e
+            }
+            updated
+        }
 
     override suspend fun addBookFromFile(book: Book): Long {
         return bookDao.insertBook(book)

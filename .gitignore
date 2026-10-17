@@ -24,3 +24,5 @@ server/supabase/.temp/
 /pagedrop_server.md
 /task.md
 /walkthrough.md
+.kotlin/
+__pycache__/

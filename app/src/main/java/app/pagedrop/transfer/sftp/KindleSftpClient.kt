@@ -18,6 +18,26 @@ object KindleSftpClient {
     internal fun kindleFileName(fileName: String): String =
         fileName.replace(Regex("\\.azw3$", RegexOption.IGNORE_CASE), ".azw")
 
+    /** Folder the stock Kindle home screen indexes. */
+    internal const val KINDLE_HOME_DIR = "/mnt/us/documents"
+
+    /** KOReader's book folder on this device. */
+    internal const val KOREADER_BOOKS_DIR = "/mnt/us/Books"
+
+    private val STOCK_READER_FORMATS = setOf("MOBI", "AZW", "AZW3", "PRC", "PDF", "TXT")
+
+    /**
+     * Every book goes to the KOReader folder; formats the stock reader can open also go to
+     * the home-screen folder, so they can be read without launching KOReader.
+     */
+    internal fun destinationsFor(book: Book, configured: List<String>): List<String> {
+        val dirs = configured.map { it.trim().removeSuffix("/") }.filter { it.isNotBlank() }.toMutableList()
+        if (book.format.uppercase() in STOCK_READER_FORMATS) dirs += KINDLE_HOME_DIR
+        else dirs -= KINDLE_HOME_DIR
+        dirs += KOREADER_BOOKS_DIR
+        return dirs.distinct()
+    }
+
     /**
      * Tests connection to the Kindle SSH/SFTP server.
      */
@@ -82,15 +102,13 @@ object KindleSftpClient {
             sftpChannel = session.openChannel("sftp") as ChannelSftp
             sftpChannel.connect(10000)
 
-            val destinationDirectories = directories
-                .map { it.trim().removeSuffix("/") }
-                .filter { it.isNotBlank() }
-                .distinct()
-            if (destinationDirectories.isEmpty()) {
-                throw IllegalArgumentException("Add at least one Kindle destination path")
-            }
+            val createdDirectories = mutableSetOf<String>()
 
             books.forEachIndexed { index, book ->
+                val destinationDirectories = destinationsFor(book, directories)
+                destinationDirectories.filter { createdDirectories.add(it) }.forEach { dir ->
+                    runCatching { sftpChannel.stat(dir) }.onFailure { sftpChannel.mkdir(dir) }
+                }
                 onProgress(index, books.size, "Sending: ${book.title}")
                 val file = File(book.filePath)
                 if (!file.exists()) {
@@ -152,7 +170,9 @@ object KindleSftpClient {
                         "if lipc-probe -l 2>/dev/null | grep -q 'com.lab126.amznAssetsMgrService'; then " +
                         "lipc-set-prop com.lab126.amznAssetsMgrService reScan 1; " +
                         "else lipc-set-prop -i com.lab126.indexer updateIndexerState 1; fi; " +
-                        "fi"
+                        "fi; " +
+                        // Firmware 5.x rescans documents/ on a simulated resume; it is deferred while KOReader runs.
+                        "dbus-send --system /default com.lab126.powerd.resuming int32:1 2>/dev/null; true"
                 )
                 execChannel.connect()
                 var elapsed = 0

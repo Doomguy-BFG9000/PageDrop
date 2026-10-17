@@ -60,17 +60,24 @@ class PageDropApiClient @Inject constructor(
             val key = anonKey ?: return@withContext Result.failure(
                 IllegalStateException("PageDrop conversion service is not configured in this build")
             )
-            val token = signInAnonymously().getOrElse { return@withContext Result.failure(it) }
-            val req = Request.Builder()
-                .url("$base/auth/v1/user")
-                .header("apikey", key)
-                .header("Authorization", "Bearer $token")
-                .get()
-                .build()
-            client.newCall(req).execute().use { response ->
-                if (response.isSuccessful) Result.success(Unit)
-                else Result.failure(IllegalStateException("PageDrop conversion service returned HTTP ${response.code}"))
+            fun checkUser(token: String): Int {
+                val req = Request.Builder()
+                    .url("$base/auth/v1/user")
+                    .header("apikey", key)
+                    .header("Authorization", "Bearer $token")
+                    .get()
+                    .build()
+                return client.newCall(req).execute().use { it.code }
             }
+            var code = checkUser(signInAnonymously().getOrElse { return@withContext Result.failure(it) })
+            if (code == 401 || code == 403) {
+                // Session was rejected before its expiry (revoked or user removed): start a fresh one once.
+                serverSettings.accessToken = ""
+                serverSettings.refreshToken = ""
+                code = checkUser(signInAnonymously().getOrElse { return@withContext Result.failure(it) })
+            }
+            if (code in 200..299) Result.success(Unit)
+            else Result.failure(IllegalStateException("PageDrop conversion service returned HTTP $code"))
         } catch (e: Exception) {
             Result.failure(IllegalStateException("Could not reach the PageDrop conversion service: ${e.localizedMessage ?: "unknown error"}", e))
         }
@@ -82,7 +89,13 @@ class PageDropApiClient @Inject constructor(
             val key = anonKey ?: return@withContext Result.failure(IllegalStateException("Supabase anon key is not configured"))
 
             val existingToken = accessToken
-            if (existingToken != null) return@withContext Result.success(existingToken)
+            if (existingToken != null && !isJwtExpired(existingToken)) {
+                return@withContext Result.success(existingToken)
+            }
+            // Access tokens expire after about an hour; refresh before falling back to a new anonymous user.
+            refreshSession(base, key)?.let { return@withContext Result.success(it) }
+            serverSettings.accessToken = ""
+            serverSettings.refreshToken = ""
 
             val body = buildJsonObject {
                 put("data", buildJsonObject {
@@ -123,6 +136,28 @@ class PageDropApiClient @Inject constructor(
             Log.e(TAG, "Auth failed: ${e.message}", e)
             Result.failure(e)
         }
+    }
+
+    /** Exchanges the stored refresh token for a new session; null when there is none or it was rejected. */
+    private fun refreshSession(base: String, key: String): String? {
+        val refresh = serverSettings.refreshToken.takeIf { it.isNotBlank() } ?: return null
+        val body = buildJsonObject { put("refresh_token", refresh) }.toString()
+        val req = Request.Builder()
+            .url("$base/auth/v1/token?grant_type=refresh_token")
+            .header("apikey", key)
+            .header("Content-Type", "application/json")
+            .post(body.toRequestBody(JSON_MEDIA))
+            .build()
+        return runCatching {
+            client.newCall(req).execute().use { response ->
+                if (!response.isSuccessful) return null
+                val parsed = json.parseToJsonElement(response.body?.string() ?: return null).jsonObject
+                val access = parsed["access_token"]?.jsonPrimitive?.contentOrNull ?: return null
+                serverSettings.accessToken = access
+                parsed["refresh_token"]?.jsonPrimitive?.contentOrNull?.let { serverSettings.refreshToken = it }
+                access
+            }
+        }.onFailure { Log.w(TAG, "Session refresh failed: ${it.message}") }.getOrNull()
     }
 
     suspend fun createConvertJob(
@@ -431,4 +466,14 @@ internal fun anonymousSignInErrorMessage(statusCode: Int, responseBody: String):
         append("Anonymous sign-in failed: HTTP $statusCode")
         message?.takeIf { it.isNotBlank() }?.let { append(" ($it)") }
     }
+}
+
+/** True when the JWT's `exp` claim is missing, unreadable, or within [skewSeconds] of now. */
+internal fun isJwtExpired(token: String, nowSeconds: Long = System.currentTimeMillis() / 1000, skewSeconds: Long = 60): Boolean {
+    val payload = token.split('.').getOrNull(1) ?: return true
+    return runCatching {
+        val decoded = String(java.util.Base64.getUrlDecoder().decode(payload.padEnd((payload.length + 3) / 4 * 4, '=')))
+        val exp = Json.parseToJsonElement(decoded).jsonObject["exp"]?.jsonPrimitive?.contentOrNull?.toLong() ?: return true
+        exp - skewSeconds <= nowSeconds
+    }.getOrDefault(true)
 }

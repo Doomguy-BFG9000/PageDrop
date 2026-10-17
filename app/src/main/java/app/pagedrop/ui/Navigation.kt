@@ -16,91 +16,89 @@
 
 package app.pagedrop.ui
 
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.safeDrawingPadding
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
+import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
+import androidx.navigation3.runtime.NavKey
 import androidx.navigation3.runtime.entryProvider
 import androidx.navigation3.runtime.rememberNavBackStack
 import androidx.navigation3.ui.NavDisplay
-import app.pagedrop.ui.book.BookScreen
-import app.pagedrop.ui.tools.dashboard.DashboardScreen
-import app.pagedrop.ui.tools.fonts.FontsScreen
+import app.pagedrop.ui.connection.ConnectionScreen
+import app.pagedrop.ui.onboarding.SetupScreen
+import app.pagedrop.ui.settings.SettingsScreen
+import app.pagedrop.ui.shell.MainShell
+import app.pagedrop.ui.shell.ShellViewModel
+import app.pagedrop.ui.tools.articles.ArticlesScreen
 import app.pagedrop.ui.tools.dictionaries.DictionariesScreen
+import app.pagedrop.ui.tools.fonts.FontsScreen
 import app.pagedrop.ui.tools.screensavers.ScreensaverScreen
 import app.pagedrop.ui.tools.sync.SyncScreen
-import app.pagedrop.ui.tools.articles.ArticlesScreen
-import app.pagedrop.ui.connection.ConnectionScreen
 
+/**
+ * Navigation map:
+ *  - first run (no Kindle configured): Setup -> Main
+ *  - Main = tab shell (Library | Kindle | Extras) with the bottom bar
+ *  - Settings, Setup, Connection, Sync, Screensaver, Fonts, Dictionaries, Articles push full-screen
+ *    over Main (bottom bar hidden) with a back arrow.
+ */
 @Composable
-fun MainNavigation() {
-    val backStack = rememberNavBackStack(Main)
+fun MainNavigation(shellViewModel: ShellViewModel = hiltViewModel()) {
+    val start: NavKey = remember { if (shellViewModel.needsFirstRunSetup) Setup else Main }
+    val backStack = rememberNavBackStack(start)
+    val pop: () -> Unit = { backStack.removeLastOrNull() }
+    val push: (NavKey) -> Unit = { backStack.add(it) }
 
     NavDisplay(
         backStack = backStack,
-        onBack = { backStack.removeLastOrNull() },
+        onBack = { pop() },
         entryProvider = entryProvider {
             entry<Main> {
-                BookScreen(
+                MainShell(
+                    onOpenSettings = { push(Settings) },
+                    onOpenSetup = { push(Setup) },
+                    onOpenConnection = { push(Connection) },
+                    onOpenSync = { push(Sync) },
+                    onOpenArticle = { push(Articles) },
+                    onOpenScreensaver = { push(Screensaver) },
+                    onOpenFonts = { push(Fonts) },
+                    onOpenDictionaries = { push(Dictionaries) }
+                )
+            }
+            entry<Setup> {
+                // Computed once at entry creation: the back stack changes during the exit animation.
+                val firstRun = remember { Main !in backStack }
+                val finish: () -> Unit = {
+                    if (firstRun) {
+                        backStack.add(Main)
+                        backStack.remove(Setup)
+                    } else {
+                        pop()
+                    }
+                }
+                SetupScreen(
+                    canGoBack = !firstRun,
+                    onBack = pop,
+                    onDone = finish,
+                    onSkip = finish
+                )
+            }
+            entry<Settings> {
+                SettingsScreen(
                     modifier = Modifier.safeDrawingPadding(),
-                    onNavigateToTools = { backStack.addLast(Tools) }
+                    onBack = pop,
+                    onOpenConnection = { push(Connection) }
                 )
             }
-            entry<Tools> {
-                val modifier = Modifier.safeDrawingPadding()
-                ToolsScreen(
-                    modifier = modifier,
-                    onBack = { backStack.removeLastOrNull() },
-                    onNavigateToScreensaver = { backStack.addLast(Screensaver) },
-                    onNavigateToFonts = { backStack.addLast(Fonts) },
-                    onNavigateToDictionaries = { backStack.addLast(Dictionaries) },
-                    onNavigateToDashboard = { backStack.addLast(Dashboard) },
-                    onNavigateToSync = { backStack.addLast(Sync) },
-                    onNavigateToArticles = { backStack.addLast(Articles) },
-                    onNavigateToConnection = { backStack.addLast(Connection) }
-                )
-            }
-            entry<Screensaver> {
-                ScreensaverScreen(
-                    modifier = Modifier.safeDrawingPadding(),
-                    onBack = { backStack.removeLastOrNull() }
-                )
-            }
-            entry<Fonts> {
-                FontsScreen(
-                    modifier = Modifier.safeDrawingPadding(),
-                    onBack = { backStack.removeLastOrNull() }
-                )
-            }
-            entry<Dictionaries> {
-                DictionariesScreen(
-                    modifier = Modifier.safeDrawingPadding(),
-                    onBack = { backStack.removeLastOrNull() }
-                )
-            }
-            entry<Dashboard> {
-                DashboardScreen(
-                    modifier = Modifier.safeDrawingPadding(),
-                    onBack = { backStack.removeLastOrNull() }
-                )
-            }
-            entry<Sync> {
-                SyncScreen(
-                    modifier = Modifier.safeDrawingPadding(),
-                    onBack = { backStack.removeLastOrNull() }
-                )
-            }
-            entry<Articles> {
-                ArticlesScreen(
-                    modifier = Modifier.safeDrawingPadding(),
-                    onBack = { backStack.removeLastOrNull() }
-                )
-            }
-            entry<Connection> {
-                ConnectionScreen(
-                    modifier = Modifier.safeDrawingPadding(),
-                    onBack = { backStack.removeLastOrNull() }
-                )
-            }
+            entry<Screensaver> { ScreensaverScreen(Modifier.safeDrawingPadding(), onBack = pop) }
+            entry<Fonts> { FontsScreen(Modifier.safeDrawingPadding(), onBack = pop) }
+            entry<Dictionaries> { DictionariesScreen(Modifier.safeDrawingPadding(), onBack = pop) }
+            entry<Sync> { SyncScreen(Modifier.safeDrawingPadding(), onBack = pop) }
+            entry<Articles> { ArticlesScreen(Modifier.safeDrawingPadding(), onBack = pop) }
+            entry<Connection> { ConnectionScreen(Modifier.safeDrawingPadding(), onBack = pop) }
         }
     )
 }

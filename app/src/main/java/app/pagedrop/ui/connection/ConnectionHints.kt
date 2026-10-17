@@ -1,0 +1,48 @@
+package app.pagedrop.ui.connection
+
+/** Turns raw SSH/network exceptions into a short plain-English explanation and fix. */
+object ConnectionHints {
+
+    data class Hint(val title: String, val fix: String)
+
+    fun explain(error: Throwable?, port: Int): Hint {
+        val msg = (error?.message ?: error?.javaClass?.simpleName ?: "").lowercase()
+        val refused = error is java.net.ConnectException && "unreachable" !in msg && "no route" !in msg
+        val timedOut = error is java.net.SocketTimeoutException
+        val unknownHost = error is java.net.UnknownHostException
+        return when {
+            refused -> refusedHint(port)
+            "address cannot be empty" in msg ->
+                Hint("No address entered", "Type your Kindle's IP address, or tap Find my Kindle.")
+            "auth fail" in msg || "authentication" in msg || "permission denied" in msg ->
+                Hint(
+                    "The Kindle rejected the login",
+                    "Leave the password blank if KOReader's \"login without password\" is on. " +
+                        "Otherwise enter the SSH password you set (USBNetwork's is usually blank for root)."
+                )
+            "refused" in msg -> refusedHint(port)
+            timedOut || "timeout" in msg || "timed out" in msg || "no route" in msg || "unreachable" in msg ->
+                Hint(
+                    "Can't reach the Kindle",
+                    "Wake the Kindle, check that it and this phone are on the same Wi-Fi, and that the IP address is right."
+                )
+            unknownHost || "unknownhost" in msg || "unresolved" in msg || "unknown host" in msg ->
+                Hint("That address isn't valid", "Use the Kindle's IP address, like 192.168.1.42.")
+            "algorithm negotiation" in msg || "kex" in msg ->
+                Hint("Couldn't agree on encryption with the Kindle", "Update KOReader on the Kindle and try again.")
+            else ->
+                Hint("Couldn't connect", "Check the address and port, make sure the Kindle is awake and on the same Wi-Fi.")
+        }
+    }
+
+    private fun refusedHint(port: Int) = Hint(
+        "Nothing is listening on port $port",
+        if (port == 2222) {
+            "Open KOReader on the Kindle and turn on its SSH server (Tools > More tools > SSH server). " +
+                "SSH only runs while KOReader is open. If you use USBNetwork instead, pick port 22."
+        } else {
+            "Make sure USBNetwork SSH is enabled. If you use KOReader's SSH server, open KOReader, " +
+                "turn on Tools > More tools > SSH server, and pick port 2222."
+        }
+    )
+}

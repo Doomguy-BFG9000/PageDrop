@@ -7,23 +7,22 @@ import org.junit.Test
 
 class NavigationKeysTest {
 
+    private val keys = listOf(Main, Setup, Settings, Screensaver, Fonts, Dictionaries, Sync, Articles, Connection)
+
     @Test
     fun allNavKeysAreSerializable() {
-        val keys = listOf(Main, Tools, Screensaver, Fonts, Dictionaries, Dashboard, Sync, Articles)
-        assertEquals(8, keys.size)
+        assertEquals(9, keys.size)
         keys.forEach { key -> assertNotNull(key.toString()) }
     }
 
     @Test
     fun routeCount_matchesScreens() {
-        val screenCount = 8 // Main (BookScreen) + Tools hub + 6 tool screens
-        val navKeys = listOf(Main, Tools, Screensaver, Fonts, Dictionaries, Dashboard, Sync, Articles)
-        assertEquals(screenCount, navKeys.size)
+        // Main (tab shell) + Setup + Settings + Connection + Sync + 4 extras screens
+        assertEquals(9, keys.toSet().size)
     }
 
     @Test
     fun routeNames_areNotEmpty() {
-        listOf(Main, Tools, Screensaver, Fonts, Dictionaries, Dashboard, Sync, Articles)
-            .forEach { assertTrue(it.toString().isNotBlank()) }
+        keys.forEach { assertTrue(it.toString().isNotBlank()) }
     }
 }

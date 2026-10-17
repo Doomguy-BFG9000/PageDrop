@@ -24,7 +24,10 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.qualifiers.ApplicationContext
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -33,11 +36,21 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import android.util.Log
+import app.pagedrop.converter.BookConverter
 import app.pagedrop.data.BookRepository
+import app.pagedrop.data.DefaultBookRepository
 import app.pagedrop.data.KindleSettings
 import app.pagedrop.data.local.database.Book
 import app.pagedrop.metadata.BookMetadataCandidate
 import app.pagedrop.metadata.BookMetadataLookup
+import app.pagedrop.metadata.BookNameCleaner
+import app.pagedrop.metadata.MetadataLookupResult
+import app.pagedrop.metadata.MetadataSuggester
+import app.pagedrop.metadata.Suggestion
+import app.pagedrop.share.PendingSharedFile
+import kotlinx.coroutines.Job
+import java.io.IOException
 import app.pagedrop.server.PageDropApiClient
 import app.pagedrop.transfer.sftp.KindleSftpClient
 import app.pagedrop.ui.book.LibraryUiState.Error
@@ -46,6 +59,9 @@ import app.pagedrop.ui.book.LibraryUiState.Success
 import java.io.ByteArrayOutputStream
 import java.io.File
 import javax.inject.Inject
+import java.net.InetSocketAddress
+import java.net.Socket
+import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
@@ -55,7 +71,14 @@ class BookViewModel @Inject constructor(
     private val bookRepository: BookRepository,
     private val kindleSettings: KindleSettings,
     private val pageDropApiClient: PageDropApiClient? = null,
+    private val pendingSharedFile: PendingSharedFile = PendingSharedFile(),
 ) : ViewModel() {
+
+    /** A single file shared to PageDrop, waiting for the Add book sheet. */
+    val pendingSharedUri: StateFlow<Uri?> = pendingSharedFile.uri
+
+    fun consumeSharedUri(uri: Uri) = pendingSharedFile.consume(uri)
+
 
     val uiState: StateFlow<LibraryUiState> = bookRepository
         .getBooks()
@@ -78,11 +101,91 @@ class BookViewModel @Inject constructor(
         object Idle : TransferState
         data class Progress(val current: Int, val total: Int, val message: String) : TransferState
         object Success : TransferState
-        data class Error(val message: String) : TransferState
+        data class Error(val message: String, val isConnectionProblem: Boolean = false) : TransferState
     }
 
     private val _transferState = MutableStateFlow<TransferState>(TransferState.Idle)
     val transferState: StateFlow<TransferState> = _transferState.asStateFlow()
+
+    /** One-shot results for the library UI; buffered so nothing is lost while the tab is away. */
+    sealed interface LibraryEvent {
+        data class Message(val text: String) : LibraryEvent
+        data object TransferSucceeded : LibraryEvent
+        data class TransferFailed(val error: TransferState.Error, val books: List<Book>) : LibraryEvent
+        data class ConvertedCopyAdded(val originalBookId: Int) : LibraryEvent
+    }
+
+    private val _events = Channel<LibraryEvent>(Channel.BUFFERED)
+    val events: Flow<LibraryEvent> = _events.receiveAsFlow()
+
+    /** Books of the transfer that is running right now (empty when idle). */
+    private val _sendingIds = MutableStateFlow<Set<Int>>(emptySet())
+    val sendingIds: StateFlow<Set<Int>> = _sendingIds.asStateFlow()
+
+    /** Books whose last send failed; cleared by the next successful send. */
+    private val _failedIds = MutableStateFlow<Set<Int>>(emptySet())
+    val failedIds: StateFlow<Set<Int>> = _failedIds.asStateFlow()
+
+    /** Send requests made while another transfer was running; sent when it finishes. */
+    private var pendingSend: List<Book> = emptyList()
+
+    // ── Kindle reachability (lightweight TCP check for the library status chip) ──
+
+    private val _kindleStatus = MutableStateFlow(initialKindleStatus())
+    val kindleStatus: StateFlow<KindleStatus> = _kindleStatus.asStateFlow()
+
+    /** Replaceable in tests; true when something accepts TCP connections on host:port. */
+    internal var reachabilityCheck: suspend (String, Int) -> Boolean = ::canConnectTcp
+
+    /** Dispatchers for blocking and CPU work; tests replace them with their test dispatcher. */
+    internal var ioDispatcher: CoroutineDispatcher = Dispatchers.IO
+    internal var defaultDispatcher: CoroutineDispatcher = Dispatchers.Default
+
+    /** SFTP seams, replaceable in tests so no real sockets are opened. */
+    internal var sftpTestConnection: suspend (String, Int, String, String) -> Result<Unit> =
+        { host, port, user, pass -> KindleSftpClient.testConnection(host, port, user, pass) }
+    internal var sftpTransfer: suspend (
+        List<Book>, String, Int, String, String, List<String>, Boolean, Map<Int, ByteArray>, (Int, Int, String) -> Unit,
+    ) -> Result<Unit> = { books, host, port, user, pass, dirs, rescan, thumbs, progress ->
+        KindleSftpClient.transferBooks(
+            books = books, host = host, port = port, user = user, pass = pass,
+            directories = dirs, triggerRescan = rescan, thumbnailBytes = thumbs, onProgress = progress,
+        )
+    }
+
+    private fun initialKindleStatus(): KindleStatus =
+        if (kindleSettings.host.isBlank()) KindleStatus.NotConfigured else KindleStatus.Checking
+
+    /** Re-reads the saved connection settings and probes the Kindle. Call on resume. */
+    fun refreshKindleStatus() {
+        reloadSettings()
+        val host = kindleSettings.host.trim()
+        if (host.isBlank()) {
+            _kindleStatus.value = KindleStatus.NotConfigured
+            return
+        }
+        val port = kindleSettings.port
+        _kindleStatus.value = KindleStatus.Checking
+        viewModelScope.launch {
+            val reachable = try {
+                reachabilityCheck(host, port)
+            } catch (_: Exception) {
+                false
+            }
+            _kindleStatus.value = if (reachable) KindleStatus.Online else KindleStatus.Offline
+        }
+    }
+
+    /** Pulls host/port/credentials back from [KindleSettings], which Settings may have changed. */
+    private fun reloadSettings() {
+        _kindleIp.value = kindleSettings.host
+        _kindlePort.value = kindleSettings.port.toString()
+        _kindleUsername.value = kindleSettings.username
+        _kindlePassword.value = kindleSettings.password
+        _kindleDirectories.value = kindleSettings.targetDirectories
+        _kindleDirectory.value = kindleSettings.targetDirectory
+        _triggerRescan.value = kindleSettings.triggerRescan
+    }
 
     // ── Connection Test State ──
 
@@ -118,31 +221,79 @@ class BookViewModel @Inject constructor(
     val isServerConversionAvailable: Boolean
         get() = pageDropApiClient?.isAvailable == true
 
+    /**
+     * @property best confident top match (safe to pre-fill, the user still confirms); null for weak matches.
+     * @property auto true when the lookup started by itself (sheet opened), false for "Find details".
+     * @property offlineNote the automatic lookup could not run because the phone is offline.
+     * @property searched a lookup has finished (with or without results).
+     */
     data class MetadataLookupState(
         val isSearching: Boolean = false,
         val candidates: List<BookMetadataCandidate> = emptyList(),
+        val best: BookMetadataCandidate? = null,
         val error: String? = null,
+        val auto: Boolean = false,
+        val offlineNote: Boolean = false,
+        val searched: Boolean = false,
+        /** What the file itself (or the catalogs) suggested for the open sheet; null for manual searches. */
+        val suggestion: Suggestion? = null,
+        /** Cover read from the file, saved as a pending cover; the default when no other cover is chosen. */
+        val embeddedCoverPath: String? = null,
     )
 
     private val _metadataLookupState = MutableStateFlow(MetadataLookupState())
     val metadataLookupState: StateFlow<MetadataLookupState> = _metadataLookupState.asStateFlow()
 
-    fun addBook(context: Context, uri: Uri) {
+    private var lookupJob: Job? = null
+
+    /** Replaceable in tests. */
+    internal var lookupFn: suspend (String, String) -> MetadataLookupResult = { t, a -> BookMetadataLookup.lookup(t, a) }
+    internal var fetchCoverFn: suspend (String) -> ByteArray? = { BookMetadataLookup.fetchCover(it) }
+    internal var suggestFn: suspend (File, String, String) -> Suggestion =
+        { file, format, name -> MetadataSuggester.suggest(file, format, name) }
+    internal var copyToCacheFn: suspend (Context, Uri) -> File? = { c, u -> MetadataSuggester.copyToCache(c, u) }
+    internal var coversDir: () -> File = { File(appContext.filesDir, "covers") }
+
+    /**
+     * Extra choices made in the Add book sheet. Blank/null values keep whatever the import
+     * detected; [sendAfterAdd] queues the new book for the Kindle as soon as it is saved.
+     */
+    data class AddOptions(
+        val title: String? = null,
+        val author: String? = null,
+        val coverUri: Uri? = null,
+        val coverUrl: String? = null,
+        val sendAfterAdd: Boolean = false,
+        /** Set when this is a converted copy of a library book, so the UI can offer to remove it. */
+        val originalBookId: Int? = null,
+    )
+
+    fun addBook(context: Context, uri: Uri, options: AddOptions = AddOptions()) {
         viewModelScope.launch {
             try {
-                bookRepository.addBook(context, uri)
+                val cover = resolveCover(options.coverUri, options.coverUrl)
+                val book = bookRepository.addBookWithMetadata(context, uri, options.title, options.author, cover)
+                completeAdd(book, options)
             } catch (e: Exception) {
-                // Error will surface through uiState flow
+                _conversionError.value = e.localizedMessage ?: "Could not add this book"
             }
         }
     }
 
-    fun addBookWithConversion(context: Context, uri: Uri, outputTitle: String? = null) {
+    fun addBookWithConversion(
+        context: Context,
+        uri: Uri,
+        outputTitle: String? = null,
+        options: AddOptions = AddOptions(),
+    ) {
         viewModelScope.launch {
             _isConverting.value = true
             _conversionError.value = null
             try {
-                bookRepository.convertAndAddBook(context, uri, outputTitle)
+                val cover = resolveCover(options.coverUri, options.coverUrl)
+                val title = outputTitle?.takeIf { it.isNotBlank() } ?: options.title
+                val book = bookRepository.convertAndAddBookWithMetadata(context, uri, title, options.author, cover)
+                completeAdd(book, options)
             } catch (e: Exception) {
                 _conversionError.value = e.localizedMessage ?: "Conversion failed"
             } finally {
@@ -159,10 +310,14 @@ class BookViewModel @Inject constructor(
         targetFormat: String = "mobi",
         coverUri: Uri? = null,
         coverUrl: String? = null,
+        sendAfterAdd: Boolean = false,
+        originalBookId: Int? = null,
     ) {
         viewModelScope.launch {
             _isConverting.value = true
             _conversionError.value = null
+            // Fetch the cover once; the server and the final applyMetadata both use this file.
+            val cover = resolveCover(coverUri, coverUrl)
             try {
                 val server = pageDropApiClient
                     ?: throw IllegalStateException("PageDrop conversion service is unavailable")
@@ -175,53 +330,163 @@ class BookViewModel @Inject constructor(
                     title = outputTitle,
                     author = outputAuthor,
                     targetFormat = targetFormat,
-                    coverUri = coverUri,
-                    coverUrl = coverUrl,
+                    coverUri = cover?.let { Uri.fromFile(File(it)) },
+                    coverUrl = null,
                 ) ?: throw IllegalStateException("The PageDrop conversion service could not convert this file")
 
-                bookRepository.addBookFromFile(
-                    Book(
-                        title = prepared.title,
-                        author = prepared.author,
-                        fileName = prepared.file.name,
-                        filePath = prepared.file.absolutePath,
-                        format = prepared.format,
-                        fileSize = prepared.file.length(),
-                        coverPath = prepared.coverFile?.absolutePath
-                    )
+                val book = Book(
+                    title = prepared.title,
+                    author = prepared.author,
+                    fileName = prepared.file.name,
+                    filePath = prepared.file.absolutePath,
+                    format = prepared.format,
+                    fileSize = prepared.file.length(),
+                    coverPath = prepared.coverFile?.absolutePath
                 )
+                val id = bookRepository.addBookFromFile(book)
+                var saved = book.copy(uid = id.toInt())
+                val chosenAuthor = outputAuthor?.takeIf { it.isNotBlank() && !BookNameCleaner.isPlaceholderAuthor(it) }
+                if (!outputTitle.isNullOrBlank() || chosenAuthor != null || cover != null) {
+                    try {
+                        saved = bookRepository.applyMetadata(
+                            saved,
+                            outputTitle?.takeIf { it.isNotBlank() } ?: saved.title,
+                            chosenAuthor ?: saved.author,
+                            cover ?: saved.coverPath,
+                        )
+                    } catch (e: Exception) {
+                        Log.w("BookViewModel", "Could not apply metadata to server result: ${e.message}")
+                    }
+                }
+                originalBookId?.let { _events.trySend(LibraryEvent.ConvertedCopyAdded(it)) }
+                if (sendAfterAdd) sendBooks(listOf(saved))
             } catch (e: Exception) {
-                _conversionError.value = e.localizedMessage ?: "Server conversion failed"
+                Log.w("BookViewModel", "Server conversion failed: ${e.message}")
+                val sourceFormat = DefaultBookRepository.detectFormat(
+                    context.contentResolver.query(uri, null, null, null, null)?.use { c ->
+                        val col = c.getColumnIndex(android.provider.OpenableColumns.DISPLAY_NAME)
+                        if (col >= 0 && c.moveToFirst()) c.getString(col) else null
+                    } ?: uri.lastPathSegment.orEmpty()
+                )
+                if (targetFormat.equals("mobi", ignoreCase = true) && BookConverter.canConvert(sourceFormat)) {
+                    // The phone's own converter makes MOBI too; use it rather than losing the book.
+                    _events.trySend(LibraryEvent.Message("Conversion server unavailable — converting on this phone instead"))
+                    try {
+                        val book = bookRepository.convertAndAddBookWithMetadata(context, uri, outputTitle, outputAuthor, cover)
+                        completeAdd(
+                            book,
+                            AddOptions(sendAfterAdd = sendAfterAdd, originalBookId = originalBookId),
+                        )
+                    } catch (local: Exception) {
+                        _conversionError.value = local.localizedMessage ?: "Conversion failed"
+                    }
+                } else {
+                    _conversionError.value = e.localizedMessage ?: "Server conversion failed"
+                }
             } finally {
                 _isConverting.value = false
             }
         }
     }
 
+    /** Metadata is already in the saved [book]; offer "remove original" and optionally send it. */
+    private fun completeAdd(book: Book, options: AddOptions) {
+        options.originalBookId?.let { _events.trySend(LibraryEvent.ConvertedCopyAdded(it)) }
+        if (options.sendAfterAdd) sendBooks(listOf(book))
+    }
+
     fun clearConversionError() {
         _conversionError.value = null
     }
 
-    fun searchBookMetadata(title: String, author: String) {
-        viewModelScope.launch {
-            _metadataLookupState.value = MetadataLookupState(isSearching = true)
-            val result = BookMetadataLookup.search(title, author)
-            _metadataLookupState.value = result.fold(
-                onSuccess = { candidates ->
-                    MetadataLookupState(
-                        candidates = candidates,
-                        error = if (candidates.isEmpty()) "No Google Books matches found" else null,
-                    )
-                },
-                onFailure = { error -> MetadataLookupState(error = error.localizedMessage ?: "Metadata search failed") },
-            )
+    /** The user pressed "Find details". */
+    fun searchBookMetadata(title: String, author: String) = startLookup(title, author, auto = false)
+
+    /**
+     * Sheet opened for a picked/shared file: read what the file itself says (then the catalogs) and
+     * offer it. Never applies anything; the form decides what is safe to pre-fill.
+     */
+    fun suggestForUri(uri: Uri, displayName: String, format: String) =
+        suggestForCopy({ copyToCacheFn(appContext, uri) }, displayName, format)
+
+    internal fun suggestForCopy(copy: suspend () -> File?, displayName: String, format: String) = launchLookup(auto = true) {
+        val file = try {
+            withContext(ioDispatcher) { copy() }
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            null
+        }
+        if (file == null) {
+            MetadataLookupState(auto = true, searched = true)
+        } else {
+            try {
+                suggestionState(runSuggest(file, format, displayName))
+            } finally {
+                withContext(kotlinx.coroutines.NonCancellable + ioDispatcher) { file.delete() }
+            }
+        }
+    }
+
+    /** Edit sheet for a book with missing details: same suggestion, straight from the stored file. */
+    fun suggestForBook(book: Book) = launchLookup(auto = true) {
+        suggestionState(runSuggest(File(book.filePath), book.format, book.fileName))
+    }
+
+    private suspend fun runSuggest(file: File, format: String, displayName: String): Suggestion =
+        try {
+            suggestFn(file, format, displayName)
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            Suggestion(title = null, author = null, source = Suggestion.Source.FILENAME, unavailable = true, message = e.message)
+        }
+
+    private suspend fun suggestionState(s: Suggestion): MetadataLookupState {
+        val coverPath = s.coverBytes?.takeIf { it.isNotEmpty() }?.let { bytes ->
+            withContext(ioDispatcher) {
+                try {
+                    val dir = coversDir().apply { mkdirs() }
+                    File(dir, "pending_${System.currentTimeMillis()}.jpg").also { it.writeBytes(bytes) }.absolutePath
+                } catch (_: IOException) {
+                    null
+                }
+            }
+        }
+        return MetadataLookupState(
+            candidates = s.candidates, best = s.best, auto = true, offlineNote = s.offline,
+            searched = true, suggestion = s, embeddedCoverPath = coverPath,
+        )
+    }
+
+    private fun startLookup(title: String, author: String, auto: Boolean) = launchLookup(auto) {
+        val result = try {
+            lookupFn(title, author)
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            MetadataLookupResult.Unavailable(offline = false, message = e.message.orEmpty())
+        }
+        lookupStateFor(result, auto)
+    }
+
+    private fun launchLookup(auto: Boolean, block: suspend () -> MetadataLookupState) {
+        lookupJob?.cancel()
+        val keepCover = _metadataLookupState.value.embeddedCoverPath
+        _metadataLookupState.value = MetadataLookupState(isSearching = true, auto = auto, embeddedCoverPath = keepCover)
+        lookupJob = viewModelScope.launch {
+            val state = block()
+            _metadataLookupState.value =
+                if (state.embeddedCoverPath == null) state.copy(embeddedCoverPath = keepCover) else state
         }
     }
 
     fun clearMetadataLookup() {
+        lookupJob?.cancel()
         _metadataLookupState.value = MetadataLookupState()
     }
 
+    /** Saves edits to the database and into the file itself; the library card updates from Room. */
     fun updateBookMetadata(
         book: Book,
         title: String,
@@ -231,10 +496,8 @@ class BookViewModel @Inject constructor(
     ) {
         viewModelScope.launch {
             try {
-                val coverPath = withContext(Dispatchers.IO) {
-                    saveSelectedCover(book, coverUri, coverUrl) ?: book.coverPath
-                }
-                bookRepository.updateBookMetadata(book, title, author, coverPath)
+                val coverPath = resolveCover(coverUri, coverUrl, "metadata_${book.uid}") ?: book.coverPath
+                bookRepository.applyMetadata(book, title, author, coverPath)
                 _conversionError.value = null
             } catch (error: Exception) {
                 _conversionError.value = error.localizedMessage ?: "Could not update book details"
@@ -242,30 +505,62 @@ class BookViewModel @Inject constructor(
         }
     }
 
-    fun deleteBook(book: Book) {
+    fun deleteBook(book: Book) = deleteBooks(listOf(book))
+
+    /** Deletes [books] except those a running transfer is sending; those are reported, not removed. */
+    fun deleteBooks(books: List<Book>) {
+        val busy = _sendingIds.value
+        val (blocked, deletable) = books.partition { it.uid in busy }
+        if (blocked.isNotEmpty()) {
+            _events.trySend(LibraryEvent.Message(
+                if (blocked.size == 1) "Can't delete a book while it is being sent."
+                else "Can't delete books while they are being sent."
+            ))
+        }
+        if (deletable.isEmpty()) return
         viewModelScope.launch {
-            // Also remove from transfer queue if queued
-            _transferQueue.update { queue -> queue.filter { it.uid != book.uid } }
-            bookRepository.deleteBook(book)
+            val ids = deletable.map { it.uid }.toSet()
+            _transferQueue.update { queue -> queue.filter { it.uid !in ids } }
+            pendingSend = pendingSend.filter { it.uid !in ids }
+            _failedIds.update { it - ids }
+            deletable.forEach { bookRepository.deleteBook(it) }
         }
     }
 
-    private fun saveSelectedCover(book: Book, coverUri: Uri?, coverUrl: String?): String? {
+    /** "Remove original" after a format conversion: deletes the source row and its file. */
+    fun removeOriginal(bookId: Int) {
+        viewModelScope.launch {
+            bookRepository.getBookById(bookId)?.let { deleteBooks(listOf(it)) }
+        }
+    }
+
+    /**
+     * Stores the chosen cover (a picked image or a downloaded match) once, as
+     * `filesDir/covers/<prefix>_<ts>.jpg`. Returns null when there is none or it could not be fetched
+     * (the user is told; the book is still saved).
+     */
+    private suspend fun resolveCover(coverUri: Uri?, coverUrl: String?, prefix: String = "pending"): String? {
         if (coverUri == null && coverUrl.isNullOrBlank()) return null
-        val coversDir = File(appContext.filesDir, "covers")
-        if (!coversDir.exists()) coversDir.mkdirs()
-        val coverFile = File(coversDir, "metadata_${book.uid}.jpg")
-        val saved = when {
-            coverUri != null -> appContext.contentResolver.openInputStream(coverUri)?.use { input ->
-                coverFile.outputStream().use(input::copyTo)
-                coverFile.length() > 0
-            } ?: false
-            else -> BookMetadataLookup.downloadCover(coverUrl!!, coverFile)
+        val path = withContext(ioDispatcher) {
+            val dir = coversDir().apply { mkdirs() }
+            val file = File(dir, "${prefix}_${System.currentTimeMillis()}.jpg")
+            try {
+                val saved = if (coverUri != null) {
+                    appContext.contentResolver.openInputStream(coverUri)?.use { input ->
+                        file.outputStream().use(input::copyTo)
+                        file.length() > 0
+                    } ?: false
+                } else {
+                    fetchCoverFn(coverUrl!!)?.let { file.writeBytes(it); true } ?: false
+                }
+                if (saved) file.absolutePath else null.also { file.delete() }
+            } catch (_: IOException) {
+                file.delete()
+                null
+            }
         }
-        return coverFile.absolutePath.takeIf { saved } ?: run {
-            coverFile.delete()
-            throw IllegalStateException("Could not save the selected cover")
-        }
+        if (path == null) _events.trySend(LibraryEvent.Message("Couldn't get that cover — saved without it"))
+        return path
     }
 
     fun queueForTransfer(book: Book) {
@@ -347,12 +642,7 @@ class BookViewModel @Inject constructor(
             val userVal = _kindleUsername.value
             val passVal = _kindlePassword.value
 
-            val result = KindleSftpClient.testConnection(
-                host = hostVal,
-                port = portVal,
-                user = userVal,
-                pass = passVal
-            )
+            val result = sftpTestConnection(hostVal, portVal, userVal, passVal)
 
             _connectionTestResult.value = result
             _isTestingConnection.value = false
@@ -367,13 +657,64 @@ class BookViewModel @Inject constructor(
         _transferState.value = TransferState.Idle
     }
 
+    /** Called once the user has seen a transfer result; a failed batch leaves the queue. */
+    fun dismissTransferResult() {
+        if (_transferState.value is TransferState.Error) clearQueue()
+        _transferState.value = TransferState.Idle
+    }
+
+    /** Replaces the queue with [books] and starts sending them to the Kindle. */
+    fun sendBooks(books: List<Book>) {
+        if (books.isEmpty()) return
+        if (_transferState.value is TransferState.Progress) {
+            val known = pendingSend.map { it.uid }.toSet()
+            pendingSend = pendingSend + books.filter { it.uid !in known }
+            _events.trySend(LibraryEvent.Message("Will send after the current transfer"))
+            return
+        }
+        _transferQueue.value = books
+        transferBooksToKindle()
+    }
+
+    private fun sendPendingIfAny() {
+        val next = pendingSend
+        if (next.isEmpty()) return
+        pendingSend = emptyList()
+        // Books deleted in the meantime were already removed from pendingSend.
+        _transferQueue.value = next
+        transferBooksToKindle()
+    }
+
+    private fun failTransfer(error: TransferState.Error, books: List<Book>) {
+        _sendingIds.value = emptySet()
+        _failedIds.value = books.map { it.uid }.toSet()
+        _transferState.value = error
+        _events.trySend(LibraryEvent.TransferFailed(error, books))
+        sendPendingIfAny()
+    }
+
     fun transferBooksToKindle() {
         val booksToTransfer = _transferQueue.value
         if (booksToTransfer.isEmpty()) return
+        if (_transferState.value is TransferState.Progress) return
 
+        reloadSettings()
+        if (_kindleIp.value.isBlank()) {
+            _kindleStatus.value = KindleStatus.NotConfigured
+            failTransfer(
+                TransferState.Error(
+                    "Your Kindle isn't set up yet. Add its address to send books.",
+                    isConnectionProblem = true,
+                ),
+                booksToTransfer,
+            )
+            return
+        }
+
+        _sendingIds.value = booksToTransfer.map { it.uid }.toSet()
+        _failedIds.update { it - _sendingIds.value }
+        _transferState.value = TransferState.Progress(0, booksToTransfer.size, "Checking Kindle connection...")
         viewModelScope.launch {
-            _transferState.value = TransferState.Idle
-
             val hostVal = _kindleIp.value
             val portVal = _kindlePort.value.toIntOrNull() ?: 22
             val userVal = _kindleUsername.value
@@ -382,58 +723,105 @@ class BookViewModel @Inject constructor(
             val rescanVal = _triggerRescan.value
 
             _transferState.value = TransferState.Progress(0, booksToTransfer.size, "Checking Kindle connection...")
-            val connection = KindleSftpClient.testConnection(hostVal, portVal, userVal, passVal)
+            val connection = sftpTestConnection(hostVal, portVal, userVal, passVal)
             if (connection.isFailure) {
                 val detail = connection.exceptionOrNull()?.localizedMessage ?: "unknown error"
-                _transferState.value = TransferState.Error("Can't reach your Kindle at $hostVal:$portVal. Check that it is on the same network and SSH is running. $detail")
+                _kindleStatus.value = KindleStatus.Offline
+                failTransfer(
+                    TransferState.Error(
+                        "Can't reach your Kindle at $hostVal:$portVal. Check that it is on the same network and SSH is running. $detail",
+                        isConnectionProblem = true,
+                    ),
+                    booksToTransfer,
+                )
                 return@launch
             }
 
-            // Prepare thumbnail bytes from cover files
-            val thumbs = mutableMapOf<Int, ByteArray>()
-            for (book in booksToTransfer) {
-                book.coverPath?.let { path ->
-                    try {
-                        val coverFile = File(path)
-                        if (coverFile.exists()) {
-                            val source = BitmapFactory.decodeFile(path)
-                            if (source != null) {
-                                val scaled = Bitmap.createScaledBitmap(source, 330, 430, true)
-                                if (scaled != source) source.recycle()
-                                val out = ByteArrayOutputStream()
-                                scaled.compress(Bitmap.CompressFormat.JPEG, 85, out)
-                                scaled.recycle()
-                                thumbs[book.uid] = out.toByteArray()
-                            }
-                        }
-                    } catch (_: Exception) { }
-                }
-            }
+            // Decoding and scaling covers is CPU/IO heavy; keep it off the main thread.
+            val thumbs = withContext(defaultDispatcher) { prepareThumbnails(booksToTransfer) }
 
-            val result = KindleSftpClient.transferBooks(
-                books = booksToTransfer,
-                host = hostVal,
-                port = portVal,
-                user = userVal,
-                pass = passVal,
-                directories = directoriesVal,
-                triggerRescan = rescanVal,
-                thumbnailBytes = thumbs
+            val result = sftpTransfer(
+                booksToTransfer, hostVal, portVal, userVal, passVal, directoriesVal, rescanVal, thumbs,
             ) { current, total, message ->
                 _transferState.value = TransferState.Progress(current, total, message)
             }
 
             if (result.isSuccess) {
-                _transferState.value = TransferState.Success
+                _kindleStatus.value = KindleStatus.Online
                 bookRepository.markTransferredBookIds(
                     booksToTransfer.map { it.uid }
                 )
                 clearQueue()
+                _sendingIds.value = emptySet()
+                _failedIds.value = emptySet()
+                _transferState.value = TransferState.Idle
+                _events.trySend(LibraryEvent.TransferSucceeded)
+                sendPendingIfAny()
             } else {
                 val errorMsg = result.exceptionOrNull()?.localizedMessage ?: "Unknown error"
-                _transferState.value = TransferState.Error(errorMsg)
+                failTransfer(TransferState.Error(errorMsg), booksToTransfer)
             }
         }
+    }
+
+    private fun prepareThumbnails(books: List<Book>): Map<Int, ByteArray> {
+        val thumbs = mutableMapOf<Int, ByteArray>()
+        for (book in books) {
+            book.coverPath?.let { path ->
+                try {
+                    if (File(path).exists()) {
+                        val source = BitmapFactory.decodeFile(path)
+                        if (source != null) {
+                            val scaled = Bitmap.createScaledBitmap(source, 330, 430, true)
+                            if (scaled != source) source.recycle()
+                            val out = ByteArrayOutputStream()
+                            scaled.compress(Bitmap.CompressFormat.JPEG, 85, out)
+                            scaled.recycle()
+                            thumbs[book.uid] = out.toByteArray()
+                        }
+                    }
+                } catch (_: Exception) { }
+            }
+        }
+        return thumbs
+    }
+}
+
+internal const val MSG_NO_MATCHES = "No matches found. Check the title or author."
+internal const val MSG_OFFLINE = "You're offline — add details by hand or try again when connected."
+internal const val MSG_BUSY = "Book search is busy right now. Try again in a minute."
+
+/** Maps a catalog result to what the sheets show. Automatic lookups stay quiet when there is nothing to say. */
+internal fun lookupStateFor(result: MetadataLookupResult, auto: Boolean): BookViewModel.MetadataLookupState =
+    when (result) {
+        is MetadataLookupResult.Matches -> BookViewModel.MetadataLookupState(
+            candidates = result.candidates, best = result.best, auto = auto, searched = true,
+        )
+        MetadataLookupResult.NoMatches -> BookViewModel.MetadataLookupState(
+            error = if (auto) null else MSG_NO_MATCHES, auto = auto, searched = true,
+        )
+        is MetadataLookupResult.Unavailable -> when {
+            result.offline && auto -> BookViewModel.MetadataLookupState(offlineNote = true, auto = true, searched = true)
+            result.offline -> BookViewModel.MetadataLookupState(error = MSG_OFFLINE, auto = auto, searched = true)
+            else -> BookViewModel.MetadataLookupState(error = MSG_BUSY, auto = auto, searched = true)
+        }
+    }
+
+/** True when an online lookup is likely to improve this title/author (file-name titles, no real author). */
+internal fun shouldAutoLookup(title: String, author: String?): Boolean =
+    title.isNotBlank() && (author.isNullOrBlank() || BookNameCleaner.isMissingMetadata(title, author))
+
+/** Result of the quick reachability probe shown as the status chip in the library. */
+enum class KindleStatus { NotConfigured, Checking, Online, Offline }
+
+private const val KINDLE_PROBE_TIMEOUT_MS = 2000
+
+private suspend fun canConnectTcp(host: String, port: Int): Boolean = withContext(Dispatchers.IO) {
+    try {
+        Socket().use { it.connect(InetSocketAddress(host, port), KINDLE_PROBE_TIMEOUT_MS) }
+        true
+    } catch (_: Exception) {
+        false
     }
 }
 

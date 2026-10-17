@@ -65,6 +65,16 @@ object ShareHandler {
         ShareResult(successCount = successCount, errors = errors)
     }
 
+    /**
+     * The one file a SEND/VIEW intent carries, or null for several files, text/URL shares
+     * and anything that is not a content/file URI. Those keep the silent add flow.
+     */
+    fun singleSharedFile(intent: Intent): Uri? {
+        if (intent.action == Intent.ACTION_SEND_MULTIPLE) return null
+        val uri = extractUris(intent).singleOrNull() ?: return null
+        return uri.takeIf { it.scheme == "content" || it.scheme == "file" }
+    }
+
     private fun extractUris(intent: Intent): List<Uri> {
         val uris = mutableListOf<Uri>()
         intent.getParcelableExtra<Uri>(Intent.EXTRA_STREAM)?.let { uris.add(it) }

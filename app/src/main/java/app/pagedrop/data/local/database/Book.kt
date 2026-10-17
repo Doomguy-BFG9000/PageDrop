@@ -61,4 +61,15 @@ interface BookDao {
 
     @Query("UPDATE book SET title = :title, author = :author, coverPath = :coverPath WHERE uid = :uid")
     suspend fun updateMetadata(uid: Int, title: String, author: String, coverPath: String?)
+
+    @Query("UPDATE book SET fileName=:fileName, filePath=:filePath, fileSize=:fileSize, title=:title, author=:author, coverPath=:coverPath WHERE uid=:uid")
+    suspend fun updateFileAndMetadata(
+        uid: Int,
+        fileName: String,
+        filePath: String,
+        fileSize: Long,
+        title: String,
+        author: String,
+        coverPath: String?,
+    )
 }

@@ -49,6 +49,26 @@ class KindleSettingsTest {
     }
 
     @Test
+    fun targetDirectories_keepsOrderAndMigratesLegacyKeys() {
+        val settings = KindleSettings()
+        settings.targetDirectories = listOf("/z", "/a", "/m")
+        assertEquals(listOf("/z", "/a", "/m"), settings.targetDirectories)
+        settings.targetDirectory = "/q"
+        assertEquals(listOf("/q", "/a", "/m"), settings.targetDirectories)
+
+        val prefs = NullSharedPreferences()
+        prefs.edit().putString("target_directory", "/mnt/us/documents")
+            .putStringSet("target_directories", mutableSetOf("/mnt/us/extra", "/mnt/us/documents")).apply()
+        val legacy = KindleSettings(object : android.content.ContextWrapper(null) {
+            override fun getSharedPreferences(name: String?, mode: Int) = prefs
+        })
+        assertEquals(listOf("/mnt/us/documents", "/mnt/us/extra"), legacy.targetDirectories)
+        legacy.targetDirectories = legacy.targetDirectories + "/mnt/us/more"
+        assertEquals(listOf("/mnt/us/documents", "/mnt/us/extra", "/mnt/us/more"), legacy.targetDirectories)
+        assertEquals(null, prefs.getStringSet("target_directories", null))
+    }
+
+    @Test
     fun detectFormat_knownFormats() {
         assertEquals("MOBI", DefaultBookRepository.detectFormat("book.mobi"))
         assertEquals("AZW3", DefaultBookRepository.detectFormat("book.AZW3"))

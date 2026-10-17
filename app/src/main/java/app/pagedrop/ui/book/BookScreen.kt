@@ -17,1391 +17,348 @@
 package app.pagedrop.ui.book
 
 import android.net.Uri
-import android.text.format.Formatter
+import android.provider.OpenableColumns
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.animateColorAsState
-import androidx.compose.animation.core.Spring
-import androidx.compose.animation.core.spring
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
-import androidx.compose.animation.slideInVertically
-import androidx.compose.animation.slideOutVertically
-import androidx.compose.foundation.ExperimentalFoundationApi
-import androidx.compose.foundation.Image
-import androidx.compose.foundation.background
-import androidx.compose.foundation.border
-import androidx.compose.foundation.combinedClickable
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.PaddingValues
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.Build
-import androidx.compose.material.icons.filled.Send
-import androidx.compose.material.icons.outlined.MenuBook
-import androidx.compose.material.icons.rounded.Delete
-import androidx.compose.material.icons.rounded.Edit
-import androidx.compose.material3.Button
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.Checkbox
-import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.DropdownMenu
-import androidx.compose.material3.DropdownMenuItem
-import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.FilledTonalButton
-import androidx.compose.material3.FloatingActionButton
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
-import androidx.compose.material3.LinearProgressIndicator
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.MediumTopAppBar
-import androidx.compose.material3.ModalBottomSheet
-import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.Scaffold
-import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarDuration
 import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.SnackbarResult
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.HorizontalDivider
-import androidx.compose.material3.TopAppBarDefaults
-import androidx.compose.material3.rememberModalBottomSheetState
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
-import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.launch
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Brush
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.input.nestedscroll.nestedScroll
-import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.res.painterResource
-import app.pagedrop.R
-import androidx.compose.ui.text.font.FontFamily
-import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextAlign
-import androidx.compose.ui.text.style.TextOverflow
-import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.compose.LifecycleEventEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import app.pagedrop.data.DefaultBookRepository
-import app.pagedrop.converter.BookConverter
 import app.pagedrop.data.local.database.Book
-import app.pagedrop.metadata.BookMetadataCandidate
-import kotlinx.coroutines.launch
+import java.io.File
 
-// ─────────────────────────────────────────────────────────────
-// Public entry — wired to the ViewModel via Hilt
-// ─────────────────────────────────────────────────────────────
-
-@OptIn(ExperimentalMaterial3Api::class)
+/**
+ * The Library tab. Reads everything from [BookViewModel]; navigation is handed back through
+ * the callbacks so the shell decides where the status chip, gear and banner lead.
+ */
 @Composable
 fun BookScreen(
     modifier: Modifier = Modifier,
-    onNavigateToTools: () -> Unit = {},
+    onOpenKindle: () -> Unit,
+    onOpenSettings: () -> Unit,
+    onOpenConnectionSetup: () -> Unit,
+    onOpenArticle: () -> Unit,
     viewModel: BookViewModel = hiltViewModel(),
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
-    val transferQueue by viewModel.transferQueue.collectAsStateWithLifecycle()
+    val sendingIds by viewModel.sendingIds.collectAsStateWithLifecycle()
+    val failedIds by viewModel.failedIds.collectAsStateWithLifecycle()
     val isConverting by viewModel.isConverting.collectAsStateWithLifecycle()
     val conversionError by viewModel.conversionError.collectAsStateWithLifecycle()
-    
-    val kindleIp by viewModel.kindleIp.collectAsStateWithLifecycle()
-    val kindlePort by viewModel.kindlePort.collectAsStateWithLifecycle()
-    val kindleUsername by viewModel.kindleUsername.collectAsStateWithLifecycle()
-    val kindlePassword by viewModel.kindlePassword.collectAsStateWithLifecycle()
-    val kindleDirectories by viewModel.kindleDirectories.collectAsStateWithLifecycle()
-    val triggerRescan by viewModel.triggerRescan.collectAsStateWithLifecycle()
-
-    val isTestingConnection by viewModel.isTestingConnection.collectAsStateWithLifecycle()
-    val connectionTestResult by viewModel.connectionTestResult.collectAsStateWithLifecycle()
     val transferState by viewModel.transferState.collectAsStateWithLifecycle()
     val metadataLookupState by viewModel.metadataLookupState.collectAsStateWithLifecycle()
+    val kindleStatus by viewModel.kindleStatus.collectAsStateWithLifecycle()
 
     val context = LocalContext.current
-    val scope = rememberCoroutineScope()
     val snackbarHostState = remember { SnackbarHostState() }
+    val books = (uiState as? LibraryUiState.Success)?.data.orEmpty()
 
-    // Formats the Kindle browser can download directly (no conversion needed)
-    val kindleNativeFormats = listOf("AZW3", "MOBI", "PRC")
+    var filter by rememberSaveable { mutableStateOf(LibraryFilter.All) }
+    var viewMode by rememberSaveable { mutableStateOf(LibraryViewMode.List) }
+    var selectedIds by remember { mutableStateOf(emptySet<Int>()) }
+    var sheetBookId by remember { mutableStateOf<Int?>(null) }
+    var editBookId by remember { mutableStateOf<Int?>(null) }
+    var pendingAdd by remember { mutableStateOf<PendingAdd?>(null) }
+    var deleteTargets by remember { mutableStateOf<List<Book>?>(null) }
+    var coverUri by remember { mutableStateOf<Uri?>(null) }
 
-    // State for the conversion bottom sheet (for convertible formats)
-    var pendingConvertUri by remember { mutableStateOf<Uri?>(null) }
-    var pendingConvertFormat by remember { mutableStateOf("") }
-    var pendingConvertTitle by remember { mutableStateOf("") }
-    var pendingConvertCoverUri by remember { mutableStateOf<Uri?>(null) }
-    val convertSheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+    val selectionMode = selectedIds.isNotEmpty()
+    val transferProgress = transferState as? BookViewModel.TransferState.Progress
 
-    // State for the transfer bottom sheet
-    var showTransferSheet by remember { mutableStateOf(false) }
-    val transferSheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
-    var metadataEditingBook by remember { mutableStateOf<Book?>(null) }
-    var selectedCoverUri by remember { mutableStateOf<Uri?>(null) }
-    val coverPickerLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.OpenDocument(),
-    ) { uri -> selectedCoverUri = uri }
-    val conversionCoverPickerLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.OpenDocument(),
-    ) { uri ->
-        pendingConvertCoverUri = uri
+    LifecycleEventEffect(Lifecycle.Event.ON_RESUME) { viewModel.refreshKindleStatus() }
+    BackHandler(enabled = selectionMode) { selectedIds = emptySet() }
+
+    val coverPicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+        if (uri != null) coverUri = uri
     }
 
-    val filePickerLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.OpenDocument()
-    ) { uri: Uri? ->
-        uri?.let {
-            // Detect format from the URI filename
-            val displayName = context.contentResolver.query(it, null, null, null, null)?.use { cursor ->
-                if (cursor.moveToFirst()) {
-                    val nameIndex = cursor.getColumnIndex(android.provider.OpenableColumns.DISPLAY_NAME)
-                    if (nameIndex >= 0) cursor.getString(nameIndex) else null
-                } else null
-            }
-            val format = DefaultBookRepository.detectFormat(displayName ?: "")
+    /** Opens the Add book sheet for a file the user picked or shared to PageDrop. */
+    fun startAdd(uri: Uri) {
+        val displayName = context.contentResolver.query(uri, null, null, null, null)?.use { cursor ->
+            if (cursor.moveToFirst()) {
+                val nameIndex = cursor.getColumnIndex(OpenableColumns.DISPLAY_NAME)
+                if (nameIndex >= 0) cursor.getString(nameIndex) else null
+            } else null
+        } ?: uri.lastPathSegment ?: "Untitled"
+        coverUri = null
+        viewModel.clearMetadataLookup()
+        pendingAdd = PendingAdd(
+            uri = uri,
+            displayName = displayName,
+            format = DefaultBookRepository.detectFormat(displayName),
+            initialTitle = displayName.substringBeforeLast("."),
+        )
+    }
 
-            if (format.uppercase() in kindleNativeFormats) {
-                // Kindle-native format: add directly, no dialog
-                viewModel.addBook(context, it)
-            } else if (BookConverter.canConvert(format)) {
-                // We can convert this format (EPUB, PDF, TXT) → show bottom sheet
-                pendingConvertUri = it
-                pendingConvertFormat = format.uppercase()
-                pendingConvertTitle = (displayName ?: "Untitled").substringBeforeLast(".")
-            } else {
-                // Unknown format: add as-is
-                viewModel.addBook(context, it)
-            }
+    val filePicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri: Uri? ->
+        if (uri != null) startAdd(uri)
+    }
+
+    // A single file shared to PageDrop opens the same Add book sheet as picking one.
+    val sharedUri by viewModel.pendingSharedUri.collectAsStateWithLifecycle()
+    LaunchedEffect(sharedUri) {
+        sharedUri?.let { uri ->
+            startAdd(uri)
+            viewModel.consumeSharedUri(uri)
         }
     }
+    val launchAddBook = {
+        filePicker.launch(
+            arrayOf(
+                "application/pdf",
+                "text/plain",
+                "application/x-mobipocket-ebook", // .mobi
+                "application/epub+zip",            // .epub
+                "application/octet-stream",        // .azw3 fallback
+                "*/*",                             // fallback for Kindle formats
+            )
+        )
+    }
 
-    // Show snackbar for conversion errors
+    // Import / metadata errors
     LaunchedEffect(conversionError) {
         conversionError?.let { error ->
-            snackbarHostState.showSnackbar("Conversion error: $error")
+            snackbarHostState.showSnackbar(error)
             viewModel.clearConversionError()
         }
     }
 
-    // Format options bottom sheet for convertible formats (EPUB, PDF, TXT)
-    if (pendingConvertUri != null) {
-        FormatOptionsBottomSheet(
-            format = pendingConvertFormat,
-            sheetState = convertSheetState,
-            initialTitle = pendingConvertTitle,
-            serverConversionAvailable = viewModel.isServerConversionAvailable,
-            lookupState = metadataLookupState,
-            onSearch = viewModel::searchBookMetadata,
-            selectedCoverUri = pendingConvertCoverUri,
-            onPickCover = { conversionCoverPickerLauncher.launch(arrayOf("image/*")) },
-            onConvertToMobi = { outputTitle ->
-                pendingConvertUri?.let { uri ->
-                    viewModel.addBookWithConversion(context, uri, outputTitle)
+    // One-shot results from the ViewModel. Snackbars are for results and errors only;
+    // sending progress lives in the library header and on the book cards.
+    LaunchedEffect(viewModel) {
+        coroutineScope {
+            viewModel.events.collect { event ->
+                launch {
+                    when (event) {
+                        is BookViewModel.LibraryEvent.Message -> snackbarHostState.showSnackbar(event.text)
+                        is BookViewModel.LibraryEvent.TransferSucceeded -> snackbarHostState.showSnackbar("Sent to Kindle")
+                        is BookViewModel.LibraryEvent.ConvertedCopyAdded -> {
+                            val result = snackbarHostState.showSnackbar(
+                                message = "Converted copy added",
+                                actionLabel = "Remove original",
+                                duration = SnackbarDuration.Long,
+                            )
+                            if (result == SnackbarResult.ActionPerformed) viewModel.removeOriginal(event.originalBookId)
+                        }
+                        is BookViewModel.LibraryEvent.TransferFailed -> {
+                            val error = event.error
+                            val result = snackbarHostState.showSnackbar(
+                                message = transferErrorMessage(error),
+                                actionLabel = if (error.isConnectionProblem) "Check connection" else "Retry",
+                                withDismissAction = true,
+                                duration = SnackbarDuration.Long,
+                            )
+                            if (result == SnackbarResult.ActionPerformed && !error.isConnectionProblem) {
+                                viewModel.sendBooks(event.books)
+                            } else {
+                                viewModel.dismissTransferResult()
+                                if (result == SnackbarResult.ActionPerformed) {
+                                    if (viewModel.kindleStatus.value == KindleStatus.NotConfigured) onOpenConnectionSetup() else onOpenKindle()
+                                }
+                            }
+                        }
+                    }
                 }
-                pendingConvertUri = null
-                pendingConvertFormat = ""
-                pendingConvertCoverUri = null
+            }
+        }
+    }
+
+    fun closeAddSheets() {
+        pendingAdd = null
+        editBookId = null
+        coverUri = null
+        viewModel.clearMetadataLookup()
+    }
+
+    // ── Sheets and dialogs ──
+
+    val sheetBook = books.firstOrNull { it.uid == sheetBookId }
+    if (sheetBook != null) {
+        BookSheet(
+            book = sheetBook,
+            transfer = when (sheetBook.uid) {
+                in sendingIds -> BookTransfer.Sending
+                in failedIds -> BookTransfer.Failed
+                else -> BookTransfer.Idle
+            },
+            deleteBlocked = sheetBook.uid in sendingIds,
+            onSend = {
+                sheetBookId = null
+                viewModel.sendBooks(listOf(sheetBook))
+            },
+            onEdit = {
+                sheetBookId = null
+                coverUri = null
                 viewModel.clearMetadataLookup()
-                scope.launch { convertSheetState.hide() }
+                editBookId = sheetBook.uid
             },
-            onConvertOnServer = { outputTitle, outputAuthor, targetFormat, coverUrl ->
-                pendingConvertUri?.let { uri ->
-                    viewModel.addBookWithServerConversion(
-                        context,
-                        uri,
-                        outputTitle,
-                        outputAuthor,
-                        targetFormat,
-                        pendingConvertCoverUri,
-                        coverUrl,
-                    )
-                }
-                pendingConvertUri = null
-                pendingConvertFormat = ""
-                pendingConvertCoverUri = null
+            onConvert = {
+                sheetBookId = null
+                coverUri = null
                 viewModel.clearMetadataLookup()
-                scope.launch { convertSheetState.hide() }
+                pendingAdd = PendingAdd(
+                    uri = Uri.fromFile(File(sheetBook.filePath)),
+                    displayName = sheetBook.fileName,
+                    format = sheetBook.format,
+                    initialTitle = sheetBook.title,
+                    initialAuthor = sheetBook.author,
+                    convertOnly = true,
+                    originalBookId = sheetBook.uid,
+                )
             },
-            onSendAsIs = {
-                pendingConvertUri?.let { uri ->
-                    viewModel.addBook(context, uri)
-                }
-                pendingConvertUri = null
-                pendingConvertFormat = ""
-                pendingConvertCoverUri = null
-                scope.launch { convertSheetState.hide() }
+            onDelete = {
+                sheetBookId = null
+                deleteTargets = listOf(sheetBook)
             },
-            onDismiss = {
-                pendingConvertUri = null
-                pendingConvertFormat = ""
-                pendingConvertCoverUri = null
-                viewModel.clearMetadataLookup()
-            },
+            onDismiss = { sheetBookId = null },
         )
     }
 
-    // Transfer bottom sheet
-    if (showTransferSheet) {
-        TransferBottomSheet(
-            sheetState = transferSheetState,
-            kindleIp = kindleIp,
-            kindlePort = kindlePort,
-            kindleUsername = kindleUsername,
-            kindlePassword = kindlePassword,
-            kindleDirectories = kindleDirectories,
-            triggerRescan = triggerRescan,
-            isTestingConnection = isTestingConnection,
-            connectionTestResult = connectionTestResult,
-            transferState = transferState,
-            selectedBooks = transferQueue,
-            onIpChange = viewModel::updateKindleIp,
-            onPortChange = viewModel::updateKindlePort,
-            onUsernameChange = viewModel::updateKindleUsername,
-            onPasswordChange = viewModel::updateKindlePassword,
-            onDirectoriesChange = viewModel::updateKindleDirectories,
-            onTriggerRescanChange = viewModel::updateTriggerRescan,
-            onTestConnection = viewModel::testConnection,
-            onClearTestResult = viewModel::clearConnectionTestResult,
-            onStartTransfer = viewModel::transferBooksToKindle,
-            onResetTransferState = viewModel::resetTransferState,
-            onDismiss = { 
-                showTransferSheet = false
-                viewModel.resetTransferState()
-                viewModel.clearConnectionTestResult()
-            },
-        )
-    }
-
-    metadataEditingBook?.let { book ->
-        BookDetailsBottomSheet(
+    books.firstOrNull { it.uid == editBookId }?.let { book ->
+        EditBookSheet(
             book = book,
             lookupState = metadataLookupState,
-            selectedCoverUri = selectedCoverUri,
+            selectedCoverUri = coverUri,
             onSearch = viewModel::searchBookMetadata,
-            onPickCover = { coverPickerLauncher.launch(arrayOf("image/*")) },
+            onSuggest = { viewModel.suggestForBook(book) },
+            onPickCover = { coverPicker.launch(arrayOf("image/*")) },
             onSave = { title, author, coverUrl ->
-                viewModel.updateBookMetadata(book, title, author, selectedCoverUri, coverUrl)
-                metadataEditingBook = null
-                selectedCoverUri = null
-                viewModel.clearMetadataLookup()
+                val embedded = metadataLookupState.embeddedCoverPath
+                    ?.takeIf { coverUri == null && coverUrl == null && book.coverPath == null }
+                    ?.let { Uri.fromFile(File(it)) }
+                viewModel.updateBookMetadata(book, title, author, coverUri ?: embedded, coverUrl)
+                closeAddSheets()
             },
-            onDismiss = {
-                metadataEditingBook = null
-                selectedCoverUri = null
-                viewModel.clearMetadataLookup()
+            onDismiss = ::closeAddSheets,
+        )
+    }
+
+    pendingAdd?.let { pending ->
+        AddBookSheet(
+            pending = pending,
+            serverConversionAvailable = viewModel.isServerConversionAvailable,
+            lookupState = metadataLookupState,
+            selectedCoverUri = coverUri,
+            onSearch = viewModel::searchBookMetadata,
+            onSuggest = { viewModel.suggestForUri(pending.uri, pending.displayName, pending.format) },
+            onPickCover = { coverPicker.launch(arrayOf("image/*")) },
+            onConfirm = { decision ->
+                val embeddedCover = metadataLookupState.embeddedCoverPath
+                    ?.takeIf { coverUri == null && decision.coverUrl == null }
+                    ?.let { Uri.fromFile(File(it)) }
+                val effectiveCover = coverUri ?: embeddedCover
+                val options = BookViewModel.AddOptions(
+                    title = decision.title,
+                    author = decision.author,
+                    coverUri = effectiveCover,
+                    coverUrl = decision.coverUrl,
+                    sendAfterAdd = decision.sendToKindle,
+                    originalBookId = pending.originalBookId,
+                )
+                when {
+                    !decision.convert -> viewModel.addBook(context, pending.uri, options)
+                    viewModel.isServerConversionAvailable -> viewModel.addBookWithServerConversion(
+                        context = context,
+                        uri = pending.uri,
+                        outputTitle = decision.title ?: pending.initialTitle,
+                        outputAuthor = decision.author ?: pending.initialAuthor.ifBlank { "Unknown Author" },
+                        targetFormat = decision.serverFormat.lowercase(),
+                        coverUri = effectiveCover,
+                        coverUrl = decision.coverUrl,
+                        sendAfterAdd = decision.sendToKindle,
+                        originalBookId = pending.originalBookId,
+                    )
+                    else -> viewModel.addBookWithConversion(context, pending.uri, decision.title, options)
+                }
+                closeAddSheets()
             },
+            onDismiss = ::closeAddSheets,
+        )
+    }
+
+    deleteTargets?.let { targets ->
+        AlertDialog(
+            onDismissRequest = { deleteTargets = null },
+            shape = MaterialTheme.shapes.small,
+            title = { Text(if (targets.size == 1) "Delete this book?" else "Delete ${targets.size} books?") },
+            text = {
+                Text(
+                    if (targets.size == 1) "“${targets.first().title}” will be removed from PageDrop. Copies already on your Kindle are not touched."
+                    else "They will be removed from PageDrop. Copies already on your Kindle are not touched."
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    viewModel.deleteBooks(targets)
+                    selectedIds = selectedIds - targets.map { it.uid }.toSet()
+                    deleteTargets = null
+                }) { Text("Delete", color = MaterialTheme.colorScheme.error) }
+            },
+            dismissButton = { TextButton(onClick = { deleteTargets = null }) { Text("Cancel") } },
         )
     }
 
     LibraryScreenContent(
         uiState = uiState,
-        transferQueue = transferQueue,
+        kindleStatus = kindleStatus,
+        filter = filter,
+        viewMode = viewMode,
+        selectedIds = selectedIds,
+        sendingIds = sendingIds,
+        failedIds = failedIds,
         isConverting = isConverting,
+        isSending = transferProgress != null,
+        transferProgress = transferProgress,
         snackbarHostState = snackbarHostState,
-        onAddBookClick = {
-            filePickerLauncher.launch(
-                arrayOf(
-                    "application/pdf",
-                    "text/plain",
-                    "application/x-mobipocket-ebook",   // .mobi
-                    "application/epub+zip",              // .epub
-                    "application/octet-stream",          // .azw3 fallback
-                    "*/*"                                // fallback for Kindle formats
-                )
-            )
-        },
-        onToggleQueued = viewModel::toggleQueued,
-        onDeleteBook = viewModel::deleteBook,
-        onEditBook = { book ->
-            metadataEditingBook = book
-            selectedCoverUri = null
-            viewModel.clearMetadataLookup()
-        },
-        onOpenTransferSheet = {
-            showTransferSheet = true
-        },
-        onNavigateToTools = onNavigateToTools,
         modifier = modifier,
+        actions = LibraryActions(
+            onAddBook = launchAddBook,
+            onOpenArticle = onOpenArticle,
+            onOpenSettings = onOpenSettings,
+            onStatusClick = onOpenKindle,
+            onSetUp = onOpenConnectionSetup,
+            onFilterChange = {
+                if (it != filter) selectedIds = emptySet()
+                filter = it
+            },
+            onViewModeChange = { viewMode = it },
+            onBookClick = { book ->
+                if (selectionMode) selectedIds = selectedIds.toggle(book.uid) else sheetBookId = book.uid
+            },
+            onBookLongClick = { book -> selectedIds = selectedIds + book.uid },
+            onClearSelection = { selectedIds = emptySet() },
+            onSelectAll = { selectedIds = books.filter(filter::matches).map { it.uid }.toSet() },
+            onSendSelected = {
+                viewModel.sendBooks(books.filter { filter.matches(it) && it.uid in selectedIds })
+                selectedIds = emptySet()
+            },
+            onDeleteSelected = { deleteTargets = books.filter { filter.matches(it) && it.uid in selectedIds } },
+        ),
     )
 }
 
-// ─────────────────────────────────────────────────────────────
-// Format Options Bottom Sheet (for non-Kindle-native formats)
-// ─────────────────────────────────────────────────────────────
-
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-private fun FormatOptionsBottomSheet(
-    format: String,
-    sheetState: androidx.compose.material3.SheetState,
-    initialTitle: String,
-    serverConversionAvailable: Boolean,
-    lookupState: BookViewModel.MetadataLookupState,
-    onSearch: (String, String) -> Unit,
-    selectedCoverUri: Uri?,
-    onPickCover: () -> Unit,
-    onConvertToMobi: (String) -> Unit,
-    onConvertOnServer: (String, String, String, String?) -> Unit,
-    onSendAsIs: () -> Unit,
-    onDismiss: () -> Unit,
-) {
-    val canConvert = BookConverter.canConvert(format)
-    var outputTitle by remember(initialTitle) { mutableStateOf(initialTitle) }
-    var outputAuthor by remember { mutableStateOf("Unknown Author") }
-    var selectedCoverUrl by remember { mutableStateOf<String?>(null) }
-    var serverOutputFormat by remember { mutableStateOf("MOBI") }
-    var outputFormatMenuExpanded by remember { mutableStateOf(false) }
-    val description = when (format) {
-        "EPUB" -> "EPUBs aren\u2019t natively supported on older Kindles. Convert to MOBI for compatibility."
-        "PDF" -> "Extract text and convert to MOBI. Layout and images will not be preserved."
-        "TXT" -> "Convert to MOBI for better formatting on Kindle, or send the text file directly."
-        else -> "$format files may not be compatible with Kindle."
-    }
-
-    ModalBottomSheet(
-        onDismissRequest = onDismiss,
-        sheetState = sheetState,
-        containerColor = MaterialTheme.colorScheme.surface,
-    ) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 24.dp)
-                .padding(bottom = 36.dp)
-                .verticalScroll(rememberScrollState()),
-        ) {
-            Text(
-                text = "$format File",
-                style = MaterialTheme.typography.titleLarge,
-                color = MaterialTheme.colorScheme.onSurface,
-            )
-
-            Spacer(Modifier.height(8.dp))
-
-            Text(
-                text = description,
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-
-            Spacer(Modifier.height(16.dp))
-
-            OutlinedTextField(
-                value = outputTitle,
-                onValueChange = { outputTitle = it },
-                label = { Text("Converted book title") },
-                singleLine = true,
-                modifier = Modifier.fillMaxWidth(),
-            )
-
-            OutlinedTextField(
-                value = outputAuthor,
-                onValueChange = { outputAuthor = it },
-                label = { Text("Author") },
-                singleLine = true,
-                modifier = Modifier.fillMaxWidth(),
-            )
-
-            OutlinedButton(
-                onClick = { onSearch(outputTitle, outputAuthor) },
-                enabled = !lookupState.isSearching && outputTitle.isNotBlank(),
-                modifier = Modifier.fillMaxWidth(),
-            ) {
-                if (lookupState.isSearching) {
-                    CircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp)
-                    Spacer(Modifier.width(8.dp))
-                    Text("Searching Google Books")
-                } else {
-                    Text("Search Google Books")
-                }
-            }
-
-            lookupState.error?.let { error ->
-                Text(error, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
-            }
-            lookupState.candidates.forEach { candidate ->
-                FilledTonalButton(
-                    onClick = {
-                        outputTitle = candidate.title
-                        outputAuthor = candidate.author
-                        selectedCoverUrl = candidate.coverUrl
-                    },
-                    modifier = Modifier.fillMaxWidth(),
-                ) {
-                    Column(modifier = Modifier.fillMaxWidth()) {
-                        Text(candidate.title, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                        Text(candidate.author, style = MaterialTheme.typography.bodySmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                    }
-                }
-            }
-
-            OutlinedButton(
-                onClick = onPickCover,
-                modifier = Modifier.fillMaxWidth(),
-            ) {
-                Text(
-                    when {
-                        selectedCoverUri != null -> "Custom cover selected"
-                        selectedCoverUrl != null -> "Google Books cover selected"
-                        else -> "Choose cover"
-                    }
-                )
-            }
-
-            if (serverConversionAvailable) {
-                Spacer(Modifier.height(12.dp))
-
-                Box {
-                    OutlinedButton(
-                        onClick = { outputFormatMenuExpanded = true },
-                        modifier = Modifier.fillMaxWidth(),
-                    ) {
-                        Text("Server output: $serverOutputFormat")
-                    }
-                    DropdownMenu(
-                        expanded = outputFormatMenuExpanded,
-                        onDismissRequest = { outputFormatMenuExpanded = false },
-                    ) {
-                        serverOutputFormats.forEach { outputFormat ->
-                            DropdownMenuItem(
-                                text = { Text(outputFormat) },
-                                onClick = {
-                                    serverOutputFormat = outputFormat
-                                    outputFormatMenuExpanded = false
-                                },
-                            )
-                        }
-                    }
-                }
-            }
-
-            Spacer(Modifier.height(24.dp))
-
-            // Primary action: Convert to MOBI
-            if (canConvert) {
-                if (serverConversionAvailable) {
-                    Button(
-                        onClick = {
-                            onConvertOnServer(
-                                outputTitle.trim().ifBlank { initialTitle },
-                                outputAuthor.trim().ifBlank { "Unknown Author" },
-                                serverOutputFormat.lowercase(),
-                                selectedCoverUrl,
-                            )
-                        },
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(48.dp),
-                        shape = RoundedCornerShape(12.dp),
-                    ) {
-                        Text("Convert with PageDrop server")
-                    }
-
-                    Spacer(Modifier.height(12.dp))
-                } else {
-                    OutlinedButton(
-                        onClick = {},
-                        enabled = false,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(48.dp),
-                        shape = RoundedCornerShape(12.dp),
-                    ) {
-                        Text("Convert with PageDrop server")
-                    }
-
-                    Spacer(Modifier.height(4.dp))
-                    Text(
-                        text = "PageDrop server conversion is not connected in this build.",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-
-                    Spacer(Modifier.height(12.dp))
-                }
-
-                Button(
-                    onClick = { onConvertToMobi(outputTitle.trim().ifBlank { initialTitle }) },
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(48.dp),
-                    shape = RoundedCornerShape(12.dp),
-                ) {
-                    Text("Convert to MOBI")
-                }
-
-                Spacer(Modifier.height(12.dp))
-            }
-
-            // Secondary action: Send as-is
-            OutlinedButton(
-                onClick = onSendAsIs,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(48.dp),
-                shape = RoundedCornerShape(12.dp),
-            ) {
-                Text(if (canConvert) "Add as-is" else "Add to library")
-            }
-        }
-    }
-}
-
-private val serverOutputFormats = listOf(
-    "AZW3", "EPUB", "MOBI", "DOCX", "FB2", "HTMLZ", "KEPUB", "LIT", "LRF", "PDB",
-    "PDF", "PMLZ", "RB", "RTF", "SNB", "TCR", "TXT", "TXTZ", "ZIP",
-)
-
-// ─────────────────────────────────────────────────────────────
-// Transfer / Settings Bottom Sheet
-// ─────────────────────────────────────────────────────────────
-
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-private fun TransferBottomSheet(
-    sheetState: androidx.compose.material3.SheetState,
-    kindleIp: String,
-    kindlePort: String,
-    kindleUsername: String,
-    kindlePassword: String,
-    kindleDirectories: List<String>,
-    triggerRescan: Boolean,
-    isTestingConnection: Boolean,
-    connectionTestResult: Result<Unit>?,
-    transferState: BookViewModel.TransferState,
-    selectedBooks: List<Book>,
-    onIpChange: (String) -> Unit,
-    onPortChange: (String) -> Unit,
-    onUsernameChange: (String) -> Unit,
-    onPasswordChange: (String) -> Unit,
-    onDirectoriesChange: (List<String>) -> Unit,
-    onTriggerRescanChange: (Boolean) -> Unit,
-    onTestConnection: () -> Unit,
-    onClearTestResult: () -> Unit,
-    onStartTransfer: () -> Unit,
-    onResetTransferState: () -> Unit,
-    onDismiss: () -> Unit,
-) {
-    ModalBottomSheet(
-        onDismissRequest = onDismiss,
-        sheetState = sheetState,
-        containerColor = MaterialTheme.colorScheme.surface,
-    ) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 24.dp)
-                .padding(bottom = 36.dp)
-                .verticalScroll(rememberScrollState()),
-            verticalArrangement = Arrangement.spacedBy(16.dp)
-        ) {
-            Text(
-                text = "Kindle Connection Settings",
-                style = MaterialTheme.typography.titleLarge,
-                fontWeight = FontWeight.Bold,
-                color = MaterialTheme.colorScheme.onSurface
-            )
-
-            // IP & Port
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
-                OutlinedTextField(
-                    value = kindleIp,
-                    onValueChange = onIpChange,
-                    label = { Text("Kindle IP Address") },
-                    placeholder = { Text("e.g. 192.168.1.100") },
-                    singleLine = true,
-                    modifier = Modifier.weight(2f)
-                )
-
-                OutlinedTextField(
-                    value = kindlePort,
-                    onValueChange = onPortChange,
-                    label = { Text("Port") },
-                    singleLine = true,
-                    modifier = Modifier.weight(1f)
-                )
-            }
-
-            // Username & Password
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
-                OutlinedTextField(
-                    value = kindleUsername,
-                    onValueChange = onUsernameChange,
-                    label = { Text("Username") },
-                    singleLine = true,
-                    modifier = Modifier.weight(1f)
-                )
-
-                OutlinedTextField(
-                    value = kindlePassword,
-                    onValueChange = onPasswordChange,
-                    label = { Text("Password") },
-                    visualTransformation = PasswordVisualTransformation(),
-                    singleLine = true,
-                    modifier = Modifier.weight(1f)
-                )
-            }
-
-            Text(
-                text = "Send to paths",
-                style = MaterialTheme.typography.titleSmall,
-                fontWeight = FontWeight.SemiBold,
-                color = MaterialTheme.colorScheme.onSurface
-            )
-            kindleDirectories.forEachIndexed { index, path ->
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    OutlinedTextField(
-                        value = path,
-                        onValueChange = { value ->
-                            onDirectoriesChange(kindleDirectories.toMutableList().also { it[index] = value })
-                        },
-                        label = { Text(if (index == 0) "Kindle Documents Directory" else "Additional Kindle Path") },
-                        singleLine = true,
-                        modifier = Modifier.weight(1f)
-                    )
-                    if (kindleDirectories.size > 1) {
-                        IconButton(onClick = {
-                            onDirectoriesChange(kindleDirectories.filterIndexed { itemIndex, _ -> itemIndex != index })
-                        }) {
-                            Icon(Icons.Rounded.Delete, contentDescription = "Remove path")
-                        }
-                    }
-                }
-            }
-            OutlinedButton(
-                onClick = { onDirectoriesChange(kindleDirectories + "/mnt/us/documents") },
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(18.dp))
-                Spacer(Modifier.width(8.dp))
-                Text("Add path")
-            }
-
-            // Trigger Library Rescan Checkbox
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Checkbox(
-                    checked = triggerRescan,
-                    onCheckedChange = onTriggerRescanChange
-                )
-                Spacer(Modifier.width(8.dp))
-                Text(
-                    text = "Trigger Library Rescan after transfer",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
-
-            // Test Connection button and status
-            Column(modifier = Modifier.fillMaxWidth()) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    OutlinedButton(
-                        onClick = onTestConnection,
-                        enabled = !isTestingConnection && kindleIp.isNotBlank(),
-                        modifier = Modifier.weight(1f)
-                    ) {
-                        if (isTestingConnection) {
-                            CircularProgressIndicator(
-                                modifier = Modifier.size(18.dp),
-                                strokeWidth = 2.dp,
-                                color = MaterialTheme.colorScheme.primary
-                            )
-                            Spacer(Modifier.width(8.dp))
-                            Text("Testing...")
-                        } else {
-                            Text("Test Connection")
-                        }
-                    }
-                }
-
-                connectionTestResult?.let { result ->
-                    Spacer(Modifier.height(8.dp))
-                    if (result.isSuccess) {
-                        Text(
-                            text = "✓ Connection Successful!",
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.primary,
-                            fontWeight = FontWeight.Medium
-                        )
-                    } else {
-                        val errMsg = result.exceptionOrNull()?.localizedMessage ?: "Unknown error"
-                        Text(
-                            text = "✗ Failed to connect: $errMsg",
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.error,
-                            fontWeight = FontWeight.Medium
-                        )
-                    }
-                }
-            }
-
-            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
-
-            // Book Selection / Summary
-            if (selectedBooks.isNotEmpty()) {
-                Column(modifier = Modifier.fillMaxWidth()) {
-                    Text(
-                        text = "Books to Send (${selectedBooks.size})",
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.onSurface
-                    )
-                    Spacer(Modifier.height(8.dp))
-                    selectedBooks.forEach { book ->
-                        Text(
-                            text = book.title,
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
-                            modifier = Modifier.padding(vertical = 2.dp)
-                        )
-                    }
-                }
-            }
-
-            // Transfer action and status
-            Column(modifier = Modifier.fillMaxWidth()) {
-                when (transferState) {
-                    is BookViewModel.TransferState.Idle -> {
-                        Button(
-                            onClick = onStartTransfer,
-                            enabled = kindleIp.isNotBlank() && selectedBooks.isNotEmpty(),
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .height(48.dp),
-                            shape = RoundedCornerShape(12.dp)
-                        ) {
-                            Text("Send to Kindle")
-                        }
-                    }
-
-                    is BookViewModel.TransferState.Progress -> {
-                        Column(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalAlignment = Alignment.CenterHorizontally
-                        ) {
-                            LinearProgressIndicator(
-                                progress = { if (transferState.total > 0) transferState.current.toFloat() / transferState.total else 0f },
-                                modifier = Modifier.fillMaxWidth(),
-                                color = MaterialTheme.colorScheme.primary,
-                                trackColor = MaterialTheme.colorScheme.surfaceVariant
-                            )
-                            Spacer(Modifier.height(8.dp))
-                            Text(
-                                text = transferState.message,
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                textAlign = TextAlign.Center
-                            )
-                        }
-                    }
-
-                    is BookViewModel.TransferState.Success -> {
-                        Column(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalAlignment = Alignment.CenterHorizontally
-                        ) {
-                            Text(
-                                text = "✓ Copied to Kindle",
-                                style = MaterialTheme.typography.titleMedium,
-                                color = MaterialTheme.colorScheme.primary,
-                                fontWeight = FontWeight.Bold
-                            )
-                            Spacer(Modifier.height(8.dp))
-                            Text(
-                                text = "PageDrop verified the file on your Kindle. The Kindle library or KOReader may need a moment to refresh.",
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                textAlign = TextAlign.Center
-                            )
-                            Spacer(Modifier.height(16.dp))
-                            Button(
-                                onClick = onDismiss,
-                                modifier = Modifier.fillMaxWidth()
-                            ) {
-                                Text("Close")
-                            }
-                        }
-                    }
-
-                    is BookViewModel.TransferState.Error -> {
-                        Column(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalAlignment = Alignment.CenterHorizontally
-                        ) {
-                            Text(
-                                text = "✗ Transfer Failed",
-                                style = MaterialTheme.typography.titleMedium,
-                                color = MaterialTheme.colorScheme.error,
-                                fontWeight = FontWeight.Bold
-                            )
-                            Spacer(Modifier.height(8.dp))
-                            Text(
-                                text = transferState.message,
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                textAlign = TextAlign.Center
-                            )
-                            Spacer(Modifier.height(16.dp))
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.spacedBy(12.dp)
-                            ) {
-                                OutlinedButton(
-                                    onClick = onResetTransferState,
-                                    modifier = Modifier.weight(1f)
-                                ) {
-                                    Text("Back")
-                                }
-                                Button(
-                                    onClick = onStartTransfer,
-                                    modifier = Modifier.weight(1f)
-                                ) {
-                                    Text("Retry")
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        }
-    }
-}
-
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-private fun BookDetailsBottomSheet(
-    book: Book,
-    lookupState: BookViewModel.MetadataLookupState,
-    selectedCoverUri: Uri?,
-    onSearch: (String, String) -> Unit,
-    onPickCover: () -> Unit,
-    onSave: (String, String, String?) -> Unit,
-    onDismiss: () -> Unit,
-) {
-    var title by remember(book.uid) { mutableStateOf(book.title) }
-    var author by remember(book.uid) { mutableStateOf(book.author) }
-    var selectedCoverUrl by remember(book.uid) { mutableStateOf<String?>(null) }
-    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
-
-    ModalBottomSheet(
-        onDismissRequest = onDismiss,
-        sheetState = sheetState,
-        containerColor = MaterialTheme.colorScheme.surface,
-    ) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 24.dp)
-                .padding(bottom = 36.dp)
-                .verticalScroll(rememberScrollState()),
-            verticalArrangement = Arrangement.spacedBy(12.dp),
-        ) {
-            Text(
-                text = "Book details",
-                style = MaterialTheme.typography.titleLarge,
-                fontWeight = FontWeight.Bold,
-            )
-
-            OutlinedTextField(
-                value = title,
-                onValueChange = { title = it },
-                label = { Text("Title") },
-                singleLine = true,
-                modifier = Modifier.fillMaxWidth(),
-            )
-            OutlinedTextField(
-                value = author,
-                onValueChange = { author = it },
-                label = { Text("Author") },
-                singleLine = true,
-                modifier = Modifier.fillMaxWidth(),
-            )
-
-            OutlinedButton(
-                onClick = { onSearch(title, author) },
-                enabled = !lookupState.isSearching && title.isNotBlank(),
-                modifier = Modifier.fillMaxWidth(),
-            ) {
-                if (lookupState.isSearching) {
-                    CircularProgressIndicator(
-                        modifier = Modifier.size(18.dp),
-                        strokeWidth = 2.dp,
-                    )
-                    Spacer(Modifier.width(8.dp))
-                    Text("Searching Google Books")
-                } else {
-                    Text("Search Google Books")
-                }
-            }
-
-            lookupState.error?.let { error ->
-                Text(
-                    text = error,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.error,
-                )
-            }
-            lookupState.candidates.forEach { candidate ->
-                FilledTonalButton(
-                    onClick = {
-                        title = candidate.title
-                        author = candidate.author
-                        selectedCoverUrl = candidate.coverUrl
-                    },
-                    modifier = Modifier.fillMaxWidth(),
-                ) {
-                    Column(modifier = Modifier.fillMaxWidth()) {
-                        Text(candidate.title, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                        Text(
-                            text = candidate.author,
-                            style = MaterialTheme.typography.bodySmall,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
-                        )
-                        candidate.isbn?.let { isbn ->
-                            Text("ISBN $isbn", style = MaterialTheme.typography.labelSmall)
-                        }
-                    }
-                }
-            }
-
-            OutlinedButton(
-                onClick = onPickCover,
-                modifier = Modifier.fillMaxWidth(),
-            ) {
-                Text(if (selectedCoverUri != null) "Custom cover selected" else "Choose cover")
-            }
-
-            Button(
-                onClick = { onSave(title, author, selectedCoverUrl) },
-                enabled = title.isNotBlank(),
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(48.dp),
-            ) {
-                Text("Save details")
-            }
-        }
-    }
-}
-
-// ─────────────────────────────────────────────────────────────
-// Pure UI content (preview-friendly)
-// ─────────────────────────────────────────────────────────────
-
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-internal fun LibraryScreenContent(
-    uiState: LibraryUiState,
-    transferQueue: List<Book>,
-    isConverting: Boolean,
-    snackbarHostState: SnackbarHostState,
-    onAddBookClick: () -> Unit,
-    onToggleQueued: (Book) -> Unit,
-    onDeleteBook: (Book) -> Unit,
-    onEditBook: (Book) -> Unit = {},
-    onOpenTransferSheet: () -> Unit,
-    onNavigateToTools: () -> Unit = {},
-    modifier: Modifier = Modifier,
-) {
-    val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
-
-    Box(modifier = modifier.fillMaxSize()) {
-        // Background image — full-bleed, Kindle aesthetic
-        Image(
-            painter = painterResource(id = R.drawable.bezos_bg),
-            contentDescription = null,
-            modifier = Modifier.fillMaxSize(),
-            contentScale = ContentScale.Crop,
-            alpha = 0.85f
-        )
-
-        // Gradient overlay — fades from transparent at top to surface at bottom
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .background(
-                    Brush.verticalGradient(
-                        colors = listOf(
-                            Color.Transparent,
-                            Color.Transparent,
-                            MaterialTheme.colorScheme.surface.copy(alpha = 0.50f),
-                            MaterialTheme.colorScheme.surface.copy(alpha = 0.85f),
-                            MaterialTheme.colorScheme.surface
-                        ),
-                        startY = 0f,
-                        endY = Float.POSITIVE_INFINITY
-                    )
-                )
-        )
-
-        Scaffold(
-            modifier = Modifier.fillMaxSize(),
-            topBar = {
-                MediumTopAppBar(
-                    title = {
-                        Text(
-                            text = "PageDrop",
-                            style = MaterialTheme.typography.titleLarge,
-                        )
-                    },
-                    actions = {
-                        IconButton(onClick = onNavigateToTools) {
-                            Icon(
-                                Icons.Default.Build,
-                                contentDescription = "Tools",
-                            )
-                        }
-                        IconButton(onClick = onAddBookClick) {
-                            Icon(
-                                Icons.Default.Add,
-                                contentDescription = "Add book",
-                            )
-                        }
-                    },
-                    colors = TopAppBarDefaults.mediumTopAppBarColors(
-                        containerColor = Color.Transparent,
-                        scrolledContainerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.92f),
-                        titleContentColor = MaterialTheme.colorScheme.onSurface,
-                    ),
-                    scrollBehavior = scrollBehavior,
-                )
-            },
-            floatingActionButton = {
-                AnimatedVisibility(
-                    visible = transferQueue.isNotEmpty(),
-                    enter = fadeIn() + slideInVertically { it },
-                    exit = fadeOut() + slideOutVertically { it },
-                ) {
-                    FloatingActionButton(
-                        onClick = onOpenTransferSheet,
-                        containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.92f),
-                        contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
-                    ) {
-                        Icon(Icons.Default.Send, contentDescription = "Transfer")
-                    }
-                }
-            },
-            snackbarHost = { SnackbarHost(snackbarHostState) },
-            containerColor = Color.Transparent,
-        ) { innerPadding ->
-
-            if (isConverting) {
-                LinearProgressIndicator(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(top = innerPadding.calculateTopPadding()),
-                    color = MaterialTheme.colorScheme.primary,
-                    trackColor = MaterialTheme.colorScheme.surfaceVariant,
-                )
-            }
-
-            when (uiState) {
-                is LibraryUiState.Loading -> {
-                    Box(
-                        Modifier
-                            .fillMaxSize()
-                            .padding(innerPadding),
-                        contentAlignment = Alignment.Center,
-                    ) {
-                        CircularProgressIndicator(color = MaterialTheme.colorScheme.primary)
-                    }
-                }
-
-                is LibraryUiState.Error -> {
-                    Box(
-                        Modifier
-                            .fillMaxSize()
-                            .padding(innerPadding),
-                        contentAlignment = Alignment.Center,
-                    ) {
-                        Text(
-                            text = "Something went wrong.\n${uiState.throwable.localizedMessage}",
-                            color = MaterialTheme.colorScheme.error,
-                            style = MaterialTheme.typography.bodyLarge,
-                        )
-                    }
-                }
-
-                is LibraryUiState.Success -> {
-                    if (uiState.data.isEmpty()) {
-                        EmptyLibraryState(
-                            modifier = Modifier
-                                .fillMaxSize()
-                                .padding(innerPadding),
-                        )
-                    } else {
-                        BookList(
-                            books = uiState.data,
-                            transferQueue = transferQueue,
-                            onToggleQueued = onToggleQueued,
-                            onDelete = onDeleteBook,
-                            onEdit = onEditBook,
-                            contentPadding = innerPadding,
-                        )
-                    }
-                }
-            }
-        }
-    }
-}
-
-// ─────────────────────────────────────────────────────────────
-// Empty state
-// ─────────────────────────────────────────────────────────────
-
-@Composable
-private fun EmptyLibraryState(
-    modifier: Modifier = Modifier,
-) {
-    Column(
-        modifier = modifier.padding(horizontal = 32.dp),
-        verticalArrangement = Arrangement.Center,
-        horizontalAlignment = Alignment.CenterHorizontally,
-    ) {
-        Card(
-            colors = CardDefaults.cardColors(
-                containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.75f)
-            ),
-            shape = RoundedCornerShape(24.dp),
-            elevation = CardDefaults.cardElevation(defaultElevation = 4.dp)
-        ) {
-            Column(
-                modifier = Modifier.padding(40.dp),
-                horizontalAlignment = Alignment.CenterHorizontally
-            ) {
-                Icon(
-                    imageVector = Icons.Outlined.MenuBook,
-                    contentDescription = null,
-                    modifier = Modifier.size(64.dp),
-                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-                Spacer(Modifier.height(16.dp))
-                Text(
-                    text = "No books yet",
-                    style = MaterialTheme.typography.titleMedium,
-                    color = MaterialTheme.colorScheme.onSurface,
-                )
-                Spacer(Modifier.height(4.dp))
-                Text(
-                    text = "Tap + to add",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
-        }
-    }
-}
-
-// ─────────────────────────────────────────────────────────────
-// Book list (no swipe-to-dismiss)
-// ─────────────────────────────────────────────────────────────
-
-@OptIn(ExperimentalFoundationApi::class)
-@Composable
-private fun BookList(
-    books: List<Book>,
-    transferQueue: List<Book>,
-    onToggleQueued: (Book) -> Unit,
-    onDelete: (Book) -> Unit,
-    onEdit: (Book) -> Unit,
-    contentPadding: PaddingValues,
-) {
-    LazyColumn(
-        modifier = Modifier.fillMaxSize(),
-        contentPadding = PaddingValues(
-            top = contentPadding.calculateTopPadding() + 8.dp,
-            bottom = contentPadding.calculateBottomPadding() + 96.dp,
-            start = 16.dp,
-            end = 16.dp,
-        ),
-        verticalArrangement = Arrangement.spacedBy(8.dp),
-    ) {
-        items(
-            items = books,
-            key = { it.uid },
-        ) { book ->
-            val isQueued = transferQueue.any { it.uid == book.uid }
-
-            BookCard(
-                book = book,
-                isQueued = isQueued,
-                onTap = { onToggleQueued(book) },
-                onDelete = { onDelete(book) },
-                onEdit = { onEdit(book) },
-                modifier = Modifier.animateItem(
-                    fadeInSpec = spring(stiffness = Spring.StiffnessMediumLow),
-                    fadeOutSpec = spring(stiffness = Spring.StiffnessMediumLow),
-                ),
-            )
-        }
-    }
-}
-
-// ─────────────────────────────────────────────────────────────
-// Individual book card
-// ─────────────────────────────────────────────────────────────
-
-@OptIn(ExperimentalFoundationApi::class)
-@Composable
-private fun BookCard(
-    book: Book,
-    isQueued: Boolean,
-    onTap: () -> Unit,
-    onDelete: () -> Unit,
-    onEdit: () -> Unit,
-    modifier: Modifier = Modifier,
-) {
-    var showMenu by remember { mutableStateOf(false) }
-    val context = LocalContext.current
-
-    Card(
-        modifier = modifier
-            .fillMaxWidth()
-            .combinedClickable(
-                onClick = onTap,
-                onLongClick = { showMenu = true },
-            ),
-        shape = RoundedCornerShape(12.dp),
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.78f),
-        ),
-        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
-    ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 12.dp, vertical = 12.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            // Selection checkbox
-            Checkbox(
-                checked = isQueued,
-                onCheckedChange = { onTap() },
-            )
-
-            Spacer(Modifier.width(8.dp))
-
-            // Book info
-            Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    text = book.title,
-                    style = MaterialTheme.typography.titleSmall,
-                    fontWeight = FontWeight.Medium,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                    color = MaterialTheme.colorScheme.onSurface,
-                )
-                Spacer(Modifier.height(2.dp))
-                Text(
-                    text = book.author,
-                    style = MaterialTheme.typography.bodySmall,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
-
-            Spacer(Modifier.width(8.dp))
-
-            // Format chip (outlined)
-            Box(
-                modifier = Modifier
-                    .border(
-                        width = 1.dp,
-                        color = MaterialTheme.colorScheme.outline,
-                        shape = RoundedCornerShape(6.dp),
-                    )
-                    .padding(horizontal = 8.dp, vertical = 4.dp),
-            ) {
-                Text(
-                    text = book.format.uppercase(),
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
-
-            Spacer(Modifier.width(8.dp))
-
-            // File size
-            Text(
-                text = Formatter.formatShortFileSize(context, book.fileSize),
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-
-            // Context menu (long press)
-            DropdownMenu(
-                expanded = showMenu,
-                onDismissRequest = { showMenu = false },
-            ) {
-                DropdownMenuItem(
-                    text = { Text("Edit details") },
-                    onClick = {
-                        showMenu = false
-                        onEdit()
-                    },
-                    leadingIcon = {
-                        Icon(Icons.Rounded.Edit, contentDescription = null)
-                    },
-                )
-                DropdownMenuItem(
-                    text = { Text("Delete") },
-                    onClick = {
-                        showMenu = false
-                        onDelete()
-                    },
-                    leadingIcon = {
-                        Icon(
-                            Icons.Rounded.Delete,
-                            contentDescription = null,
-                            tint = MaterialTheme.colorScheme.error,
-                        )
-                    },
-                )
-            }
-        }
-    }
-}
+private fun Set<Int>.toggle(id: Int): Set<Int> = if (id in this) this - id else this + id
+
+private fun transferErrorMessage(error: BookViewModel.TransferState.Error): String =
+    if (error.isConnectionProblem) "Can’t reach your Kindle."
+    else "Couldn’t send to Kindle. ${error.message.lineSequence().first().take(80)}"

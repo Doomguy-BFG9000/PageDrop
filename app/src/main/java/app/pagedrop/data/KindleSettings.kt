@@ -24,12 +24,21 @@ class KindleSettings @Inject constructor(
         }
     }
 
+    /** True once the user has entered a Kindle address. */
+    val isConfigured: Boolean
+        get() = host.isNotBlank()
+
+    /** True when the user chose "Set up later" on the first-run screen. */
+    var setupSkipped: Boolean
+        get() = prefs.getBoolean("setup_skipped", false)
+        set(value) = prefs.edit().putBoolean("setup_skipped", value).apply()
+
     var host: String
         get() = prefs.getString("host", "") ?: ""
         set(value) = prefs.edit().putString("host", value).apply()
 
     var port: Int
-        get() = prefs.getInt("port", 22)
+        get() = prefs.getInt("port", DEFAULT_PORT)
         set(value) = prefs.edit().putInt("port", value).apply()
 
     var username: String
@@ -40,29 +49,47 @@ class KindleSettings @Inject constructor(
         get() = prefs.getString("password", "") ?: ""
         set(value) = prefs.edit().putString("password", value).apply()
 
+    /** The first (primary) folder. Setting it replaces the first entry of [targetDirectories]. */
     var targetDirectory: String
-        get() = prefs.getString("target_directory", "/mnt/us/documents") ?: "/mnt/us/documents"
-        set(value) = prefs.edit().putString("target_directory", value).apply()
-
-    var targetDirectories: List<String>
-        get() = listOf(targetDirectory) + (prefs.getStringSet("target_directories", null)
-            ?.map { it.trim() }
-            ?.filter { it.isNotBlank() }
-            ?.filter { it != targetDirectory }
-            .orEmpty())
+        get() = targetDirectories.first()
         set(value) {
-            val paths = value.map { it.trim() }.filter { it.isNotBlank() }.distinct()
-                .ifEmpty { listOf("/mnt/us/documents") }
+            targetDirectories = listOf(value) + targetDirectories.drop(1)
+        }
+
+    /**
+     * Ordered folder list, stored as one newline-joined string. Older installs kept the primary
+     * in "target_directory" and the rest in an unordered StringSet; those are read as a fallback
+     * and replaced by the new key on the next write.
+     */
+    var targetDirectories: List<String>
+        get() {
+            prefs.getString(KEY_DIRECTORIES, null)?.let { stored ->
+                return cleanPaths(stored.lines()).ifEmpty { listOf(DEFAULT_DIRECTORY) }
+            }
+            val legacyPrimary = prefs.getString("target_directory", null)
+            val legacyExtras = prefs.getStringSet("target_directories", null).orEmpty().sorted()
+            return cleanPaths(listOfNotNull(legacyPrimary) + legacyExtras).ifEmpty { listOf(DEFAULT_DIRECTORY) }
+        }
+        set(value) {
+            val paths = cleanPaths(value).ifEmpty { listOf(DEFAULT_DIRECTORY) }
             prefs.edit()
-                .putStringSet("target_directories", paths.toSet())
-                .putString("target_directory", paths.first())
+                .putString(KEY_DIRECTORIES, paths.joinToString("\n"))
+                .remove("target_directories")
+                .remove("target_directory")
                 .apply()
         }
+
+    private fun cleanPaths(raw: List<String>) = raw.map { it.trim() }.filter { it.isNotBlank() }.distinct()
 
     var triggerRescan: Boolean
         get() = prefs.getBoolean("trigger_rescan", true)
         set(value) = prefs.edit().putBoolean("trigger_rescan", value).apply()
 }
+
+private const val KEY_DIRECTORIES = "target_directories_v2"
+private const val DEFAULT_DIRECTORY = "/mnt/us/documents"
+
+const val DEFAULT_PORT = 2222 // KOReader's built-in SSH server
 
 internal class NullSharedPreferences : SharedPreferences {
     private val map = mutableMapOf<String, Any?>()

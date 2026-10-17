@@ -121,4 +121,6 @@ private class FakeBookDao : BookDao {
     override suspend fun updateMetadata(uid: Int, title: String, author: String, coverPath: String?) {}
 
     override suspend fun updateCoverAndUuid(uid: Int, coverPath: String?, kindleUuid: String) {}
+
+    override suspend fun updateFileAndMetadata(uid: Int, fileName: String, filePath: String, fileSize: Long, title: String, author: String, coverPath: String?) {}
 }

@@ -21,7 +21,9 @@ class MobiWriter(
     private val author: String,
     private val htmlContent: ByteArray,
     private val coverImage: ByteArray? = null,
-    private val images: List<ByteArray> = emptyList()
+    private val images: List<ByteArray> = emptyList(),
+    /** Extra EXTH records (type -> payload), e.g. 121 for tests. */
+    private val extraExth: Map<Int, ByteArray> = emptyMap(),
 ) {
 
     val kindleUuid: String get() = _kindleUuid
@@ -267,6 +269,7 @@ class MobiWriter(
      *   503 = updated title
      *   501 = "EBOK" (CDE type — tells Kindle this is an ebook)
      *   113 = UUID (unique identifier)
+     *   201 = cover image offset (relative to the first image record) when a cover is supplied
      */
     private fun buildExthHeader(): ByteArray {
         val baos = ByteArrayOutputStream(256)
@@ -279,6 +282,12 @@ class MobiWriter(
         records.add(buildExthRecord(503, title.toByteArray(Charsets.UTF_8)))
         records.add(buildExthRecord(501, "EBOK".toByteArray(Charsets.UTF_8)))
         records.add(buildExthRecord(113, uuid.toByteArray(Charsets.UTF_8)))
+        if (coverImage != null) {
+            // Cover is the first image record: offset 0 from the first image index. 203 = no "fake cover".
+            records.add(buildExthRecord(201, byteArrayOf(0, 0, 0, 0)))
+            records.add(buildExthRecord(203, byteArrayOf(0, 0, 0, 0)))
+        }
+        for ((type, data) in extraExth) records.add(buildExthRecord(type, data))
 
         val recordsData = ByteArrayOutputStream()
         for (record in records) recordsData.write(record)

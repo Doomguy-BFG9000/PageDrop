@@ -103,6 +103,35 @@ class KindleSftpClientTest {
         ) { _, _, _ -> invoked = true }
         // No real connection, but progress callback may or may not fire before failure
     }
+
+    private fun book(format: String) = Book(
+        uid = 1, title = "T", author = "A", fileName = "t.${format.lowercase()}",
+        filePath = "/x", format = format, fileSize = 1
+    )
+
+    @Test
+    fun destinationsFor_kindleReadableFormat_goesToHomeScreenAndKoreader() {
+        assertEquals(
+            listOf("/mnt/us/documents", "/mnt/us/Books"),
+            KindleSftpClient.destinationsFor(book("AZW3"), listOf("/mnt/us/documents/"))
+        )
+    }
+
+    @Test
+    fun destinationsFor_addsHomeScreenEvenWhenNotConfigured() {
+        assertEquals(
+            listOf("/mnt/us/custom", "/mnt/us/documents", "/mnt/us/Books"),
+            KindleSftpClient.destinationsFor(book("MOBI"), listOf("/mnt/us/custom"))
+        )
+    }
+
+    @Test
+    fun destinationsFor_epubSkipsHomeScreen() {
+        assertEquals(
+            listOf("/mnt/us/Books"),
+            KindleSftpClient.destinationsFor(book("EPUB"), listOf("/mnt/us/documents"))
+        )
+    }
 }
 
 private fun runBlocking(block: suspend () -> Unit) {

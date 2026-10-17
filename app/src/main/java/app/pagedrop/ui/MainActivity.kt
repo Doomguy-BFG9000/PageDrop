@@ -26,6 +26,7 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.core.content.ContextCompat
 import app.pagedrop.data.BookRepository
 import app.pagedrop.server.PageDropApiClient
+import app.pagedrop.share.PendingSharedFile
 import app.pagedrop.share.ShareHandler
 import app.pagedrop.ui.theme.MyApplicationTheme
 import androidx.activity.ComponentActivity
@@ -47,6 +48,7 @@ class MainActivity : ComponentActivity() {
 
     @Inject lateinit var bookRepository: BookRepository
     @Inject lateinit var pageDropApiClient: PageDropApiClient
+    @Inject lateinit var pendingSharedFile: PendingSharedFile
 
     private val notificationPermissionLauncher = registerForActivityResult(
         ActivityResultContracts.RequestPermission()
@@ -85,6 +87,12 @@ class MainActivity : ComponentActivity() {
     private fun handleIntent(intent: Intent) {
         val action = intent.action
         if (action != Intent.ACTION_SEND && action != Intent.ACTION_SEND_MULTIPLE && action != Intent.ACTION_VIEW) return
+
+        // One shared file goes through the Library's Add book sheet (metadata lookup, cover, confirm).
+        ShareHandler.singleSharedFile(intent)?.let { uri ->
+            pendingSharedFile.offer(uri)
+            return
+        }
 
         CoroutineScope(Dispatchers.Main).launch {
             val result = ShareHandler.processSendIntent(intent, application, bookRepository, pageDropApiClient)
