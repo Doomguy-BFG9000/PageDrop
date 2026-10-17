@@ -14,6 +14,8 @@
  * limitations under the License.
  */
 
+import java.util.Properties
+
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.hilt.gradle)
@@ -30,8 +32,8 @@ android {
         applicationId = "app.pagedrop"
         minSdk = 26
         targetSdk = 36
-        versionCode = 12
-        versionName = "0.7.0"
+        versionCode = 13
+        versionName = "0.8.0"
 
         testInstrumentationRunner = "app.pagedrop.HiltTestRunner"
         vectorDrawables {
@@ -39,6 +41,7 @@ android {
         }
 
         // These are release/build-time settings. They are never entered by an app user.
+        // An absent property falls back to the built-in server; an empty one (-PNAME=) builds without a server.
         val pageDropSupabaseUrl = providers.gradleProperty("PAGEDROP_SUPABASE_URL").orNull
             ?: "https://bzvvpwykluklvvjyzytn.supabase.co"
         val pageDropSupabaseAnonKey = providers.gradleProperty("PAGEDROP_SUPABASE_ANON_KEY").orNull
@@ -47,8 +50,36 @@ android {
         buildConfigField("String", "PAGEDROP_SUPABASE_ANON_KEY", "\"$pageDropSupabaseAnonKey\"")
     }
 
+    signingConfigs {
+        // Signing material lives outside the repo: env vars (CI) or a properties file. If neither
+        // exists the release build is left unsigned (e.g. F-Droid signs it itself).
+        val env = { name: String -> System.getenv(name) }
+        val propsFile = file(
+            providers.gradleProperty("PAGEDROP_KEYSTORE_PROPERTIES").orNull
+                ?: "${System.getProperty("user.home")}/.pagedrop-release/keystore.properties"
+        )
+        val envPath = env("PAGEDROP_KEYSTORE_PATH")
+        if (!envPath.isNullOrBlank()) {
+            create("release") {
+                storeFile = file(envPath)
+                storePassword = env("PAGEDROP_KEYSTORE_PASSWORD")
+                keyAlias = env("PAGEDROP_KEY_ALIAS")
+                keyPassword = env("PAGEDROP_KEY_PASSWORD")
+            }
+        } else if (propsFile.isFile) {
+            val props = Properties().apply { propsFile.inputStream().use { load(it) } }
+            create("release") {
+                storeFile = file(props.getProperty("storeFile"))
+                storePassword = props.getProperty("storePassword")
+                keyAlias = props.getProperty("keyAlias")
+                keyPassword = props.getProperty("keyPassword")
+            }
+        }
+    }
+
     buildTypes {
         getByName("release") {
+            signingConfigs.findByName("release")?.let { signingConfig = it }
             isMinifyEnabled = false
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
         }
@@ -104,7 +135,6 @@ dependencies {
     // Compose
     implementation(libs.androidx.compose.ui)
     implementation(libs.androidx.compose.ui.tooling.preview)
-    implementation(libs.androidx.compose.ui.text.google.fonts)
     implementation(libs.androidx.compose.material3)
     implementation("androidx.compose.material:material-icons-extended")
     // Tooling

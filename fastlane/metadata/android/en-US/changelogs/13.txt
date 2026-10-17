@@ -1,0 +1,7 @@
+- Redesigned look with the bundled Literata serif
+- Find books in-app and send them straight to your Kindle
+- Manage the books on your Kindle from the Kindle tab
+- New "Get your Kindle ready" setup walkthrough
+- Better PDF conversion
+- Automatic book details and covers
+- Optional conversion server: turn it off in Settings to convert everything on the phone

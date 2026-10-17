@@ -28,6 +28,7 @@ class SettingsViewModel @Inject constructor(
         val foldersDirty: Boolean = false,
         val triggerRescan: Boolean = true,
         val serverAvailable: Boolean = false,
+        val useServer: Boolean = true,
         val isTestingServer: Boolean = false,
         val serverTestResult: Result<Unit>? = null
     )
@@ -39,7 +40,8 @@ class SettingsViewModel @Inject constructor(
         kindleSummary = summary(),
         folders = kindleSettings.targetDirectories.joinToString("\n"),
         triggerRescan = kindleSettings.triggerRescan,
-        serverAvailable = serverSettings.isConfigured
+        serverAvailable = serverSettings.hasBuiltInServer,
+        useServer = serverSettings.useServer
     )
 
     private fun summary() =
@@ -68,6 +70,11 @@ class SettingsViewModel @Inject constructor(
     fun updateTriggerRescan(value: Boolean) {
         _state.update { it.copy(triggerRescan = value) }
         kindleSettings.triggerRescan = value
+    }
+
+    fun updateUseServer(value: Boolean) {
+        serverSettings.useServer = value
+        _state.update { it.copy(useServer = value, serverTestResult = null) }
     }
 
     fun testServer() {

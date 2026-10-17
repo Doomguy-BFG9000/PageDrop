@@ -1,36 +1,34 @@
 package app.pagedrop.ui.theme
 
 import androidx.compose.material3.Typography
+import androidx.compose.ui.text.ExperimentalTextApi
 import androidx.compose.ui.text.TextStyle
-import androidx.compose.ui.text.font.DeviceFontFamilyName
 import androidx.compose.ui.text.font.Font
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontStyle
+import androidx.compose.ui.text.font.FontVariation
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.googlefonts.Font as GoogleFont
-import androidx.compose.ui.text.googlefonts.GoogleFont as GoogleFontName
 import androidx.compose.ui.unit.sp
 import app.pagedrop.R
 
-private val fontProvider = GoogleFontName.Provider(
-    providerAuthority = "com.google.android.gms.fonts",
-    providerPackage = "com.google.android.gms",
-    certificates = R.array.com_google_android_gms_fonts_certs
+@OptIn(ExperimentalTextApi::class)
+private fun literata(resId: Int, weight: FontWeight, style: FontStyle) = Font(
+    resId,
+    weight,
+    style,
+    variationSettings = FontVariation.Settings(FontVariation.weight(weight.weight))
 )
 
-private val literata = GoogleFontName("Literata")
-
-/** Book serif (Literata, downloaded on demand) with the system serif as fallback. */
+/** Book serif: Literata (SIL OFL), bundled as variable fonts. */
 val BookSerif = FontFamily(
-    GoogleFont(literata, fontProvider, FontWeight.Normal),
-    GoogleFont(literata, fontProvider, FontWeight.Normal, FontStyle.Italic),
-    GoogleFont(literata, fontProvider, FontWeight.Medium),
-    GoogleFont(literata, fontProvider, FontWeight.SemiBold),
-    GoogleFont(literata, fontProvider, FontWeight.Bold),
-    // Fallback while the download is pending or unavailable.
-    Font(DeviceFontFamilyName("serif"), FontWeight.Normal),
-    Font(DeviceFontFamilyName("serif"), FontWeight.Normal, FontStyle.Italic),
-    Font(DeviceFontFamilyName("serif"), FontWeight.Bold),
+    literata(R.font.literata, FontWeight.Normal, FontStyle.Normal),
+    literata(R.font.literata, FontWeight.Medium, FontStyle.Normal),
+    literata(R.font.literata, FontWeight.SemiBold, FontStyle.Normal),
+    literata(R.font.literata, FontWeight.Bold, FontStyle.Normal),
+    literata(R.font.literata_italic, FontWeight.Normal, FontStyle.Italic),
+    literata(R.font.literata_italic, FontWeight.Medium, FontStyle.Italic),
+    literata(R.font.literata_italic, FontWeight.SemiBold, FontStyle.Italic),
+    literata(R.font.literata_italic, FontWeight.Bold, FontStyle.Italic),
 )
 
 private val Serif = BookSerif

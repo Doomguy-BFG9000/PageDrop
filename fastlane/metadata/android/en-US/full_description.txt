@@ -1,0 +1,17 @@
+PageDrop is a phone-first companion for jailbroken Kindles running KOReader. Find a book, convert it if needed, and send it to your Kindle over Wi-Fi, all from one app.
+
+Requires a jailbroken Kindle with KOReader and its SSH server enabled. The in-app "Get your Kindle ready" walkthrough explains each step.
+
+Features:
+- Find books in-app across public-domain and open libraries (Project Gutenberg, Standard Ebooks, Internet Archive, Wikisource and more) and your own OPDS catalogs
+- Add books from your phone, or capture downloads from websites inside PageDrop
+- Converts EPUB, PDF and text to MOBI on the phone, with improved PDF conversion
+- Automatic book details: titles, authors and covers
+- Send to the Kindle over SSH/SFTP and refresh its library
+- Kindle tab: see what is on the Kindle and manage those books
+- Optional conversion server, which can be switched off so everything stays on your phone
+- Free and open source (GPL-3.0)
+
+PageDrop does not host or provide books. Some book sources and websites may offer material that is not freely licensed; you are responsible for respecting copyright law in your country.
+
+Not affiliated with or endorsed by Amazon.

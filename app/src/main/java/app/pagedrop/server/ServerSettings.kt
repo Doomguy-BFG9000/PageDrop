@@ -26,8 +26,17 @@ class ServerSettings @Inject constructor(
         get() = prefs.getString("refresh_token", "") ?: ""
         set(value) = prefs.edit().putString("refresh_token", value).apply()
 
-    val isConfigured: Boolean
+    /** True when this build ships with a conversion server URL and key. */
+    val hasBuiltInServer: Boolean
         get() = supabaseUrl.isNotBlank() && supabaseAnonKey.isNotBlank()
+
+    /** User preference; on by default so builds with a server keep their current behaviour. */
+    var useServer: Boolean
+        get() = prefs.getBoolean("use_server", true)
+        set(value) = prefs.edit().putBoolean("use_server", value).apply()
+
+    val isConfigured: Boolean
+        get() = useServer && hasBuiltInServer
 
     val isAuthenticated: Boolean
         get() = accessToken.isNotBlank()

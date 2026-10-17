@@ -14,6 +14,19 @@ other backend tools can be used by PageDrop servers for heavy conversion and
 formatting work, but they should remain implementation details behind
 PageDrop's own UI and APIs.
 
+## Install
+
+- **GitHub Releases:** download the latest `PageDrop-vX.Y.Z.apk` from the
+  [Releases page](https://github.com/spandan-kumar/PageDrop/releases). A SHA-256
+  checksum file is attached to each release.
+- **Obtainium:** add `https://github.com/spandan-kumar/PageDrop` as an app source.
+- **F-Droid:** planned (see `fdroid/`).
+
+## Requirements
+
+A jailbroken Kindle running KOReader with its SSH server enabled. The in-app
+"Get your Kindle ready" walkthrough covers the setup.
+
 ## Features
 
 ### Direct Mode (built-in)
@@ -163,6 +176,32 @@ If Gradle cannot find the Android SDK, configure either `ANDROID_HOME` or
 ```properties
 sdk.dir=/path/to/Android/sdk
 ```
+
+## Building a release
+
+Release signing keys are never stored in the repo. Gradle reads them from either:
+
+1. environment variables `PAGEDROP_KEYSTORE_PATH`, `PAGEDROP_KEYSTORE_PASSWORD`,
+   `PAGEDROP_KEY_ALIAS`, `PAGEDROP_KEY_PASSWORD`, or
+2. a properties file (keys `storeFile`, `storePassword`, `keyAlias`, `keyPassword`) at
+   `~/.pagedrop-release/keystore.properties`, or the path in the Gradle property
+   `PAGEDROP_KEYSTORE_PROPERTIES`.
+
+With neither, `./gradlew assembleRelease` produces an unsigned APK. Pushing a `v*` tag
+runs `.github/workflows/release.yml`, which needs the GitHub secrets
+`PAGEDROP_KEYSTORE_BASE64`, `PAGEDROP_KEYSTORE_PASSWORD`, `PAGEDROP_KEY_ALIAS` and
+`PAGEDROP_KEY_PASSWORD`.
+
+To build without the PageDrop conversion server, pass empty properties:
+`-PPAGEDROP_SUPABASE_URL= -PPAGEDROP_SUPABASE_ANON_KEY=`. Otherwise Settings has a
+"Use PageDrop conversion server" switch.
+
+## License
+
+GPL-3.0 (see `LICENSE`). The bundled Literata font is under the SIL Open Font License
+(see `licenses/`).
+
+PageDrop is not affiliated with or endorsed by Amazon.
 
 ## Documentation
 

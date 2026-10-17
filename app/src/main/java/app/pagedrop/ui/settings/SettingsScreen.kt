@@ -19,6 +19,7 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
@@ -140,11 +141,26 @@ fun SettingsScreen(
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                     if (state.serverAvailable) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text(
+                                "Use PageDrop conversion server",
+                                style = MaterialTheme.typography.bodyMedium,
+                                modifier = Modifier.weight(1f)
+                            )
+                            Switch(checked = state.useServer, onCheckedChange = viewModel::updateUseServer)
+                        }
+                        if (!state.useServer) {
+                            Text(
+                                "Off: everything is converted on this phone and nothing is sent to the server.",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
                         OutlineButton(
                             if (state.isTestingServer) "Testing..." else "Test PageDrop server",
                             viewModel::testServer,
                             Modifier.fillMaxWidth(),
-                            enabled = !state.isTestingServer
+                            enabled = state.useServer && !state.isTestingServer
                         )
                     } else {
                         Text(

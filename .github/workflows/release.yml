@@ -28,14 +28,47 @@ jobs:
       - name: Grant execute permission for gradlew
         run: chmod +x gradlew
 
-      - name: Build Debug APK
-        run: ./gradlew assembleDebug
+      - name: Decode keystore
+        env:
+          KEYSTORE_BASE64: ${{ secrets.PAGEDROP_KEYSTORE_BASE64 }}
+        run: |
+          test -n "$KEYSTORE_BASE64" || { echo "PAGEDROP_KEYSTORE_BASE64 secret is missing"; exit 1; }
+          echo "$KEYSTORE_BASE64" | base64 --decode > "$RUNNER_TEMP/release.jks"
+          echo "PAGEDROP_KEYSTORE_PATH=$RUNNER_TEMP/release.jks" >> "$GITHUB_ENV"
 
-      - name: Rename APK
-        run: mv app/build/outputs/apk/debug/app-debug.apk app/build/outputs/apk/debug/PageDrop-${{ github.ref_name }}.apk
+      - name: Run unit tests
+        run: ./gradlew testDebugUnitTest
+
+      - name: Build signed release APK
+        env:
+          PAGEDROP_KEYSTORE_PASSWORD: ${{ secrets.PAGEDROP_KEYSTORE_PASSWORD }}
+          PAGEDROP_KEY_ALIAS: ${{ secrets.PAGEDROP_KEY_ALIAS }}
+          PAGEDROP_KEY_PASSWORD: ${{ secrets.PAGEDROP_KEY_PASSWORD }}
+        run: ./gradlew assembleRelease
+
+      - name: Verify APK signature
+        run: |
+          APKSIGNER=$(ls -d "$ANDROID_HOME"/build-tools/*/apksigner | sort -V | tail -1)
+          "$APKSIGNER" verify --print-certs app/build/outputs/apk/release/app-release.apk
+
+      - name: Rename APK, write checksum and release notes
+        run: |
+          mkdir -p dist
+          APK="dist/PageDrop-${{ github.ref_name }}.apk"
+          cp app/build/outputs/apk/release/app-release.apk "$APK"
+          (cd dist && sha256sum "PageDrop-${{ github.ref_name }}.apk" > "PageDrop-${{ github.ref_name }}.apk.sha256")
+          CODE=$(grep -E 'versionCode *=' app/build.gradle.kts | head -1 | grep -oE '[0-9]+')
+          if [ -f "fastlane/metadata/android/en-US/changelogs/${CODE}.txt" ]; then
+            cp "fastlane/metadata/android/en-US/changelogs/${CODE}.txt" release-notes.md
+          else
+            : > release-notes.md
+          fi
 
       - name: Create Release
         uses: softprops/action-gh-release@v2
         with:
-          files: app/build/outputs/apk/debug/PageDrop-${{ github.ref_name }}.apk
+          files: |
+            dist/PageDrop-${{ github.ref_name }}.apk
+            dist/PageDrop-${{ github.ref_name }}.apk.sha256
+          body_path: release-notes.md
           generate_release_notes: true
