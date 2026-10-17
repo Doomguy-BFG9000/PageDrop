@@ -109,12 +109,92 @@ object DeviceCommandRunner {
         )
     }
 
-    suspend fun triggerRescan(
-        host: String, port: Int, user: String, pass: String
-    ): CommandResult = runCommand(
-        host, port, user, pass,
-        "lipc-set-prop com.lab126.amznAssetsMgrService reScan 1"
+    /**
+     * Shell fragment shared with the post-transfer rescan. Tries each rescan method in order and
+     * prints `RESCAN|<method>` for the first that works (`RESCAN|none` otherwise). A method that
+     * does not exist on this firmware (lipc exit 3 "lipcErrNoSuchSource") is simply skipped.
+     */
+    const val RESCAN_FALLBACK_SCRIPT: String =
+        "if lipc-set-prop com.lab126.amznAssetsMgrService reScan 1 >/dev/null 2>&1; then echo 'RESCAN|assets-manager'; " +
+            "elif lipc-set-prop com.lab126.scanner doFullScan 1 >/dev/null 2>&1; then echo 'RESCAN|scanner'; " +
+            "elif dbus-send --system /default com.lab126.powerd.resuming int32:1 >/dev/null 2>&1; then echo 'RESCAN|resume-signal'; " +
+            "else echo 'RESCAN|none'; fi"
+
+    private const val BOOK_FOLDERS = "/mnt/us/documents /mnt/us/Books"
+
+    /** Full script run by [refreshKindleLibrary]: rescan, KOReader check, then a sized file listing. */
+    val LIBRARY_CHECK_SCRIPT: String = listOf(
+        RESCAN_FALLBACK_SCRIPT,
+        "n=\$(ps | grep -c '[r]eader.lua' 2>/dev/null)",
+        "if [ \"\${n:-0}\" -gt 0 ] 2>/dev/null; then echo 'KOREADER|1'; else echo 'KOREADER|0'; fi",
+        "for d in $BOOK_FOLDERS; do",
+        "  [ -d \"\$d\" ] || continue",
+        "  find \"\$d\" -maxdepth 2 -type f \\( -iname '*.azw*' -o -iname '*.mobi' -o -iname '*.pdf' " +
+            "-o -iname '*.epub' -o -iname '*.txt' -o -iname '*.prc' \\) 2>/dev/null | while read -r f; do",
+        "    case \"\$f\" in *.sdr/*) continue;; esac",
+        "    echo \"FILE|\$(wc -c < \"\$f\" | tr -d ' ')|\$f\"",
+        "  done",
+        "done",
+        "echo 'DONE'"
+    ).joinToString("\n")
+
+    data class KindleFile(val path: String, val folder: String, val name: String, val sizeBytes: Long) {
+        /** KUAL's .azw2 launcher and the Kindle's clippings file are not books. */
+        val isBook: Boolean
+            get() = !name.endsWith(".azw2", ignoreCase = true) && !name.equals("My Clippings.txt", ignoreCase = true)
+    }
+
+    data class KindleLibraryScan(
+        /** Which rescan method worked, or null if none did (not an error). */
+        val rescanMethod: String?,
+        val koreaderRunning: Boolean,
+        val files: List<KindleFile>
     )
+
+    /** Parses [LIBRARY_CHECK_SCRIPT] output; null when the script did not run to completion. */
+    fun parseLibraryScan(stdout: String): KindleLibraryScan? {
+        var method: String? = null
+        var koreader = false
+        var done = false
+        val files = mutableListOf<KindleFile>()
+        for (raw in stdout.lines()) {
+            val line = raw.trimEnd('\r')
+            when {
+                line.startsWith("RESCAN|") ->
+                    method = line.removePrefix("RESCAN|").trim().takeIf { it.isNotEmpty() && it != "none" }
+                line.startsWith("KOREADER|") -> koreader = line.removePrefix("KOREADER|").trim() == "1"
+                line.startsWith("FILE|") -> {
+                    val parts = line.split('|', limit = 3)
+                    if (parts.size == 3 && parts[2].isNotBlank()) {
+                        val path = parts[2]
+                        files += KindleFile(
+                            path = path,
+                            folder = path.substringBeforeLast('/', ""),
+                            name = path.substringAfterLast('/'),
+                            sizeBytes = parts[1].trim().toLongOrNull() ?: 0L
+                        )
+                    }
+                }
+                line.trim() == "DONE" -> done = true
+                // Anything else (e.g. a lipc "lipcErrNoSuchSource" line) is noise, not an error.
+            }
+        }
+        return if (done) KindleLibraryScan(method, koreader, files.distinctBy { it.path }) else null
+    }
+
+    /** One SSH session: asks the Kindle to rescan, checks KOReader, lists books. Fails only on real connection problems. */
+    suspend fun refreshKindleLibrary(
+        host: String, port: Int, user: String, pass: String
+    ): Result<KindleLibraryScan> {
+        val result = runCommand(host, port, user, pass, LIBRARY_CHECK_SCRIPT, timeoutMs = 30_000)
+        val scan = parseLibraryScan(result.stdout)
+        return when {
+            scan != null -> Result.success(scan)
+            else -> Result.failure(
+                IllegalStateException(result.stderr.ifBlank { "The Kindle didn't answer the library check." })
+            )
+        }
+    }
 
     suspend fun rebootDevice(
         host: String, port: Int, user: String, pass: String

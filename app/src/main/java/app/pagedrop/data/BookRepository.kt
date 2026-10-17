@@ -27,11 +27,13 @@ import app.pagedrop.data.local.database.Book
 import app.pagedrop.data.local.database.BookDao
 import app.pagedrop.converter.BookConverter
 import app.pagedrop.metadata.BookFileMetadataEmbedder
+import app.pagedrop.metadata.BookMetadataLookup
 import app.pagedrop.metadata.BookNameCleaner
 import app.pagedrop.metadata.CoverImages
 import app.pagedrop.server.PageDropApiClient
 import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.withTimeout
+import dagger.hilt.android.qualifiers.ApplicationContext
 import java.io.File
 import javax.inject.Inject
 
@@ -54,6 +56,21 @@ interface BookRepository {
      */
     suspend fun applyMetadata(book: Book, title: String, author: String, coverPath: String?): Book =
         updateBookMetadata(book, title, author, coverPath)
+
+    /**
+     * Imports a file downloaded by the Find-a-book flow: moves [file] into filesDir/books, saves the cover from
+     * [coverUrl] (when reachable), inserts the row (format from the extension) and embeds title/author/cover into
+     * AZW3/MOBI/PDF via [applyMetadata]. EPUB stays EPUB; see [convertImported].
+     */
+    suspend fun importDownloaded(file: File, title: String, author: String, coverUrl: String?): Book =
+        throw UnsupportedOperationException("importDownloaded is not supported by this repository")
+
+    /**
+     * Converts a library book that is not Kindle-native (EPUB; also PDF/TXT) to MOBI with the existing server-or-phone
+     * conversion, keeping its title, author and cover, and returns the new book. The original row and file are removed
+     * only after the conversion succeeded. Kindle-native books are returned unchanged.
+     */
+    suspend fun convertImported(book: Book): Book = book
 
     /** [addBook] then [applyMetadata] when any of [title]/[author]/[coverPath] is given. */
     suspend fun addBookWithMetadata(
@@ -84,7 +101,8 @@ interface BookRepository {
 
 class DefaultBookRepository @Inject constructor(
     private val bookDao: BookDao,
-    private val pageDropApiClient: PageDropApiClient? = null
+    private val pageDropApiClient: PageDropApiClient? = null,
+    @ApplicationContext private val appContext: Context? = null,
 ) : BookRepository {
 
     companion object {
@@ -444,6 +462,66 @@ class DefaultBookRepository @Inject constructor(
             }
             updated
         }
+
+    override suspend fun importDownloaded(file: File, title: String, author: String, coverUrl: String?): Book =
+        withContext(Dispatchers.IO) {
+            val context = appContext ?: throw IllegalStateException("No application context available for import")
+            val booksDir = File(context.filesDir, BOOKS_DIR).apply { mkdirs() }
+            val target = generateUniqueFile(booksDir, file.name)
+            if (!file.renameTo(target)) {
+                file.copyTo(target, overwrite = true)
+                file.delete()
+            }
+            val format = detectFormat(target.name)
+            val cleanTitle = title.trim().ifBlank { target.nameWithoutExtension }
+            val cleanAuthor = author.trim().ifBlank { "Unknown Author" }
+
+            val coverPath = coverUrl?.takeIf { it.isNotBlank() }?.let { url ->
+                BookMetadataLookup.downloadCoverBytes(url)?.let { saveCoverBytes(context, it, target.nameWithoutExtension) }
+            }
+
+            val book = Book(
+                title = cleanTitle,
+                author = cleanAuthor,
+                fileName = target.name,
+                filePath = target.absolutePath,
+                format = format,
+                fileSize = target.length(),
+                coverPath = coverPath,
+            )
+            val inserted = book.copy(uid = bookDao.insertBook(book).toInt())
+            Log.d(TAG, "Imported download ${target.name} as id=${inserted.uid}")
+
+            if (format in setOf("AZW3", "MOBI", "PDF")) {
+                try {
+                    applyMetadata(inserted, cleanTitle, cleanAuthor, coverPath)
+                } catch (e: Exception) {
+                    Log.w(TAG, "Metadata embedding failed for ${target.name}: ${e.message}")
+                    inserted
+                }
+            } else {
+                inserted
+            }
+        }
+
+    override suspend fun convertImported(book: Book): Book = withContext(Dispatchers.IO) {
+        val context = appContext ?: throw IllegalStateException("No application context available for conversion")
+        if (!BookConverter.canConvert(book.format)) return@withContext book
+        val source = File(book.filePath)
+        if (!source.isFile) throw IllegalStateException("The downloaded file is missing: ${book.fileName}")
+
+        val converted = convertAndAddInternal(
+            context = context,
+            uri = Uri.fromFile(source),
+            outputTitle = book.title,
+            outputAuthor = book.author,
+            chosenCoverPath = book.coverPath,
+        )
+        // Conversion worked: drop the original row and file, but keep the cover, which the new book now uses.
+        runCatching { bookDao.deleteBook(book) }
+        if (source.absolutePath != converted.filePath) source.delete()
+        converted
+    }
 
     override suspend fun addBookFromFile(book: Book): Long {
         return bookDao.insertBook(book)

@@ -1,0 +1,253 @@
+package app.pagedrop.discover
+
+import android.content.Context
+import android.content.SharedPreferences
+import android.util.Base64
+import android.util.Log
+import dagger.hilt.android.qualifiers.ApplicationContext
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.withContext
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonArray
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.booleanOrNull
+import kotlinx.serialization.json.buildJsonArray
+import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.contentOrNull
+import kotlinx.serialization.json.jsonArray
+import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
+import kotlinx.serialization.json.put
+import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
+import java.security.KeyStore
+import java.security.MessageDigest
+import javax.crypto.Cipher
+import javax.crypto.KeyGenerator
+import javax.crypto.SecretKey
+import javax.crypto.spec.GCMParameterSpec
+import javax.inject.Inject
+import javax.inject.Singleton
+
+/** Stores catalog passwords. Implementations must never persist plain text; they may fail (then no password is saved). */
+internal interface SecretStore {
+    fun get(key: String): String?
+    fun put(key: String, value: String)
+    fun remove(key: String)
+}
+
+/** AES-GCM with a non-exportable Android Keystore key, ciphertext in private SharedPreferences. No extra dependency. */
+internal class KeystoreSecretStore(private val prefs: SharedPreferences) : SecretStore {
+    override fun get(key: String): String? = try {
+        prefs.getString(key, null)?.let { stored ->
+            val raw = Base64.decode(stored, Base64.NO_WRAP)
+            val iv = raw.copyOfRange(0, IV_BYTES)
+            val cipher = Cipher.getInstance(TRANSFORMATION).apply { init(Cipher.DECRYPT_MODE, secretKey(), GCMParameterSpec(128, iv)) }
+            String(cipher.doFinal(raw, IV_BYTES, raw.size - IV_BYTES), Charsets.UTF_8)
+        }
+    } catch (e: Exception) {
+        Log.w(TAG, "Could not read stored secret: ${e.javaClass.simpleName}")
+        null
+    }
+
+    override fun put(key: String, value: String) {
+        val cipher = Cipher.getInstance(TRANSFORMATION).apply { init(Cipher.ENCRYPT_MODE, secretKey()) }
+        val encrypted = cipher.iv + cipher.doFinal(value.toByteArray(Charsets.UTF_8))
+        prefs.edit().putString(key, Base64.encodeToString(encrypted, Base64.NO_WRAP)).apply()
+    }
+
+    override fun remove(key: String) {
+        prefs.edit().remove(key).apply()
+    }
+
+    private fun secretKey(): SecretKey {
+        val store = KeyStore.getInstance("AndroidKeyStore").apply { load(null) }
+        (store.getKey(ALIAS, null) as? SecretKey)?.let { return it }
+        val generator = KeyGenerator.getInstance("AES", "AndroidKeyStore")
+        generator.init(
+            android.security.keystore.KeyGenParameterSpec.Builder(
+                ALIAS,
+                android.security.keystore.KeyProperties.PURPOSE_ENCRYPT or android.security.keystore.KeyProperties.PURPOSE_DECRYPT,
+            )
+                .setBlockModes(android.security.keystore.KeyProperties.BLOCK_MODE_GCM)
+                .setEncryptionPaddings(android.security.keystore.KeyProperties.ENCRYPTION_PADDING_NONE)
+                .setKeySize(256)
+                .build(),
+        )
+        return generator.generateKey()
+    }
+
+    private companion object {
+        const val TAG = "SourceSettings"
+        const val ALIAS = "pagedrop_opds_credentials"
+        const val TRANSFORMATION = "AES/GCM/NoPadding"
+        const val IV_BYTES = 12
+    }
+}
+
+/**
+ * Which book sources are searched, and the user's own OPDS catalogs. No catalog is ever pre-filled.
+ * Passwords live in [KeystoreSecretStore]; everything else in private preferences.
+ */
+@Singleton
+class SourceSettings internal constructor(
+    private val prefs: SharedPreferences,
+    private val secrets: SecretStore,
+    private val http: DiscoverHttp,
+) {
+    @Inject
+    constructor(@ApplicationContext ctx: Context) : this(
+        ctx.getSharedPreferences("pagedrop_discover", Context.MODE_PRIVATE),
+        KeystoreSecretStore(ctx.getSharedPreferences("pagedrop_discover_secrets", Context.MODE_PRIVATE)),
+        OkHttpDiscoverHttp(),
+    )
+
+    private val _enabledBuiltIns = MutableStateFlow(loadBuiltIns())
+    val enabledBuiltIns: StateFlow<Set<SourceKind>> = _enabledBuiltIns.asStateFlow()
+
+    private val _catalogs = MutableStateFlow(loadCatalogs())
+    val catalogs: StateFlow<List<OpdsCatalog>> = _catalogs.asStateFlow()
+
+    private val lock = Any()
+
+    fun setEnabled(kind: SourceKind, on: Boolean) {
+        if (kind == SourceKind.OPDS) return // individual catalogs are toggled with setCatalogEnabled
+        synchronized(lock) {
+            val next = if (on) _enabledBuiltIns.value + kind else _enabledBuiltIns.value - kind
+            prefs.edit().putStringSet(KEY_BUILTINS, next.map { it.name }.toSet()).apply()
+            _enabledBuiltIns.value = next
+        }
+    }
+
+    /** Validates by fetching the catalog's root feed, then stores it. Failure messages are written for end users. */
+    suspend fun addCatalog(url: String, username: String?, password: String?): Result<OpdsCatalog> =
+        withContext(Dispatchers.IO) {
+            try {
+                Result.success(addCatalogBlocking(url, username, password))
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
+            } catch (e: SourceUnavailableException) {
+                Result.failure(e)
+            } catch (e: java.net.UnknownHostException) {
+                Result.failure(SourceUnavailableException("Can't reach that address. Check the URL and your connection.", offline = true, cause = e))
+            } catch (e: java.io.IOException) {
+                Result.failure(SourceUnavailableException("Couldn't connect to that catalog.", cause = e))
+            } catch (e: Exception) {
+                Result.failure(e)
+            }
+        }
+
+    private fun addCatalogBlocking(rawUrl: String, rawUser: String?, rawPassword: String?): OpdsCatalog {
+        val url = normalizeUrl(rawUrl) ?: throw SourceUnavailableException("Enter a catalog address like https://example.org/opds")
+        val user = rawUser?.trim()?.takeIf { it.isNotEmpty() }
+        val password = rawPassword?.takeIf { user != null && it.isNotEmpty() }
+        if (user != null && !url.startsWith("https://")) {
+            throw SourceUnavailableException("Use an https:// address when signing in, so your password isn't sent in the clear.")
+        }
+        val id = catalogId(url)
+        if (_catalogs.value.any { it.id == id }) throw SourceUnavailableException("That catalog is already added.")
+
+        val auth = if (user != null) BasicAuth(user, password.orEmpty()) else null
+        val reply = http.get(url, auth, "application/atom+xml, application/xml;q=0.9, */*;q=0.5")
+        if (reply.code == 401 || reply.code == 403) {
+            throw SourceUnavailableException(
+                if (auth == null) "This catalog needs a username and password." else "Sign-in was rejected. Check the username and password.",
+            )
+        }
+        if (!reply.ok) throw SourceUnavailableException("The catalog answered with an error (HTTP ${reply.code}).")
+        val feed = OpdsParser.parseFeed(reply.body, reply.finalUrl)
+        val title = feed.title?.takeIf { it.isNotBlank() } ?: url.toHttpUrlOrNull()?.host ?: "OPDS catalog"
+
+        if (password != null) {
+            try {
+                secrets.put(passwordKey(id), password)
+            } catch (e: Exception) {
+                throw SourceUnavailableException("Couldn't store the password securely on this device.", cause = e)
+            }
+        }
+        val catalog = OpdsCatalog(id, title, url, user, enabled = true)
+        synchronized(lock) { saveCatalogs(_catalogs.value + catalog) }
+        return catalog
+    }
+
+    fun removeCatalog(id: String) {
+        synchronized(lock) {
+            runCatching { secrets.remove(passwordKey(id)) }
+            saveCatalogs(_catalogs.value.filterNot { it.id == id })
+        }
+    }
+
+    fun setCatalogEnabled(id: String, on: Boolean) {
+        synchronized(lock) { saveCatalogs(_catalogs.value.map { if (it.id == id) it.copy(enabled = on) else it }) }
+    }
+
+    /**
+     * Credentials for one catalog, or null. When [forUrl] is given they are released only if it is on the catalog's
+     * own host, so a catalog entry can never make PageDrop send the password to a third-party site.
+     */
+    fun credentialsFor(id: String, forUrl: String? = null): BasicAuth? {
+        val catalog = _catalogs.value.firstOrNull { it.id == id } ?: return null
+        if (forUrl != null && forUrl.toHttpUrlOrNull()?.host != catalog.url.toHttpUrlOrNull()?.host) return null
+        val user = catalog.username ?: return null
+        val password = secrets.get(passwordKey(id)) ?: return null
+        return BasicAuth(user, password)
+    }
+
+    private fun passwordKey(id: String) = "pw_$id"
+
+    private fun loadBuiltIns(): Set<SourceKind> {
+        val stored = prefs.getStringSet(KEY_BUILTINS, null) ?: return DEFAULT_BUILTINS
+        return stored.mapNotNull { runCatching { SourceKind.valueOf(it) }.getOrNull() }
+            .filter { it != SourceKind.OPDS }.toSet()
+    }
+
+    private fun loadCatalogs(): List<OpdsCatalog> = try {
+        val raw = prefs.getString(KEY_CATALOGS, null) ?: "[]"
+        Json.parseToJsonElement(raw).jsonArray.mapNotNull { e ->
+            val o = e as? JsonObject ?: return@mapNotNull null
+            OpdsCatalog(
+                id = o["id"]?.jsonPrimitive?.contentOrNull ?: return@mapNotNull null,
+                title = o["title"]?.jsonPrimitive?.contentOrNull ?: return@mapNotNull null,
+                url = o["url"]?.jsonPrimitive?.contentOrNull ?: return@mapNotNull null,
+                username = o["username"]?.jsonPrimitive?.contentOrNull,
+                enabled = o["enabled"]?.jsonPrimitive?.booleanOrNull ?: true,
+            )
+        }
+    } catch (e: Exception) {
+        emptyList()
+    }
+
+    private fun saveCatalogs(list: List<OpdsCatalog>) {
+        val json = buildJsonArray {
+            list.forEach { c ->
+                add(buildJsonObject {
+                    put("id", c.id); put("title", c.title); put("url", c.url); put("enabled", c.enabled)
+                    c.username?.let { put("username", it) }
+                })
+            }
+        }.toString()
+        prefs.edit().putString(KEY_CATALOGS, json).apply()
+        _catalogs.value = list
+    }
+
+    internal companion object {
+        private const val KEY_BUILTINS = "enabled_builtins"
+        private const val KEY_CATALOGS = "catalogs"
+        val DEFAULT_BUILTINS = setOf(SourceKind.GUTENBERG, SourceKind.STANDARD_EBOOKS, SourceKind.INTERNET_ARCHIVE)
+
+        fun normalizeUrl(raw: String): String? {
+            var s = raw.trim()
+            if (s.isEmpty() || s.contains(' ')) return null
+            if (!s.contains("://")) s = "https://$s"
+            val parsed = s.toHttpUrlOrNull() ?: return null
+            return parsed.toString()
+        }
+
+        fun catalogId(url: String): String =
+            MessageDigest.getInstance("SHA-1").digest(url.lowercase().trimEnd('/').toByteArray())
+                .take(5).joinToString("") { "%02x".format(it) }
+    }
+}

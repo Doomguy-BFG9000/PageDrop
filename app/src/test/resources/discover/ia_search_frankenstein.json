@@ -1,0 +1,58 @@
+{
+ "responseHeader": {
+  "status": 0,
+  "QTime": 284,
+  "params": {
+   "query": "title:frankenstein AND mediatype:texts AND NOT collection:(inlibrary OR printdisabled OR lendinglibrary)",
+   "qin": "title:(frankenstein) AND mediatype:texts AND NOT collection:(inlibrary OR printdisabled OR lendinglibrary)",
+   "fields": "identifier,title,creator,year,language",
+   "wt": "json",
+   "sort": "downloads desc",
+   "rows": 20,
+   "start": 0
+  }
+ },
+ "response": {
+  "numFound": 377,
+  "start": 0,
+  "docs": [
+   {
+    "creator": "Mary Shelley",
+    "identifier": "Frankenstein1818Edition",
+    "title": "Frankenstein 1818 edition",
+    "year": 1818
+   },
+   {
+    "creator": "Shelley, Mary Wollstonecraft, 1797-1851",
+    "identifier": "ghostseer01schiuoft",
+    "language": "eng",
+    "title": "Frankenstein, or, The modern Prometheus",
+    "year": 1831
+   },
+   {
+    "creator": "Mary W. Shelley",
+    "identifier": "shelley-1888-frankenstein",
+    "title": "Frankenstein"
+   },
+   {
+    "creator": "Shelley, Mary Wollstonecraft, 1797-1851",
+    "identifier": "cu31924105428902",
+    "language": "eng",
+    "title": "Frankenstein; or, The modern Prometheus",
+    "year": 1869
+   },
+   {
+    "creator": "Mary Wollstonecraft Shelley",
+    "identifier": "frankensteinorm02shelgoog",
+    "language": "English",
+    "title": "Frankenstein: Or, The Modern Prometheus",
+    "year": 1888
+   },
+   {
+    "creator": "Mary Shelley, Standard eBooks",
+    "identifier": "mary-shelley_frankenstein",
+    "title": "Frankenstein by Mary Shelley"
+   }
+  ]
+ }
+}

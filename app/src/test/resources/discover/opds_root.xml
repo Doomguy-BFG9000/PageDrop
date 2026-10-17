@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<feed xmlns="http://www.w3.org/2005/Atom" xmlns:opds="http://opds-spec.org/2010/catalog" xmlns:opensearch="http://a9.com/-/spec/opensearch/1.1/">
+  <id>urn:example:root</id>
+  <title>Example Library</title>
+  <updated>2026-10-17T12:00:00Z</updated>
+  <link rel="self" type="application/atom+xml;profile=opds-catalog;kind=navigation" href="/opds/"/>
+  <link rel="start" type="application/atom+xml;profile=opds-catalog;kind=navigation" href="/opds/"/>
+  <link rel="search" type="application/opensearchdescription+xml" title="Search" href="/opds/osd.xml"/>
+  <entry>
+    <title>Newest books</title>
+    <id>urn:example:new</id>
+    <link rel="subsection" type="application/atom+xml;profile=opds-catalog;kind=acquisition" href="/opds/new"/>
+  </entry>
+</feed>

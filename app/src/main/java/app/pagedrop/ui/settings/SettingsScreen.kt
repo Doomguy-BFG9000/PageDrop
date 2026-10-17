@@ -10,6 +10,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Wifi
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -43,6 +44,7 @@ fun SettingsScreen(
     modifier: Modifier = Modifier,
     onBack: () -> Unit = {},
     onOpenConnection: () -> Unit = {},
+    onOpenBookSources: () -> Unit = {},
     viewModel: SettingsViewModel = hiltViewModel()
 ) {
     val state by viewModel.state.collectAsState()
@@ -78,6 +80,14 @@ fun SettingsScreen(
                 subtitle = state.kindleSummary,
                 icon = Icons.Default.Wifi,
                 onClick = onOpenConnection
+            )
+
+            SectionLabel("Find a book")
+            NavRow(
+                title = "Book sources",
+                subtitle = "Free libraries and your own OPDS catalogs",
+                icon = Icons.Default.Search,
+                onClick = onOpenBookSources
             )
 
             SectionLabel("Extra folders (optional)")

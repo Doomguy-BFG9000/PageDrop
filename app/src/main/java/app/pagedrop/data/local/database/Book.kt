@@ -56,6 +56,12 @@ interface BookDao {
     @Query("UPDATE book SET lastTransferred = :timestamp WHERE uid = :uid")
     suspend fun updateLastTransferred(uid: Int, timestamp: Long)
 
+    @Query("UPDATE book SET lastTransferred = :timestamp WHERE uid IN (:ids)")
+    suspend fun markTransferred(ids: List<Int>, timestamp: Long)
+
+    @Query("UPDATE book SET lastTransferred = NULL WHERE uid IN (:ids)")
+    suspend fun clearTransferred(ids: List<Int>)
+
     @Query("UPDATE book SET coverPath = :coverPath, kindleUuid = :kindleUuid WHERE uid = :uid")
     suspend fun updateCoverAndUuid(uid: Int, coverPath: String?, kindleUuid: String)
 

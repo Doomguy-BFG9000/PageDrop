@@ -10,15 +10,17 @@ import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Add
 import androidx.compose.material.icons.outlined.Link
 import androidx.compose.material3.AssistChip
 import androidx.compose.material3.AssistChipDefaults
 import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.ExtendedFloatingActionButton
-import androidx.compose.material3.FloatingActionButtonDefaults
+import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
@@ -40,6 +42,7 @@ import app.pagedrop.ui.components.OverBackgroundSurfaceAlpha
 /** Everything the library screen shows, as plain values and callbacks (preview friendly). */
 internal data class LibraryActions(
     val onAddBook: () -> Unit,
+    val onFindBook: () -> Unit,
     val onOpenArticle: () -> Unit,
     val onOpenSettings: () -> Unit,
     val onStatusClick: () -> Unit,
@@ -167,6 +170,7 @@ internal fun LibraryScreenContent(
                                 transferProgress = transferProgress,
                                 onStatusClick = actions.onStatusClick,
                                 onSetUp = actions.onSetUp,
+                                onFindBook = actions.onFindBook,
                                 onFilterChange = actions.onFilterChange,
                                 onViewModeChange = actions.onViewModeChange,
                                 modifier = Modifier.padding(horizontal = 16.dp),
@@ -174,6 +178,7 @@ internal fun LibraryScreenContent(
                             )
                             EmptyLibraryState(
                                 onAddBook = actions.onAddBook,
+                                onFindBook = actions.onFindBook,
                                 modifier = Modifier.weight(1f).fillMaxWidth(),
                             )
                         }
@@ -199,6 +204,7 @@ internal fun LibraryScreenContent(
                                     transferProgress = transferProgress,
                                     onStatusClick = actions.onStatusClick,
                                     onSetUp = actions.onSetUp,
+                                onFindBook = actions.onFindBook,
                                     onFilterChange = actions.onFilterChange,
                                     onViewModeChange = actions.onViewModeChange,
                                 )
@@ -251,7 +257,7 @@ internal fun LibraryScreenContent(
     }
 }
 
-/** Extended "Add book" button with a small labelled "Send article from URL" action above it. */
+/** Secondary "Add file" button with a small labelled "Send article from URL" action above it. */
 @Composable
 private fun AddFab(onAddBook: () -> Unit, onOpenArticle: () -> Unit) {
     Column(horizontalAlignment = Alignment.End, verticalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -265,14 +271,15 @@ private fun AddFab(onAddBook: () -> Unit, onOpenArticle: () -> Unit) {
             ),
             border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
         )
-        ExtendedFloatingActionButton(
+        OutlinedButton(
             onClick = onAddBook,
-            icon = { Icon(Icons.Outlined.Add, contentDescription = null) },
-            text = { Text("Add book") },
             shape = MaterialTheme.shapes.small,
-            containerColor = MaterialTheme.colorScheme.primary,
-            contentColor = MaterialTheme.colorScheme.onPrimary,
-            elevation = FloatingActionButtonDefaults.elevation(0.dp, 0.dp, 0.dp, 0.dp),
-        )
+            colors = ButtonDefaults.outlinedButtonColors(containerColor = MaterialTheme.colorScheme.surface),
+            border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
+        ) {
+            Icon(Icons.Outlined.Add, contentDescription = null, modifier = Modifier.size(18.dp))
+            Spacer(Modifier.width(8.dp))
+            Text("Add file")
+        }
     }
 }

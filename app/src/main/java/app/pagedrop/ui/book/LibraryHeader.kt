@@ -9,12 +9,14 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Close
+import androidx.compose.material.icons.outlined.Search
 import androidx.compose.material.icons.outlined.GridView
 import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material.icons.automirrored.outlined.ViewList
@@ -27,6 +29,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
@@ -38,6 +41,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import app.pagedrop.ui.components.HairlineCard
 import app.pagedrop.ui.components.OverBackgroundSurfaceAlpha
+import app.pagedrop.ui.theme.BookSerif
 
 /** "PageDrop" with a gear; transparent so the background image shows through. */
 @OptIn(ExperimentalMaterial3Api::class)
@@ -140,6 +144,31 @@ internal fun NotConnectedBanner(onSetUp: () -> Unit, modifier: Modifier = Modifi
     }
 }
 
+/** Primary entry point: looks like a search field, opens the Find screen when tapped. */
+@Composable
+internal fun SearchEntryField(onClick: () -> Unit, modifier: Modifier = Modifier) {
+    Surface(
+        onClick = onClick,
+        modifier = modifier.fillMaxWidth().heightIn(min = 52.dp),
+        shape = MaterialTheme.shapes.small,
+        color = MaterialTheme.colorScheme.surface.copy(alpha = OverBackgroundSurfaceAlpha),
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
+    ) {
+        Row(
+            Modifier.padding(horizontal = 16.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            Icon(Icons.Outlined.Search, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text(
+                "Search for a book…",
+                style = MaterialTheme.typography.bodyLarge.copy(fontFamily = BookSerif),
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+    }
+}
+
 /** Status chip row, filter chips, List/Grid toggle and the "converting" strip. */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -151,12 +180,14 @@ internal fun LibraryHeader(
     transferProgress: BookViewModel.TransferState.Progress?,
     onStatusClick: () -> Unit,
     onSetUp: () -> Unit,
+    onFindBook: () -> Unit,
     onFilterChange: (LibraryFilter) -> Unit,
     onViewModeChange: (LibraryViewMode) -> Unit,
     modifier: Modifier = Modifier,
     showControls: Boolean = true,
 ) {
     Column(modifier = modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        SearchEntryField(onClick = onFindBook)
         KindleStatusChip(
             status = kindleStatus,
             onClick = if (kindleStatus == KindleStatus.NotConfigured) onSetUp else onStatusClick,

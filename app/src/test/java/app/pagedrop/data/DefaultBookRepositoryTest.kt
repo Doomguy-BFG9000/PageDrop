@@ -113,6 +113,8 @@ private class FakeBookDao : BookDao {
 
     override suspend fun deleteBook(item: Book) {}
 
+    override suspend fun markTransferred(ids: List<Int>, timestamp: Long) {}
+    override suspend fun clearTransferred(ids: List<Int>) {}
     override suspend fun updateLastTransferred(uid: Int, timestamp: Long) {
         lastTransferredUid = uid
         transferredUids.add(uid)

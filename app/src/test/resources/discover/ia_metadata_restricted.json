@@ -1,0 +1,27 @@
+{
+ "server": "ia800000.us.archive.org",
+ "dir": "/0/items/bwb_T5-CVH-698",
+ "metadata": {
+  "identifier": "bwb_T5-CVH-698",
+  "mediatype": "texts",
+  "collection": [
+   "internetarchivebooks",
+   "printdisabled",
+   "inlibrary"
+  ],
+  "access-restricted-item": "true",
+  "title": "The great Gatsby"
+ },
+ "files": [
+  {
+   "name": "bwb_T5-CVH-698.epub",
+   "format": "EPUB",
+   "size": "123456"
+  },
+  {
+   "name": "bwb_T5-CVH-698.pdf",
+   "format": "Text PDF",
+   "size": "7654321"
+  }
+ ]
+}

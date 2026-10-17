@@ -21,6 +21,7 @@ import android.provider.OpenableColumns
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.layout.Box
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.SnackbarDuration
@@ -45,6 +46,7 @@ import androidx.lifecycle.compose.LifecycleEventEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import app.pagedrop.data.DefaultBookRepository
 import app.pagedrop.data.local.database.Book
+import app.pagedrop.ui.discover.FindScreen
 import java.io.File
 
 /**
@@ -58,6 +60,7 @@ fun BookScreen(
     onOpenSettings: () -> Unit,
     onOpenConnectionSetup: () -> Unit,
     onOpenArticle: () -> Unit,
+    onOpenBookSources: () -> Unit = {},
     viewModel: BookViewModel = hiltViewModel(),
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
@@ -81,12 +84,13 @@ fun BookScreen(
     var pendingAdd by remember { mutableStateOf<PendingAdd?>(null) }
     var deleteTargets by remember { mutableStateOf<List<Book>?>(null) }
     var coverUri by remember { mutableStateOf<Uri?>(null) }
+    var showFind by rememberSaveable { mutableStateOf(false) }
 
     val selectionMode = selectedIds.isNotEmpty()
     val transferProgress = transferState as? BookViewModel.TransferState.Progress
 
     LifecycleEventEffect(Lifecycle.Event.ON_RESUME) { viewModel.refreshKindleStatus() }
-    BackHandler(enabled = selectionMode) { selectedIds = emptySet() }
+    BackHandler(enabled = selectionMode && !showFind) { selectedIds = emptySet() }
 
     val coverPicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         if (uri != null) coverUri = uri
@@ -318,6 +322,7 @@ fun BookScreen(
         )
     }
 
+    Box(modifier = modifier) {
     LibraryScreenContent(
         uiState = uiState,
         kindleStatus = kindleStatus,
@@ -330,9 +335,10 @@ fun BookScreen(
         isSending = transferProgress != null,
         transferProgress = transferProgress,
         snackbarHostState = snackbarHostState,
-        modifier = modifier,
+        modifier = Modifier,
         actions = LibraryActions(
             onAddBook = launchAddBook,
+            onFindBook = { showFind = true },
             onOpenArticle = onOpenArticle,
             onOpenSettings = onOpenSettings,
             onStatusClick = onOpenKindle,
@@ -355,6 +361,19 @@ fun BookScreen(
             onDeleteSelected = { deleteTargets = books.filter { filter.matches(it) && it.uid in selectedIds } },
         ),
     )
+    if (showFind) {
+        // Overlay (not a separate destination) so a finished "Send to Kindle" goes straight
+        // through this screen's own send flow and progress/snackbars.
+        FindScreen(
+            onBack = { showFind = false },
+            onSendBook = { book ->
+                showFind = false
+                viewModel.sendBooks(listOf(book))
+            },
+            onOpenSources = { showFind = false; onOpenBookSources() },
+        )
+    }
+    }
 }
 
 private fun Set<Int>.toggle(id: Int): Set<Int> = if (id in this) this - id else this + id

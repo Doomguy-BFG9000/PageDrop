@@ -31,3 +31,7 @@ data object Articles : NavKey
 
 @Serializable
 data object Connection : NavKey
+
+/** Settings -> Book sources (built-in catalogs and OPDS). */
+@Serializable
+data object BookSources : NavKey

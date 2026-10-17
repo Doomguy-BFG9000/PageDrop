@@ -2,6 +2,7 @@ package app.pagedrop.transfer.sftp
 
 import android.util.Log
 import app.pagedrop.data.local.database.Book
+import app.pagedrop.tools.dashboard.DeviceCommandRunner
 import com.jcraft.jsch.ChannelExec
 import com.jcraft.jsch.ChannelSftp
 import com.jcraft.jsch.JSch
@@ -166,13 +167,8 @@ object KindleSftpClient {
                 onProgress(books.size, books.size, "Requesting Kindle library refresh...")
                 val execChannel = session.openChannel("exec") as ChannelExec
                 execChannel.setCommand(
-                    "if initctl status framework 2>/dev/null | grep -q 'start/running'; then " +
-                        "if lipc-probe -l 2>/dev/null | grep -q 'com.lab126.amznAssetsMgrService'; then " +
-                        "lipc-set-prop com.lab126.amznAssetsMgrService reScan 1; " +
-                        "else lipc-set-prop -i com.lab126.indexer updateIndexerState 1; fi; " +
-                        "fi; " +
-                        // Firmware 5.x rescans documents/ on a simulated resume; it is deferred while KOReader runs.
-                        "dbus-send --system /default com.lab126.powerd.resuming int32:1 2>/dev/null; true"
+                    // Firmware 5.x rescans documents/ on a simulated resume; shared fallback chain tries all methods.
+                    DeviceCommandRunner.RESCAN_FALLBACK_SCRIPT + "; true"
                 )
                 execChannel.connect()
                 var elapsed = 0

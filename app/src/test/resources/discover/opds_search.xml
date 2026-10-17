@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="utf-8"?>
+<feed xmlns="http://www.w3.org/2005/Atom" xmlns:dc="http://purl.org/dc/terms/" xmlns:opds="http://opds-spec.org/2010/catalog">
+  <id>urn:example:search</id>
+  <title>Search results</title>
+  <updated>2026-10-17T12:00:00Z</updated>
+  <entry>
+    <title>Frankenstein; Or, The Modern Prometheus</title>
+    <id>urn:example:book:84</id>
+    <author><name>Mary Wollstonecraft Shelley</name></author>
+    <dc:issued>1818-01-01</dc:issued>
+    <dc:language>en</dc:language>
+    <summary type="html">&lt;p&gt;A tale of &lt;b&gt;ambition&lt;/b&gt;.&lt;/p&gt;</summary>
+    <link rel="http://opds-spec.org/image" type="image/jpeg" href="/covers/84.jpg"/>
+    <link rel="http://opds-spec.org/image/thumbnail" type="image/jpeg" href="/covers/84-thumb.jpg"/>
+    <link rel="http://opds-spec.org/acquisition/open-access" type="application/epub+zip" href="/files/84.epub" length="474733"/>
+    <link rel="http://opds-spec.org/acquisition/open-access" type="application/x-mobipocket-ebook" href="/files/84.mobi"/>
+    <link rel="http://opds-spec.org/acquisition/buy" type="application/epub+zip" href="/buy/84"/>
+    <link rel="http://opds-spec.org/acquisition/sample" type="application/epub+zip" href="/sample/84"/>
+    <link rel="alternate" type="text/html" href="/book/84"/>
+  </entry>
+  <entry>
+    <title>A Catalog Folder</title>
+    <id>urn:example:folder</id>
+    <link rel="subsection" type="application/atom+xml;profile=opds-catalog" href="/opds/folder"/>
+  </entry>
+  <entry>
+    <title>Comic Only</title>
+    <id>urn:example:comic</id>
+    <author><name>Someone</name></author>
+    <link rel="http://opds-spec.org/acquisition" type="application/x-cbz" href="/files/comic.cbz"/>
+  </entry>
+  <entry>
+    <title>Plain PDF Book</title>
+    <id>urn:example:pdf</id>
+    <link rel="http://opds-spec.org/acquisition" type="application/pdf" href="https://files.example.org/book.pdf"/>
+  </entry>
+</feed>

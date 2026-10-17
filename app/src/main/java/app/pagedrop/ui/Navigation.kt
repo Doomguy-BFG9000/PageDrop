@@ -16,6 +16,11 @@
 
 package app.pagedrop.ui
 
+import androidx.compose.animation.ContentTransform
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.safeDrawingPadding
@@ -29,6 +34,7 @@ import androidx.navigation3.runtime.rememberNavBackStack
 import androidx.navigation3.ui.NavDisplay
 import app.pagedrop.ui.connection.ConnectionScreen
 import app.pagedrop.ui.onboarding.SetupScreen
+import app.pagedrop.ui.settings.BookSourcesScreen
 import app.pagedrop.ui.settings.SettingsScreen
 import app.pagedrop.ui.shell.MainShell
 import app.pagedrop.ui.shell.ShellViewModel
@@ -37,6 +43,9 @@ import app.pagedrop.ui.tools.dictionaries.DictionariesScreen
 import app.pagedrop.ui.tools.fonts.FontsScreen
 import app.pagedrop.ui.tools.screensavers.ScreensaverScreen
 import app.pagedrop.ui.tools.sync.SyncScreen
+
+private val fadeOnly: ContentTransform =
+    fadeIn(tween(120)) togetherWith fadeOut(tween(120))
 
 /**
  * Navigation map:
@@ -55,6 +64,10 @@ fun MainNavigation(shellViewModel: ShellViewModel = hiltViewModel()) {
     NavDisplay(
         backStack = backStack,
         onBack = { pop() },
+        // Plain, quick cross-fade everywhere (e-ink friendly): no slide, and no scale-down on back.
+        transitionSpec = { fadeOnly },
+        popTransitionSpec = { fadeOnly },
+        predictivePopTransitionSpec = { fadeOnly },
         entryProvider = entryProvider {
             entry<Main> {
                 MainShell(
@@ -65,7 +78,8 @@ fun MainNavigation(shellViewModel: ShellViewModel = hiltViewModel()) {
                     onOpenArticle = { push(Articles) },
                     onOpenScreensaver = { push(Screensaver) },
                     onOpenFonts = { push(Fonts) },
-                    onOpenDictionaries = { push(Dictionaries) }
+                    onOpenDictionaries = { push(Dictionaries) },
+                    onOpenBookSources = { push(BookSources) }
                 )
             }
             entry<Setup> {
@@ -90,9 +104,11 @@ fun MainNavigation(shellViewModel: ShellViewModel = hiltViewModel()) {
                 SettingsScreen(
                     modifier = Modifier.safeDrawingPadding(),
                     onBack = pop,
-                    onOpenConnection = { push(Connection) }
+                    onOpenConnection = { push(Connection) },
+                    onOpenBookSources = { push(BookSources) }
                 )
             }
+            entry<BookSources> { BookSourcesScreen(Modifier.safeDrawingPadding(), onBack = pop) }
             entry<Screensaver> { ScreensaverScreen(Modifier.safeDrawingPadding(), onBack = pop) }
             entry<Fonts> { FontsScreen(Modifier.safeDrawingPadding(), onBack = pop) }
             entry<Dictionaries> { DictionariesScreen(Modifier.safeDrawingPadding(), onBack = pop) }

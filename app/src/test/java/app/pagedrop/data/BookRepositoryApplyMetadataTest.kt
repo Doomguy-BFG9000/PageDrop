@@ -24,6 +24,8 @@ class BookRepositoryApplyMetadataTest {
         override suspend fun getBookById(uid: Int): Book? = null
         override suspend fun insertBook(item: Book): Long { calls += "insert:${item.uid}:${item.fileName}:${item.title}"; return item.uid.toLong() }
         override suspend fun deleteBook(item: Book) { calls += "delete:${item.uid}" }
+        override suspend fun markTransferred(ids: List<Int>, timestamp: Long) {}
+        override suspend fun clearTransferred(ids: List<Int>) {}
         override suspend fun updateLastTransferred(uid: Int, timestamp: Long) {}
         override suspend fun updateCoverAndUuid(uid: Int, coverPath: String?, kindleUuid: String) {}
         override suspend fun updateMetadata(uid: Int, title: String, author: String, coverPath: String?) { calls += "update:$uid:$title:$author" }

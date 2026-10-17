@@ -109,3 +109,52 @@ class DeviceCommandRunnerTest {
         }
     }
 }
+
+class LibraryScanParsingTest {
+    @Test
+    fun parsesFullOutput() {
+        val out = """
+            lipc-set-prop: lipcErrNoSuchSource (exit 3)
+            RESCAN|resume-signal
+            KOREADER|1
+            FILE|1234|/mnt/us/documents/The Hunger Games.mobi
+            FILE|99|/mnt/us/Books/a|b.pdf
+            DONE
+        """.trimIndent()
+        val scan = DeviceCommandRunner.parseLibraryScan(out)!!
+        assertEquals("resume-signal", scan.rescanMethod)
+        assertTrue(scan.koreaderRunning)
+        assertEquals(2, scan.files.size)
+        assertEquals("/mnt/us/documents", scan.files[0].folder)
+        assertEquals("The Hunger Games.mobi", scan.files[0].name)
+        assertEquals(1234L, scan.files[0].sizeBytes)
+        assertEquals("a|b.pdf", scan.files[1].name)
+    }
+
+    @Test
+    fun noRescanMethodIsNotAnError() {
+        val scan = DeviceCommandRunner.parseLibraryScan("RESCAN|none\nKOREADER|0\nDONE")!!
+        assertEquals(null, scan.rescanMethod)
+        assertFalse(scan.koreaderRunning)
+        assertTrue(scan.files.isEmpty())
+    }
+
+    @Test
+    fun incompleteOutputIsNull() {
+        assertEquals(null, DeviceCommandRunner.parseLibraryScan("RESCAN|none\nKOREADER|0"))
+    }
+
+    @Test
+    fun kualAndClippingsAreNotBooks() {
+        val scan = DeviceCommandRunner.parseLibraryScan(
+            "KOREADER|0\nFILE|5|/mnt/us/documents/KUAL-KDK-2.0.azw2\nFILE|5|/mnt/us/documents/My Clippings.txt\nDONE"
+        )!!
+        assertTrue(scan.files.none { it.isBook })
+    }
+
+    @Test
+    fun sharedRescanScriptUsedByTransferAndCheck() {
+        assertTrue(DeviceCommandRunner.LIBRARY_CHECK_SCRIPT.contains(DeviceCommandRunner.RESCAN_FALLBACK_SCRIPT))
+        assertTrue(DeviceCommandRunner.RESCAN_FALLBACK_SCRIPT.contains("powerd.resuming"))
+    }
+}

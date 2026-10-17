@@ -19,6 +19,7 @@ import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Sync
 import androidx.compose.material.icons.filled.Wifi
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -43,6 +44,7 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.dp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import app.pagedrop.tools.dashboard.DeviceCommandRunner
+import app.pagedrop.transfer.sftp.KindleSftpClient
 import app.pagedrop.ui.connection.ConnectionHints
 import app.pagedrop.ui.shell.HairlineCard
 import app.pagedrop.ui.shell.InkButton
@@ -96,6 +98,8 @@ fun KindleScreen(
             StatusCard(state, viewModel.host, viewModel.port, onRefresh = viewModel::refresh, onSetup = onOpenSetup)
 
             if (state.isConfigured) {
+                LibraryCheckCard(state, viewModel.port)
+
                 state.lastResult?.let { result ->
                     val ok = result.exitCode == 0
                     ResultBanner(
@@ -107,7 +111,12 @@ fun KindleScreen(
 
                 SectionLabel("Actions")
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                    OutlineButton("Rescan library", viewModel::triggerRescan, Modifier.weight(1f), enabled = state.reachable == true)
+                    OutlineButton(
+                        if (state.isChecking) "Checking..." else "Check Kindle library",
+                        viewModel::triggerRescan,
+                        Modifier.weight(1f),
+                        enabled = state.reachable == true && !state.isChecking
+                    )
                     OutlineButton("Restart Kindle", { confirmReboot = true }, Modifier.weight(1f), enabled = state.reachable == true)
                 }
             }
@@ -161,6 +170,84 @@ fun KindleScreen(
             dismissButton = { TextButton(onClick = { confirmRepair = null }) { Text("Cancel") } }
         )
     }
+}
+
+@Composable
+private fun LibraryCheckCard(state: DashboardViewModel.DashboardState, port: Int) {
+    val report = state.libraryReport
+    val error = state.libraryError
+    if (!state.isChecking && report == null && error == null) return
+    var expanded by remember { mutableStateOf(false) }
+    HairlineCard(Modifier.fillMaxWidth()) {
+        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            when {
+                state.isChecking -> Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    CircularProgressIndicator(Modifier.size(20.dp), strokeWidth = 2.dp)
+                    Text("Checking what's on your Kindle...", style = MaterialTheme.typography.bodyMedium)
+                }
+                error != null -> {
+                    val hint = ConnectionHints.explain(error, port)
+                    Text(hint.title, style = MaterialTheme.typography.titleSmall)
+                    Text(hint.fix, style = MaterialTheme.typography.bodySmall)
+                }
+                report != null -> {
+                    val books = if (report.bookCount == 1) "1 book" else "${report.bookCount} books"
+                    Text(
+                        "$books on your Kindle \u00b7 ${report.pageDropCount} from PageDrop",
+                        style = MaterialTheme.typography.titleSmall
+                    )
+                    if (report.rescanMethod != null) {
+                        Text("Asked the Kindle to refresh its home screen.", style = MaterialTheme.typography.bodySmall)
+                    }
+                    if (report.koreaderRunning) {
+                        Text(
+                            "Close KOReader to see new books on the Kindle home screen.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                    if (report.files.isNotEmpty()) {
+                        TextButton(onClick = { expanded = !expanded }) {
+                            Text(if (expanded) "Hide \"On your Kindle\"" else "On your Kindle", color = MaterialTheme.colorScheme.onSurface)
+                        }
+                    }
+                    if (expanded) {
+                        FileGroup("Home screen (documents)", report.files.filter { it.path.startsWith(KindleSftpClient.KINDLE_HOME_DIR) }, report)
+                        FileGroup("KOReader (Books)", report.files.filter { !it.path.startsWith(KindleSftpClient.KINDLE_HOME_DIR) }, report)
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun FileGroup(title: String, files: List<DeviceCommandRunner.KindleFile>, report: KindleLibraryReport) {
+    if (files.isEmpty()) return
+    Text(title, style = MaterialTheme.typography.labelLarge)
+    files.sortedBy { it.name.lowercase() }.forEach { f ->
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Text(
+                f.name + if (f.path in report.pageDropPaths) "  \u2022 PageDrop" else "",
+                style = MaterialTheme.typography.bodySmall,
+                modifier = Modifier.weight(1f)
+            )
+            Text(
+                formatSize(f.sizeBytes),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+    }
+}
+
+internal fun formatSize(bytes: Long): String = when {
+    bytes >= 1_048_576 -> String.format(java.util.Locale.US, "%.1f MB", bytes / 1_048_576.0)
+    bytes >= 1024 -> "${bytes / 1024} KB"
+    else -> "$bytes B"
 }
 
 @Composable

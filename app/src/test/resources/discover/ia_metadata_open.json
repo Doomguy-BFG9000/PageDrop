@@ -1,0 +1,70 @@
+{
+ "d1": "ia600808.us.archive.org",
+ "d2": "ia800808.us.archive.org",
+ "dir": "/9/items/ghostseer01schiuoft",
+ "files": [
+  {
+   "name": "ghostseer01schiuoft.epub",
+   "source": "derivative",
+   "original": "ghostseer01schiuoft_abbyy.gz",
+   "mtime": "1699596433",
+   "size": "2012388",
+   "md5": "3e456ea1ddd67d02494307364beb003a",
+   "crc32": "c788e1e9",
+   "sha1": "692b120af2c577162d0eb58dd0ff9fb6c1d8d67a",
+   "format": "EPUB"
+  },
+  {
+   "name": "ghostseer01schiuoft.pdf",
+   "source": "derivative",
+   "format": "Text PDF",
+   "original": "ghostseer01schiuoft_page_numbers.json",
+   "mtime": "1699757272",
+   "size": "20281073",
+   "md5": "75608da0c7a34d3e5e2eec7046894c41",
+   "crc32": "d64f3163",
+   "sha1": "549812a71d0ba9ef5a5cde3228f10a5913e1ff3c"
+  },
+  {
+   "name": "ghostseer01schiuoft_abbyy.gz",
+   "source": "derivative",
+   "format": "Abbyy GZ",
+   "original": "ghostseer01schiuoft_jp2.zip",
+   "md5": "846994091426e1b6b220372970686c76",
+   "mtime": "1164071723",
+   "size": "11675765",
+   "crc32": "bf3dbf12",
+   "sha1": "b994098d3ba12afaac71ec4b12a7c76c0d7eee67"
+  },
+  {
+   "name": "ghostseer01schiuoft_bw.pdf",
+   "source": "derivative",
+   "format": "Grayscale PDF",
+   "original": "ghostseer01schiuoft_page_numbers.json",
+   "mtime": "1699757272",
+   "size": "15991463",
+   "md5": "f96228b078eb18847ee0807d54a245f4",
+   "crc32": "48bf1c6d",
+   "sha1": "a8fb9ff17c1b29371053215b13b12fe119cdd9fe"
+  }
+ ],
+ "metadata": {
+  "identifier": "ghostseer01schiuoft",
+  "title": "Frankenstein, or, The modern Prometheus",
+  "creator": "Shelley, Mary Wollstonecraft, 1797-1851",
+  "mediatype": "texts",
+  "date": "1831",
+  "language": "eng",
+  "collection": [
+   "robarts",
+   "sciencefiction",
+   "toronto",
+   "university_of_toronto"
+  ]
+ },
+ "server": "ia600808.us.archive.org",
+ "workable_servers": [
+  "ia600808.us.archive.org",
+  "ia800808.us.archive.org"
+ ]
+}

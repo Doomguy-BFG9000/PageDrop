@@ -15,6 +15,7 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -24,7 +25,7 @@ import app.pagedrop.ui.components.HairlineCard
 
 /** Centred over the background when there are no books at all. */
 @Composable
-internal fun EmptyLibraryState(onAddBook: () -> Unit, modifier: Modifier = Modifier) {
+internal fun EmptyLibraryState(onAddBook: () -> Unit, onFindBook: () -> Unit, modifier: Modifier = Modifier) {
     Column(
         modifier = modifier.padding(horizontal = 24.dp),
         verticalArrangement = Arrangement.Center,
@@ -49,14 +50,17 @@ internal fun EmptyLibraryState(onAddBook: () -> Unit, modifier: Modifier = Modif
                 )
                 Spacer(Modifier.height(8.dp))
                 Text(
-                    text = "Add a book, or share a file to PageDrop from any app",
+                    text = "Search for a book above, or add a file you already have",
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     textAlign = TextAlign.Center,
                 )
                 Spacer(Modifier.height(24.dp))
-                Button(onClick = onAddBook, modifier = Modifier.heightIn(min = 48.dp)) {
-                    Text("Add book")
+                Button(onClick = onFindBook, modifier = Modifier.heightIn(min = 48.dp)) {
+                    Text("Find a book")
+                }
+                TextButton(onClick = onAddBook, modifier = Modifier.heightIn(min = 48.dp)) {
+                    Text("Add file")
                 }
             }
         }

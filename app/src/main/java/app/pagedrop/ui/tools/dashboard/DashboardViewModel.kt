@@ -3,6 +3,10 @@ package app.pagedrop.ui.tools.dashboard
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import app.pagedrop.data.KindleSettings
+import app.pagedrop.data.local.database.BookDao
+import app.pagedrop.ui.kindle.KindleLibraryMatcher
+import app.pagedrop.ui.kindle.KindleLibraryReport
+import kotlinx.coroutines.flow.first
 import app.pagedrop.tools.dashboard.DeviceCommandRunner
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -18,7 +22,8 @@ import javax.inject.Inject
 
 @HiltViewModel
 class DashboardViewModel @Inject constructor(
-    private val kindleSettings: KindleSettings
+    private val kindleSettings: KindleSettings,
+    private val bookDao: BookDao
 ) : ViewModel() {
 
     data class DashboardState(
@@ -30,7 +35,12 @@ class DashboardViewModel @Inject constructor(
         val reachable: Boolean? = null,
         val isConfigured: Boolean = true,
         /** The real exception from the TCP probe when [reachable] is false. */
-        val probeError: Throwable? = null
+        val probeError: Throwable? = null,
+        /** True while "Check Kindle library" is running. */
+        val isChecking: Boolean = false,
+        val libraryReport: KindleLibraryReport? = null,
+        /** Real failure (unreachable / auth) from the last library check. */
+        val libraryError: Throwable? = null
     )
 
     private val _state = MutableStateFlow(DashboardState())
@@ -89,12 +99,29 @@ class DashboardViewModel @Inject constructor(
     }
 
     fun triggerRescan() {
+        if (_state.value.isChecking) return
         viewModelScope.launch {
-            val result = DeviceCommandRunner.triggerRescan(
+            _state.update { it.copy(isChecking = true, libraryError = null) }
+            val result = DeviceCommandRunner.refreshKindleLibrary(
                 kindleSettings.host, kindleSettings.port,
                 kindleSettings.username, kindleSettings.password
             )
-            _state.update { it.copy(lastResult = result, error = result.stderr.ifBlank { null }) }
+            val scan = result.getOrNull()
+            if (scan == null) {
+                _state.update { it.copy(isChecking = false, libraryError = result.exceptionOrNull()) }
+                return@launch
+            }
+            val report = try {
+                val books = bookDao.getBooks().first()
+                val matches = KindleLibraryMatcher.matchBooks(books, scan.files)
+                val changes = KindleLibraryMatcher.reconcile(books, matches, System.currentTimeMillis())
+                if (changes.markTransferred.isNotEmpty()) bookDao.markTransferred(changes.markTransferred, changes.timestamp)
+                if (changes.clearTransferred.isNotEmpty()) bookDao.clearTransferred(changes.clearTransferred)
+                KindleLibraryMatcher.report(scan, matches)
+            } catch (e: Exception) {
+                KindleLibraryMatcher.report(scan, emptyMap())
+            }
+            _state.update { it.copy(isChecking = false, libraryReport = report, libraryError = null) }
         }
     }
 
