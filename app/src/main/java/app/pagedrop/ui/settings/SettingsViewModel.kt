@@ -5,6 +5,7 @@ import androidx.lifecycle.viewModelScope
 import app.pagedrop.data.KindleSettings
 import app.pagedrop.server.PageDropApiClient
 import app.pagedrop.server.ServerSettings
+import app.pagedrop.server.ServerUploadConsent
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -17,7 +18,8 @@ import javax.inject.Inject
 class SettingsViewModel @Inject constructor(
     private val kindleSettings: KindleSettings,
     private val serverSettings: ServerSettings,
-    private val pageDropApiClient: PageDropApiClient
+    private val pageDropApiClient: PageDropApiClient,
+    private val uploadConsent: ServerUploadConsent,
 ) : ViewModel() {
 
     data class SettingsState(
@@ -73,7 +75,8 @@ class SettingsViewModel @Inject constructor(
     }
 
     fun updateUseServer(value: Boolean) {
-        serverSettings.useServer = value
+        // The switch's description explains the upload, so flipping it also answers the first-upload notice.
+        uploadConsent.answer(value)
         _state.update { it.copy(useServer = value, serverTestResult = null) }
     }
 

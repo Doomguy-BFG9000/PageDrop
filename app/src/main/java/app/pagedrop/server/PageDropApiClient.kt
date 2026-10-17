@@ -27,6 +27,7 @@ import javax.inject.Singleton
 @Singleton
 class PageDropApiClient @Inject constructor(
     private val serverSettings: ServerSettings,
+    private val uploadConsent: ServerUploadConsent,
     @ApplicationContext private val context: Context
 ) {
     companion object {
@@ -445,7 +446,9 @@ class PageDropApiClient @Inject constructor(
     suspend fun shouldUseServer(format: String): Boolean {
         if (!serverSettings.isConfigured) return false
         val nativeFormats = setOf("AZW3", "MOBI", "PRC")
-        return format.uppercase() !in nativeFormats
+        if (format.uppercase() in nativeFormats) return false
+        // Before the first book upload the user is told what is sent and may choose on-phone conversion instead.
+        return uploadConsent.confirm()
     }
 }
 

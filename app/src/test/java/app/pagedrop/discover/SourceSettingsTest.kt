@@ -46,6 +46,16 @@ class SourceSettingsTest {
     }
 
     @Test
+    fun shadowLibraryShortcutsAreOffByDefaultAndTogglePersists() {
+        val prefs = app.pagedrop.data.NullSharedPreferences()
+        val s1 = SourceSettings(prefs, MemorySecrets(), FakeHttp())
+        assertFalse(s1.showShadowLibraries.value)
+        s1.setShowShadowLibraries(true)
+        assertTrue(s1.showShadowLibraries.value)
+        assertTrue(SourceSettings(prefs, MemorySecrets(), FakeHttp()).showShadowLibraries.value)
+    }
+
+    @Test
     fun noCatalogsArePrefilled() {
         assertTrue(newSettings().catalogs.value.isEmpty())
     }

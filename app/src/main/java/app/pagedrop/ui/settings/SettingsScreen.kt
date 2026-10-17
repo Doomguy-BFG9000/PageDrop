@@ -142,11 +142,17 @@ fun SettingsScreen(
                     )
                     if (state.serverAvailable) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
-                            Text(
-                                "Use PageDrop conversion server",
-                                style = MaterialTheme.typography.bodyMedium,
-                                modifier = Modifier.weight(1f)
-                            )
+                            Column(Modifier.weight(1f)) {
+                                Text(
+                                    "Use PageDrop conversion server",
+                                    style = MaterialTheme.typography.bodyMedium
+                                )
+                                Text(
+                                    SERVER_UPLOAD_SUMMARY,
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
                             Switch(checked = state.useServer, onCheckedChange = viewModel::updateUseServer)
                         }
                         if (!state.useServer) {

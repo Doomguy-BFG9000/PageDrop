@@ -21,6 +21,7 @@ class BookSourcesViewModel @Inject constructor(
 
     val enabledBuiltIns: StateFlow<Set<SourceKind>> = settings.enabledBuiltIns
     val catalogs: StateFlow<List<OpdsCatalog>> = settings.catalogs
+    val showShadowLibraries: StateFlow<Boolean> = settings.showShadowLibraries
 
     data class AddState(val adding: Boolean = false, val error: String? = null)
 
@@ -28,6 +29,8 @@ class BookSourcesViewModel @Inject constructor(
     val add: StateFlow<AddState> = _add.asStateFlow()
 
     fun setEnabled(kind: SourceKind, on: Boolean) = settings.setEnabled(kind, on)
+
+    fun setShowShadowLibraries(on: Boolean) = settings.setShowShadowLibraries(on)
 
     fun removeCatalog(id: String) = settings.removeCatalog(id)
 

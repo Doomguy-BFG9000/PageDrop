@@ -26,8 +26,10 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.core.content.ContextCompat
 import app.pagedrop.data.BookRepository
 import app.pagedrop.server.PageDropApiClient
+import app.pagedrop.server.ServerUploadConsent
 import app.pagedrop.share.PendingSharedFile
 import app.pagedrop.share.ShareHandler
+import app.pagedrop.ui.settings.ServerUploadNotice
 import app.pagedrop.ui.theme.MyApplicationTheme
 import androidx.activity.ComponentActivity
 import androidx.activity.SystemBarStyle
@@ -49,6 +51,7 @@ class MainActivity : ComponentActivity() {
     @Inject lateinit var bookRepository: BookRepository
     @Inject lateinit var pageDropApiClient: PageDropApiClient
     @Inject lateinit var pendingSharedFile: PendingSharedFile
+    @Inject lateinit var serverUploadConsent: ServerUploadConsent
 
     private val notificationPermissionLauncher = registerForActivityResult(
         ActivityResultContracts.RequestPermission()
@@ -72,6 +75,7 @@ class MainActivity : ComponentActivity() {
                     color = MaterialTheme.colorScheme.background
                 ) {
                     MainNavigation()
+                    ServerUploadNotice(serverUploadConsent)
                 }
             }
         }

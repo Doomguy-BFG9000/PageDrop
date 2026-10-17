@@ -111,7 +111,16 @@ class SourceSettings internal constructor(
     private val _catalogs = MutableStateFlow(loadCatalogs())
     val catalogs: StateFlow<List<OpdsCatalog>> = _catalogs.asStateFlow()
 
+    private val _showShadowLibraries = MutableStateFlow(prefs.getBoolean(KEY_SHADOW_LIBRARIES, false))
+    /** Whether Anna's Archive and OceanofPDF website shortcuts are listed under search results. Off by default. */
+    val showShadowLibraries: StateFlow<Boolean> = _showShadowLibraries.asStateFlow()
+
     private val lock = Any()
+
+    fun setShowShadowLibraries(on: Boolean) {
+        prefs.edit().putBoolean(KEY_SHADOW_LIBRARIES, on).apply()
+        _showShadowLibraries.value = on
+    }
 
     fun setEnabled(kind: SourceKind, on: Boolean) {
         if (!kind.isBuiltIn) return // catalogs and browser downloads are not search switches
@@ -244,6 +253,7 @@ class SourceSettings internal constructor(
         private const val KEY_BUILTINS = "enabled_builtins"
         private const val KEY_KNOWN_BUILTINS = "known_builtins"
         private const val KEY_CATALOGS = "catalogs"
+        private const val KEY_SHADOW_LIBRARIES = "show_shadow_libraries"
         val DEFAULT_BUILTINS = SourceKind.entries.filter { it.isBuiltIn }.toSet()
 
         fun normalizeUrl(raw: String): String? {
