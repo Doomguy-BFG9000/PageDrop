@@ -1,0 +1,57 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>PageDrop social preview</title>
+<!-- Source for website/assets/social-preview.png (1280×640): the GitHub and link-share card. -->
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@500&family=Literata:ital,opsz,wght@0,7..72,800;1,7..72,400&display=swap" rel="stylesheet">
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body { width: 1280px; height: 640px; overflow: hidden; }
+  body {
+    background: #efebe1; color: #121212; position: relative;
+    font-family: "Literata", Georgia, serif;
+  }
+  body::before {
+    content: ""; position: absolute; inset: 0;
+    background-image: radial-gradient(rgba(18,18,18,.07) .6px, transparent .7px);
+    background-size: 4px 4px;
+  }
+  .poster {
+    position: absolute; right: 0; top: 0; width: 480px; height: 640px;
+    background: url("assets/poster.png") right center / contain no-repeat;
+    mix-blend-mode: multiply; filter: contrast(1.08);
+  }
+  .poster::after {
+    content: ""; position: absolute; left: 30%; right: -4%; top: 56.5%; height: 4.2%;
+    background: #b3261e; transform: rotate(-4deg); mix-blend-mode: multiply;
+  }
+  .copy { position: absolute; left: 72px; top: 64px; width: 700px; }
+  .brand {
+    display: flex; align-items: center; gap: 14px;
+    font-family: "IBM Plex Mono", monospace; font-size: 22px; letter-spacing: .22em; text-transform: uppercase;
+    padding-bottom: 18px; border-bottom: 3px solid #121212;
+  }
+  .brand img { width: 46px; height: 46px; border-radius: 50%; }
+  .stamp {
+    display: inline-block; margin-top: 44px;
+    font-family: "IBM Plex Mono", monospace; font-size: 16px; letter-spacing: .22em; text-transform: uppercase;
+    color: #b3261e; border: 2.5px solid #b3261e; padding: 6px 14px 5px; transform: rotate(-3deg);
+  }
+  h1 { margin-top: 26px; font-weight: 800; font-size: 92px; line-height: .98; letter-spacing: -.025em; }
+  h1 em { font-style: italic; font-weight: 400; }
+  p {
+    margin-top: 26px; font-family: "IBM Plex Mono", monospace; font-size: 19px; letter-spacing: .06em; color: #3a3833;
+  }
+</style>
+</head>
+<body>
+  <div class="poster"></div>
+  <div class="copy">
+    <div class="brand"><img src="assets/icon.svg" alt="">PageDrop</div>
+    <span class="stamp">Unsupported device</span>
+    <h1>The store closed. <em>The Kindle didn't.</em></h1>
+    <p>Books from your phone to your old Kindle, over Wi-Fi.</p>
+  </div>
+</body>
+</html>
