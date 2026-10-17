@@ -1,0 +1,71 @@
+name: Bug report
+description: Something in PageDrop didn't work the way it should.
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time. Trouble jailbreaking the Kindle itself? Try the [Kindle Modding Wiki](https://kindlemodding.org/) or our [Discord](https://discord.gg/cfsqhuHVfb) first.
+        Please don't include passwords, Wi-Fi details or your Kindle's serial number.
+  - type: input
+    id: pagedrop_version
+    attributes:
+      label: PageDrop version
+      description: For example 0.8.0, and where you installed it from (Releases, Obtainium, ...).
+    validations:
+      required: true
+  - type: input
+    id: android_version
+    attributes:
+      label: Android version and phone
+      placeholder: Android 14, Pixel 7
+    validations:
+      required: true
+  - type: input
+    id: kindle_model
+    attributes:
+      label: Kindle model
+      placeholder: Kindle Paperwhite 2012 (PW1)
+    validations:
+      required: true
+  - type: input
+    id: kindle_firmware
+    attributes:
+      label: Kindle firmware version
+      placeholder: 5.6.1.1
+    validations:
+      required: true
+  - type: input
+    id: koreader_version
+    attributes:
+      label: KOReader version
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. Open Find a book
+        2. Search for ...
+        3. Tap Send to Kindle
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: What you expected
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: What happened instead
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs, error messages or screenshots
+      description: Paste anything useful. Remove private details first.
+      render: shell

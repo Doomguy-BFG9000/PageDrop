@@ -1,214 +1,131 @@
-# PageDrop
+<!-- website link -->
 
-PageDrop is a phone-first companion app for jailbroken Kindle and KOReader users.
-It makes sideloading, local sync, covers, screensavers, fonts, dictionaries, and
-repair tasks feel like one simple mobile workflow instead of a pile of desktop
-tools, SFTP clients, Calibre plugins, and shell commands.
+<p align="center">
+  <img src="fastlane/metadata/android/en-US/images/icon.png" alt="PageDrop icon" width="88" height="88">
+</p>
 
-The product rule is simple:
+<h1 align="center">PageDrop</h1>
 
-> PageDrop is the only app users should have to interact with.
+<p align="center"><b>The store closed. The Kindle didn't.</b></p>
 
-Calibre, Calibre-Web-Automated, command-line converters, article extractors, and
-other backend tools can be used by PageDrop servers for heavy conversion and
-formatting work, but they should remain implementation details behind
-PageDrop's own UI and APIs.
+<p align="center">
+  <a href="https://github.com/spandan-kumar/PageDrop/releases/latest"><img alt="Latest release" src="https://img.shields.io/github/v/release/spandan-kumar/PageDrop?color=121212&labelColor=efebe1"></a>
+  <a href="LICENSE"><img alt="License: GPL-3.0" src="https://img.shields.io/badge/license-GPL--3.0-b3261e"></a>
+  <a href="https://discord.gg/cfsqhuHVfb"><img alt="Join the Discord" src="https://img.shields.io/badge/Discord-join%20the%20chat-5865F2?logo=discord&logoColor=white"></a>
+  <img alt="Android 8.0+ (API 26)" src="https://img.shields.io/badge/Android-8.0%2B%20(API%2026)-3ddc84?logo=android&logoColor=white">
+  <a href="https://github.com/spandan-kumar/PageDrop/actions/workflows/build.yml"><img alt="Build status" src="https://img.shields.io/github/actions/workflow/status/spandan-kumar/PageDrop/build.yml?branch=main"></a>
+</p>
 
-## Install
+<p align="center">
+  <a href="https://github.com/spandan-kumar/PageDrop/releases/latest">Download</a> ·
+  <!-- website link -->Website (soon) ·
+  <a href="https://discord.gg/cfsqhuHVfb">Discord</a> ·
+  <a href="https://github.com/spandan-kumar/PageDrop/issues/new/choose">Report a bug</a>
+</p>
 
-- **GitHub Releases:** download the latest `PageDrop-vX.Y.Z.apk` from the
-  [Releases page](https://github.com/spandan-kumar/PageDrop/releases). A SHA-256
-  checksum file is attached to each release.
-- **Obtainium:** add `https://github.com/spandan-kumar/PageDrop` as an app source.
-- **F-Droid:** planned (see `fdroid/`).
+PageDrop finds books on your phone and sends them over Wi-Fi to your old, jailbroken Kindle running [KOReader](https://koreader.rocks/). Free, open source, no cable, no Calibre, no permission.
 
-## Requirements
+## Why
 
-A jailbroken Kindle running KOReader with its SSH server enabled. The in-app
-"Get your Kindle ready" walkthrough covers the setup.
+On May 20, 2026, Amazon switched off the Kindle Store for every Kindle made in 2012 or earlier. No buying, no borrowing, no downloading. Perfectly good e-readers, some of them in drawers, some still in people's hands, were told they were done.
 
-## Features
+They aren't. A jailbroken Kindle running KOReader is a fine reader for the rest of its life, but getting books onto it meant cables, desktop tools and shell commands. PageDrop turns that into one app on your phone. It was built and tested on a 2012 Kindle Paperwhite (firmware 5.6.1.1).
 
-### Direct Mode (built-in)
+## What it does
 
-- Add books from Android document picker (supports EPUB, PDF, TXT, MOBI, AZW3)
-- On-device EPUB/PDF/TXT → MOBI conversion with custom MobiWriter engine
-- Extraction and persistence of cover images from EPUB files
-- Local library with duplicate detection and metadata parsing
-- Queue and transfer books to Kindle over SSH/SFTP
-- Automatic thumbnail generation (EXTH UUID-based naming, resize to 330×430, upload to `/mnt/us/system/thumbnails`)
-- Kindle library rescan trigger via `lipc-set-prop`
-- Transfer history tracking with `lastTransferred` timestamps
+- **Find books in the app.** Search Project Gutenberg, Standard Ebooks, free Internet Archive items and your own OPDS catalogs, or browse other book websites in PageDrop's built-in browser and capture downloads right there.
+- **Send over Wi-Fi.** Books land in both the Kindle home screen (`/mnt/us/documents`) and KOReader's library (`/mnt/us/Books`).
+- **Make PDFs readable.** PDF reflow unwraps broken lines and strips running headers and page numbers, so a scan reads like a book on a small screen.
+- **Fix the details.** Title, author and cover are pulled from the file and open catalogs, then written into the book.
+- **Manage the Kindle.** See what is on it, delete books, save copies back to your phone.
+- **Get your Kindle ready.** A walkthrough that hands off to the [Kindle Modding Wiki](https://kindlemodding.org/)'s jailbreak wizard.
+- **Extras.** Screensavers, fonts, dictionaries, saved articles and KOReader sync.
+- **Optional conversion server.** Self-hostable (Supabase + Calibre worker). Switch it off and everything stays on your phone.
 
-### Find a book
+## Screenshots
 
-- Searches Project Gutenberg, Standard Ebooks, Internet Archive, Digital Library
-  of India, Open Library, English and Hindi Wikisource, Hindwi, Rekhta, Faded Page,
-  ManyBooks, and user-added OPDS catalogs.
-- Gutenberg falls back to its official search and edition pages when Gutendex
-  cannot respond. Faded Page uses its public title-search form and resolves the
-  actual EPUB/MOBI/PDF/TXT links on the chosen edition before downloading. Its
-  required session cookie stays in memory and is sent only to its HTTPS host.
-- Hindi and other scripts retain their letters and vowel marks for ranking,
-  duplicate detection, and matching against the phone library. Different languages
-  and unresolved Archive editions remain separate.
-- Open Archive editions resolve their actual file list before downloading. EPUB
-  downloads are checked for their ZIP structure, EPUB mimetype, and container.
-- Hindwi, Rekhta, ManyBooks, and Wikisource results open their websites. Wikisource
-  exports can be blocked or incomplete depending on the book's chapter structure;
-  PageDrop does not guess a downloadable edition. Open Library borrowing also
-  stays on its website; open editions are checked for direct downloads.
-- ePustakalay, Anna’s Archive, Global Grey, and OceanofPDF have website searches below
-  results. These and source detail links open in PageDrop's browser, where the user
-  can browse editions, sign in if needed, and complete website verification.
-  OceanofPDF opens its homepage for manual search. Access still depends on each site.
-- Tapping a supported book download opens the book sheet with editable title and
-  author. Choose Send to Kindle to download, validate, import and convert EPUB, then
-  continue into the existing transfer flow; Add to library keeps the original format.
-  The downloader uses the browser's user agent and live cookies for each destination,
-  including redirects, without forwarding another host's cookies or full referring URL.
-  Expired verification can be retried by reopening the source for a fresh download.
-  Website guesses never silently reuse an existing library edition.
-- Supported website downloads are HTTPS EPUB/MOBI/AZW3/PDF/TXT links or file attachments.
-  Blob URLs, DRM readers, and pages without downloadable files remain unsupported.
-  No JavaScript-to-native bridge, file access, or certificate-error bypass is enabled.
-- Sources can be switched off in Settings → Book sources. Existing switches are
-  preserved when new sources are introduced, including an explicit all-off choice.
+<p align="center">
+  <img src="fastlane/metadata/android/en-US/images/phoneScreenshots/1.png" width="180" alt="PageDrop screenshot 1">
+  <img src="fastlane/metadata/android/en-US/images/phoneScreenshots/2.png" width="180" alt="PageDrop screenshot 2">
+  <img src="fastlane/metadata/android/en-US/images/phoneScreenshots/3.png" width="180" alt="PageDrop screenshot 3">
+  <img src="fastlane/metadata/android/en-US/images/phoneScreenshots/4.png" width="180" alt="PageDrop screenshot 4">
+  <img src="fastlane/metadata/android/en-US/images/phoneScreenshots/5.png" width="180" alt="PageDrop screenshot 5">
+</p>
 
-Run the discovery regression tests with `./gradlew testDebugUnitTest --tests
-'app.pagedrop.discover.*' --tests 'app.pagedrop.ui.discover.*'`. Real-site checks
-are opt-in: `PAGEDROP_LIVE=1 ./gradlew testDebugUnitTest --tests
-'app.pagedrop.discover.LiveSmokeTest.indianSourcesAndRealArchiveEpub'`.
-For English searches and real EPUB downloads, use `PAGEDROP_LIVE=1 ./gradlew
-testDebugUnitTest --tests 'app.pagedrop.discover.LiveSmokeTest.englishSourcesAndRealEpubDownloads'`.
+## Getting started
 
-The Android WebView regression tests run on a connected device with
-`./gradlew connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.class=app.pagedrop.ui.discover.SourceBrowserScreenTest`.
-They exercise English links, Hindi extensionless attachments, session cookies and
-in-app review using local fixtures. Live website CAPTCHAs require user interaction.
+**You need** an Android phone (8.0 or newer) and a Kindle that is jailbroken, running KOReader with its SSH server enabled. No jailbreak yet? PageDrop walks you through it.
 
-### Tools Suite
+**Install**
 
-- **Screensaver Optimizer** — pick any image, select Kindle model, auto crop/resize/grayscale, upload to LinkSS
-- **Font Installer** — curated catalog of e-ink-tuned fonts, download/validate/install to Kindle and KOReader paths
-- **Dictionary Installer** — StarDict catalog, tar.bz2 extraction, install to KOReader dict paths
-- **Device Dashboard** — read firmware/space/battery/jailbreak status, trigger rescan, reboot, repair recipes
-- **KOReader Sync Broker** — scan `.sdr` folders, parse Lua metadata and highlights, read-only import
-- **Article Sideloading** — share URL, extract readable content, build MOBI, transfer directly to Kindle
+- **GitHub Releases:** download the APK from the [latest release](https://github.com/spandan-kumar/PageDrop/releases/latest). Each release is signed; see [SECURITY.md](SECURITY.md) to verify it.
+- **Obtainium:** add `https://github.com/spandan-kumar/PageDrop` as an app source and get updates automatically.
+- **F-Droid:** planned (see [`fdroid/`](fdroid/)).
 
-### Server-Assisted Mode (client built, server TBD)
+**First run**
 
-- Optional PageDrop conversion server API client
-- Per-file decision: skip backend for already-compatible formats
-- Job polling and artifact downloading via OkHttp + kotlinx.serialization
-- Supports `POST /v1/convert`, `GET /v1/jobs/{id}`, `GET /v1/artifacts/{id}`, `POST /v1/articles/convert`
+1. Not jailbroken yet? Open **Get your Kindle ready**. Its checklist takes you through the Kindle Modding Wiki's jailbreak wizard, KOReader and blocking updates.
+2. In KOReader, open Tools (cog) → Network → SSH server and switch it on. Keep the Kindle on the same Wi-Fi as your phone.
+3. In PageDrop, tap **Find my Kindle**, then search for a book and send it.
 
-## Architecture
+## Community
 
-- Android app: Kotlin, Jetpack Compose, Material 3
-- Architecture: MVVM + Repository, Hilt DI, Room persistence
-- Navigation: Navigation3 (type-safe nav keys)
-- Transfer: JSch SSH/SFTP
-- Local conversion: custom PalmDOC/LZ77 MobiWriter, epublib, PDFBox
-- HTTP client: OkHttp with kotlinx.serialization (JSON)
-- Image loading: Coil
+PageDrop is made by people who like old Kindles. Come say hi.
 
-### Package Structure
+- **Chat:** [Discord](https://discord.gg/cfsqhuHVfb) for questions, setup help and show-and-tell.
+- **Ideas and bugs:** [GitHub Issues](https://github.com/spandan-kumar/PageDrop/issues/new/choose).
+- **Contribute:** read [CONTRIBUTING.md](CONTRIBUTING.md). First-timers welcome. Please follow the [Code of Conduct](CODE_OF_CONDUCT.md).
+- **Security:** see [SECURITY.md](SECURITY.md).
 
-```
-app/src/main/java/app/pagedrop/
-├── converter/           EPUB/PDF/TXT → MOBI conversion, MobiWriter, ConversionResult
-├── data/
-│   ├── di/              Hilt modules, FakeBookRepository
-│   ├── local/database/  Room entities, DAOs, AppDatabase
-│   ├── BookRepository.kt
-│   └── KindleSettings.kt
-├── server/              PageDrop API client, DTOs, ServerSettings
-├── tools/
-│   ├── articles/        ArticleExtractor, ArticleMobiConverter
-│   ├── dashboard/       DeviceCommandRunner, repair recipes
-│   ├── dictionaries/    DictionaryCatalog, DictionaryInstaller
-│   ├── fonts/           FontCatalog, FontInstaller
-│   ├── screensavers/    KindleModelRegistry, ScreensaverProcessor
-│   └── sync/            KoreaderSyncBroker, LuaTableParser, models
-├── transfer/
-│   ├── sftp/            KindleSftpClient
-│   └── thumbnails/      KindleThumbnailGenerator
-└── ui/
-    ├── book/            Library, transfer bottom sheet, format picker
-    ├── theme/           Material 3 color scheme, typography
-    ├── tools/
-    │   ├── articles/    ArticlesScreen + ViewModel
-    │   ├── dashboard/   DashboardScreen + ViewModel
-    │   ├── dictionaries/DictionariesScreen + ViewModel
-    │   ├── fonts/       FontsScreen + ViewModel
-    │   ├── screensavers/ScreensaverScreen + ViewModel
-    │   ├── sync/        SyncScreen + ViewModel
-    │   └── ToolsScreen.kt
-    ├── MainActivity.kt
-    ├── Navigation.kt
-    └── NavigationKeys.kt
-```
+## Building from source
 
-```
-app/src/test/java/app/pagedrop/
-├── converter/                MobiWriterTest
-├── data/                     DefaultBookRepositoryTest
-├── tools/
-│   ├── articles/             ArticleExtractorTest
-│   ├── screensavers/         KindleModelRegistryTest
-│   └── sync/                 LuaTableParserTest, KoreaderSyncBrokerTest
-├── transfer/thumbnails/      KindleThumbnailGeneratorTest
-└── ui/book/                  BookViewModelTest
-```
-
-## Build
+You need JDK 21 and the Android SDK.
 
 ```bash
-export ANDROID_HOME=/path/to/Android/sdk
+export ANDROID_HOME=/path/to/Android/sdk   # or sdk.dir in local.properties
 ./gradlew assembleDebug
 ./gradlew testDebugUnitTest
 ```
 
-If Gradle cannot find the Android SDK, configure either `ANDROID_HOME` or
-`local.properties` with:
+To build without the conversion server, pass empty properties:
 
-```properties
-sdk.dir=/path/to/Android/sdk
+```bash
+./gradlew assembleDebug -PPAGEDROP_SUPABASE_URL= -PPAGEDROP_SUPABASE_ANON_KEY=
 ```
 
-## Building a release
+Release signing keys are never in the repo. Gradle reads them from `PAGEDROP_KEYSTORE_PATH`, `PAGEDROP_KEYSTORE_PASSWORD`, `PAGEDROP_KEY_ALIAS` and `PAGEDROP_KEY_PASSWORD`, or from a properties file (`storeFile`, `storePassword`, `keyAlias`, `keyPassword`) at `~/.pagedrop-release/keystore.properties` (override with `-PPAGEDROP_KEYSTORE_PROPERTIES`). With neither, `./gradlew assembleRelease` makes an unsigned APK. Pushing a `v*` tag runs [`release.yml`](.github/workflows/release.yml), which needs the matching GitHub secrets plus `PAGEDROP_KEYSTORE_BASE64`.
 
-Release signing keys are never stored in the repo. Gradle reads them from either:
+More: [CONTRIBUTING.md](CONTRIBUTING.md) and [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) (discovery tests, live-site checks, WebView tests).
 
-1. environment variables `PAGEDROP_KEYSTORE_PATH`, `PAGEDROP_KEYSTORE_PASSWORD`,
-   `PAGEDROP_KEY_ALIAS`, `PAGEDROP_KEY_PASSWORD`, or
-2. a properties file (keys `storeFile`, `storePassword`, `keyAlias`, `keyPassword`) at
-   `~/.pagedrop-release/keystore.properties`, or the path in the Gradle property
-   `PAGEDROP_KEYSTORE_PROPERTIES`.
+## Self-hosting the conversion server
 
-With neither, `./gradlew assembleRelease` produces an unsigned APK. Pushing a `v*` tag
-runs `.github/workflows/release.yml`, which needs the GitHub secrets
-`PAGEDROP_KEYSTORE_BASE64`, `PAGEDROP_KEYSTORE_PASSWORD`, `PAGEDROP_KEY_ALIAS` and
-`PAGEDROP_KEY_PASSWORD`.
+Optional. A Supabase project plus a worker running Calibre handles heavy conversions and article extraction when the phone can't. Setup is in [server/README.md](server/README.md).
 
-To build without the PageDrop conversion server, pass empty properties:
-`-PPAGEDROP_SUPABASE_URL= -PPAGEDROP_SUPABASE_ANON_KEY=`. Otherwise Settings has a
-"Use PageDrop conversion server" switch.
+## Project structure
+
+```
+app/        Android app (Kotlin, Jetpack Compose, MVVM + Hilt, Room)
+server/     Optional conversion server (Supabase + Calibre worker)
+website/    Project website
+fastlane/   Store listing text, icon and screenshots
+fdroid/     F-Droid submission recipe
+licenses/   Third-party licenses
+docs/       Architecture and technical notes
+```
+
+The full package layout, sources and test notes are in [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
+
+## Credits
+
+- [KOReader](https://koreader.rocks/) does the actual reading. PageDrop just feeds it.
+- [Kindle Modding Wiki](https://kindlemodding.org/) for the jailbreak guides and wizard.
+- [Calibre](https://calibre-ebook.com/) powers the optional conversion server.
+- [Project Gutenberg](https://www.gutenberg.org/), [Standard Ebooks](https://standardebooks.org/) and the [Internet Archive](https://archive.org/) for keeping books free to read.
+- [Literata](https://fonts.google.com/specimen/Literata), used under the SIL Open Font License (see [`licenses/`](licenses/)).
+- Poster art from [bezos.click](https://bezos.click).
 
 ## License
 
-GPL-3.0 (see `LICENSE`). The bundled Literata font is under the SIL Open Font License
-(see `licenses/`).
+[GPL-3.0](LICENSE). Contributions are accepted under the same license.
 
-PageDrop is not affiliated with or endorsed by Amazon.
-
-## Documentation
-
-- [Implementation plan](implementation_plan.md)
-- [Research and roadmap](next_phase_research.md)
-- [PageDrop server design](pagedrop_server.md)
-- [Kindle and KOReader device paths](device_paths.md)
-- [Current SFTP walkthrough](walkthrough.md)
-- [Current task checklist](task.md)
-- [MOBI header notes](mobi_comparison.md)
+PageDrop does not host or provide books; respect copyright law where you live. PageDrop is not affiliated with or endorsed by Amazon. Kindle is a trademark of Amazon.com, Inc.

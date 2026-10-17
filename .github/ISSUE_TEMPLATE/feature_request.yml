@@ -1,0 +1,36 @@
+name: Feature request
+description: Suggest something PageDrop should do.
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Ideas are welcome. Want to talk it through first? Join the [Discord](https://discord.gg/cfsqhuHVfb).
+  - type: textarea
+    id: problem
+    attributes:
+      label: What are you trying to do?
+      description: Describe the problem or the moment it gets annoying, not just the fix.
+    validations:
+      required: true
+  - type: textarea
+    id: idea
+    attributes:
+      label: What would you like PageDrop to do?
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: What do you do today instead?
+  - type: input
+    id: device
+    attributes:
+      label: Your Kindle, if it matters
+      placeholder: Kindle 4, firmware 4.1.4
+  - type: checkboxes
+    id: help
+    attributes:
+      label: Want to help?
+      options:
+        - label: I'd be up for working on this myself.
