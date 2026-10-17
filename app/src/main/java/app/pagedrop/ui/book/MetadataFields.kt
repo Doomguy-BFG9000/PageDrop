@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.foundation.border
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
@@ -56,8 +57,9 @@ internal class MetadataFormState(initialTitle: String, initialAuthor: String) {
     fun editAuthor(value: String) { author = value; userEdited = true; provenance = null }
 
     fun apply(candidate: BookMetadataCandidate) {
-        title = candidate.title
-        author = candidate.author
+        // Keep a title we already have when the catalog only differs by case or a leading article.
+        if (!sameTitle(title, candidate.title)) title = candidate.title
+        if (!isPlaceholderAuthor(candidate.author) || author.isBlank()) author = candidate.author
         coverUrl = candidate.coverUrl
         suggested = null
         showOthers = false
@@ -73,12 +75,26 @@ internal class MetadataFormState(initialTitle: String, initialAuthor: String) {
         if (suggestion.source == Suggestion.Source.ONLINE && !hasEmbeddedCover) {
             coverUrl = suggestion.coverUrl ?: suggestion.best?.coverUrl
         }
-        suggested = suggestion.best
+        // The best match may lack a cover while another candidate supplied one; show that one.
+        suggested = suggestion.best?.let { best ->
+            if (best.coverUrl.isNullOrBlank()) best.copy(coverUrl = suggestion.coverUrl) else best
+        }
     }
 
     fun confirmSuggestion() { suggested?.let(::apply) }
     fun openOthers() { suggested = null; showOthers = true }
 }
+
+private val LEADING_ARTICLE = Regex("^(the|a|an)\\s+", RegexOption.IGNORE_CASE)
+
+/** True when two titles name the same book, ignoring case, punctuation and a leading article. */
+internal fun sameTitle(a: String, b: String): Boolean {
+    fun norm(s: String) = s.trim().replace(LEADING_ARTICLE, "").lowercase().filter { it.isLetterOrDigit() }
+    return norm(a).isNotEmpty() && norm(a) == norm(b)
+}
+
+private fun isPlaceholderAuthor(author: String) =
+    app.pagedrop.metadata.BookNameCleaner.isPlaceholderAuthor(author)
 
 @Composable
 internal fun rememberMetadataFormState(
@@ -255,7 +271,7 @@ private fun CandidateRow(candidate: BookMetadataCandidate, onClick: () -> Unit) 
 private fun CoverThumb(url: String?) {
     val frame = Modifier.width(36.dp).height(54.dp)
     if (url.isNullOrBlank()) {
-        Box(frame.then(Modifier))
+        Box(frame.border(1.dp, MaterialTheme.colorScheme.outlineVariant))
     } else {
         AsyncImage(
             model = url.replace("http://", "https://"),

@@ -139,7 +139,7 @@ class MetadataSuggester(
             try {
                 val dir = File(context.cacheDir, "suggest").apply { mkdirs() }
                 val name = displayName(context, uri)?.let { File(it).name.take(80) }?.takeIf { it.isNotBlank() } ?: "book"
-                val out = File.createTempFile("s", "_$name", dir)
+                val out = File.createTempFile("pd_", "_$name", dir)
                 context.contentResolver.openInputStream(uri)?.use { input ->
                     out.outputStream().use { o ->
                         val buf = ByteArray(64 * 1024)
@@ -155,6 +155,7 @@ class MetadataSuggester(
                 } ?: run { out.delete(); return@withContext null }
                 out
             } catch (e: Exception) {
+                android.util.Log.w("MetadataSuggester", "Could not copy $uri for metadata detection", e)
                 null
             }
         }

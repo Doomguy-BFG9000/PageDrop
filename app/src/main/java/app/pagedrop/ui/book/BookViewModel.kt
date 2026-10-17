@@ -435,10 +435,13 @@ class BookViewModel @Inject constructor(
 
     private suspend fun runSuggest(file: File, format: String, displayName: String): Suggestion =
         try {
-            suggestFn(file, format, displayName)
+            suggestFn(file, format, displayName).also {
+                Log.d("BookViewModel", "Suggestion for $displayName: source=${it.source} title=${it.title} author=${it.author} candidates=${it.candidates.size} queries=${it.queriesTried} unavailable=${it.unavailable}")
+            }
         } catch (e: kotlinx.coroutines.CancellationException) {
             throw e
         } catch (e: Exception) {
+            Log.w("BookViewModel", "Suggestion failed for $displayName", e)
             Suggestion(title = null, author = null, source = Suggestion.Source.FILENAME, unavailable = true, message = e.message)
         }
 
