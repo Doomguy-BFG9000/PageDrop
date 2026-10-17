@@ -33,6 +33,7 @@ import androidx.navigation3.runtime.entryProvider
 import androidx.navigation3.runtime.rememberNavBackStack
 import androidx.navigation3.ui.NavDisplay
 import app.pagedrop.ui.connection.ConnectionScreen
+import app.pagedrop.ui.onboarding.KindleReadyScreen
 import app.pagedrop.ui.onboarding.SetupScreen
 import app.pagedrop.ui.settings.BookSourcesScreen
 import app.pagedrop.ui.settings.SettingsScreen
@@ -79,7 +80,8 @@ fun MainNavigation(shellViewModel: ShellViewModel = hiltViewModel()) {
                     onOpenScreensaver = { push(Screensaver) },
                     onOpenFonts = { push(Fonts) },
                     onOpenDictionaries = { push(Dictionaries) },
-                    onOpenBookSources = { push(BookSources) }
+                    onOpenBookSources = { push(BookSources) },
+                    onOpenKindleReady = { push(KindleReady) }
                 )
             }
             entry<Setup> {
@@ -97,7 +99,8 @@ fun MainNavigation(shellViewModel: ShellViewModel = hiltViewModel()) {
                     canGoBack = !firstRun,
                     onBack = pop,
                     onDone = finish,
-                    onSkip = finish
+                    onSkip = finish,
+                    onOpenKindleReady = { push(KindleReady) }
                 )
             }
             entry<Settings> {
@@ -105,7 +108,18 @@ fun MainNavigation(shellViewModel: ShellViewModel = hiltViewModel()) {
                     modifier = Modifier.safeDrawingPadding(),
                     onBack = pop,
                     onOpenConnection = { push(Connection) },
-                    onOpenBookSources = { push(BookSources) }
+                    onOpenBookSources = { push(BookSources) },
+                    onOpenKindleReady = { push(KindleReady) }
+                )
+            }
+            entry<KindleReady> {
+                KindleReadyScreen(
+                    modifier = Modifier.safeDrawingPadding(),
+                    onBack = pop,
+                    onConnect = {
+                        // Reuse Setup if it is already underneath (first run); otherwise open it.
+                        if (Setup in backStack) pop() else push(Setup)
+                    }
                 )
             }
             entry<BookSources> { BookSourcesScreen(Modifier.safeDrawingPadding(), onBack = pop) }

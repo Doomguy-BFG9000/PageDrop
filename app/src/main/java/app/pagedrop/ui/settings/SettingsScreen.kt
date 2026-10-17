@@ -45,6 +45,7 @@ fun SettingsScreen(
     onBack: () -> Unit = {},
     onOpenConnection: () -> Unit = {},
     onOpenBookSources: () -> Unit = {},
+    onOpenKindleReady: () -> Unit = {},
     viewModel: SettingsViewModel = hiltViewModel()
 ) {
     val state by viewModel.state.collectAsState()
@@ -80,6 +81,12 @@ fun SettingsScreen(
                 subtitle = state.kindleSummary,
                 icon = Icons.Default.Wifi,
                 onClick = onOpenConnection
+            )
+            NavRow(
+                title = "Get your Kindle ready",
+                subtitle = "Jailbreak, KOReader and SSH, step by step",
+                icon = Icons.Default.Wifi,
+                onClick = onOpenKindleReady
             )
 
             SectionLabel("Find a book")

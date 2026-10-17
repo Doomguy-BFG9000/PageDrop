@@ -52,6 +52,7 @@ fun SetupScreen(
     onBack: () -> Unit = {},
     onDone: () -> Unit,
     onSkip: () -> Unit,
+    onOpenKindleReady: () -> Unit = {},
     viewModel: SetupViewModel = hiltViewModel()
 ) {
     val state by viewModel.state.collectAsState()
@@ -121,7 +122,7 @@ fun SetupScreen(
                     }
                     if (state.scanFinished && state.devices.isEmpty()) {
                         Text(
-                            "Nothing found. Check that KOReader's SSH server is on (Tools > More tools > SSH server) and the Kindle is awake, or enter the address below.",
+                            "Nothing found. Check that KOReader's SSH server is on (Tools cog > Network > SSH server) and the Kindle is awake, or enter the address below.",
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
@@ -162,6 +163,10 @@ fun SetupScreen(
                 modifier = Modifier.fillMaxWidth(),
                 enabled = state.canSave
             )
+            TextButton(
+                onClick = onOpenKindleReady,
+                modifier = Modifier.align(Alignment.CenterHorizontally)
+            ) { Text("My Kindle isn't set up yet", color = Color.White) }
             if (!canGoBack) {
                 TextButton(
                     onClick = { viewModel.skip(); onSkip() },

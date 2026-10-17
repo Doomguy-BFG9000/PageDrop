@@ -23,7 +23,7 @@ class ConnectionHintsTest {
     fun refused_tellsUserToOpenKoreaderSshServer() {
         val hint = ConnectionHints.explain(ConnectException("Connection refused"), 2222)
         assertTrue(hint.fix.contains("KOReader"))
-        assertTrue(hint.fix.contains("More tools > SSH server"))
+        assertTrue(hint.fix.contains("Network > SSH server"))
     }
 
     @Test

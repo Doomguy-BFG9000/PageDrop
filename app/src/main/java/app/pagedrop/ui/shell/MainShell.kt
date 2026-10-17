@@ -44,6 +44,7 @@ fun MainShell(
     onOpenSettings: () -> Unit,
     onOpenSetup: () -> Unit,
     onOpenConnection: () -> Unit,
+    onOpenKindleReady: () -> Unit = {},
     onOpenSync: () -> Unit,
     onOpenArticle: () -> Unit,
     onOpenScreensaver: () -> Unit,
@@ -74,6 +75,7 @@ fun MainShell(
                     onOpenSync = onOpenSync,
                     onOpenConnection = onOpenConnection,
                     onOpenSetup = onOpenSetup,
+                    onOpenKindleReady = onOpenKindleReady,
                     onOpenInLibrary = { tabIndex = Tab.Library.ordinal }
                 )
                 Tab.Extras -> ExtrasScreen(

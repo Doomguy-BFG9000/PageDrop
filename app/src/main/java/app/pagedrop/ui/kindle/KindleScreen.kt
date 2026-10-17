@@ -67,6 +67,7 @@ fun KindleScreen(
     onOpenSync: () -> Unit,
     onOpenConnection: () -> Unit,
     onOpenSetup: () -> Unit,
+    onOpenKindleReady: () -> Unit = {},
     onOpenInLibrary: () -> Unit = {},
     viewModel: DashboardViewModel = hiltViewModel(),
     bookViewModel: BookViewModel = hiltViewModel()
@@ -140,7 +141,7 @@ fun KindleScreen(
                 .padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            StatusCard(state, viewModel.host, viewModel.port, onRefresh = viewModel::refresh, onSetup = onOpenSetup)
+            StatusCard(state, viewModel.host, viewModel.port, onRefresh = viewModel::refresh, onSetup = onOpenSetup, onGetReady = onOpenKindleReady)
 
             if (state.isConfigured) {
                 LibraryCheckCard(
@@ -346,7 +347,8 @@ private fun StatusCard(
     host: String,
     port: Int,
     onRefresh: () -> Unit,
-    onSetup: () -> Unit
+    onSetup: () -> Unit,
+    onGetReady: () -> Unit = {}
 ) {
     HairlineCard(Modifier.fillMaxWidth()) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -358,6 +360,7 @@ private fun StatusCard(
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
                 InkButton("Connect your Kindle", onSetup, Modifier.fillMaxWidth())
+                OutlineButton("Get your Kindle ready", onGetReady, Modifier.fillMaxWidth())
                 return@Column
             }
             val (label, filled) = when {

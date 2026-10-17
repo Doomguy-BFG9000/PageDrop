@@ -32,6 +32,10 @@ data object Articles : NavKey
 @Serializable
 data object Connection : NavKey
 
+/** "Get your Kindle ready" jailbreak/KOReader walkthrough. */
+@Serializable
+data object KindleReady : NavKey
+
 /** Settings -> Book sources (built-in catalogs and OPDS). */
 @Serializable
 data object BookSources : NavKey

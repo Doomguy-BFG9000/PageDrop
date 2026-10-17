@@ -38,11 +38,11 @@ object ConnectionHints {
     private fun refusedHint(port: Int) = Hint(
         "Nothing is listening on port $port",
         if (port == 2222) {
-            "Open KOReader on the Kindle and turn on its SSH server (Tools > More tools > SSH server). " +
+            "Open KOReader on the Kindle and turn on its SSH server (Tools cog > Network > SSH server; on older versions Tools > More tools). " +
                 "SSH only runs while KOReader is open. If you use USBNetwork instead, pick port 22."
         } else {
             "Make sure USBNetwork SSH is enabled. If you use KOReader's SSH server, open KOReader, " +
-                "turn on Tools > More tools > SSH server, and pick port 2222."
+                "turn on Tools cog > Network > SSH server, and pick port 2222."
         }
     )
 }
