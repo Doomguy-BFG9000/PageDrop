@@ -18,6 +18,7 @@ import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.rememberModalBottomSheetState
@@ -28,7 +29,6 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -36,6 +36,7 @@ import app.pagedrop.data.DefaultBookRepository
 import app.pagedrop.data.local.database.Book
 import app.pagedrop.discover.BookResult
 import app.pagedrop.discover.DownloadOption
+import app.pagedrop.discover.SourceKind
 
 /** Plain-language progress line for the current step. */
 internal fun progressLabel(action: ActionState.Working): String = when (action.stage) {
@@ -61,15 +62,16 @@ internal fun ResultSheet(
     onSend: () -> Unit,
     onAdd: () -> Unit,
     onRetry: () -> Unit,
+    onEditMetadata: (String, String) -> Unit,
+    onOpenWebsite: () -> Unit,
     onDismiss: () -> Unit,
 ) {
     val working = action as? ActionState.Working
-    val uriHandler = LocalUriHandler.current
     val busy = working != null
     val added = action is ActionState.Finished
     var expanded by remember(result.id) { mutableStateOf(false) }
     val inLibrary = libraryBook != null || added
-    val canTake = chosen != null || inLibrary
+    val canTake = (chosen != null && result.title.isNotBlank()) || inLibrary
 
     ModalBottomSheet(
         onDismissRequest = onDismiss,
@@ -81,7 +83,13 @@ internal fun ResultSheet(
             Modifier.fillMaxWidth().padding(horizontal = 16.dp).padding(bottom = 24.dp).verticalScroll(rememberScrollState()),
             verticalArrangement = Arrangement.spacedBy(16.dp),
         ) {
-            Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+            if (result.source == SourceKind.WEBSITE) {
+                TagChip(result.sourceName)
+                if (inLibrary) {
+                    Text(result.title, style = MaterialTheme.typography.titleLarge)
+                    if (result.author.isNotBlank()) Text(result.author, style = MaterialTheme.typography.bodyLarge)
+                }
+            } else Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
                 RemoteCover(result.coverUrl, result.title, Modifier.width(112.dp).height(168.dp))
                 Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                     Text(result.title, style = MaterialTheme.typography.titleLarge, maxLines = 4, overflow = TextOverflow.Ellipsis)
@@ -101,6 +109,18 @@ internal fun ResultSheet(
                         if (inLibrary) TagChip("In your library", emphasized = true)
                     }
                 }
+            }
+
+            if (result.source == SourceKind.WEBSITE && !inLibrary) {
+                Text("Review book details", style = MaterialTheme.typography.titleMedium)
+                OutlinedTextField(
+                    value = result.title, onValueChange = { onEditMetadata(it, result.author) },
+                    label = { Text("Title") }, modifier = Modifier.fillMaxWidth(), enabled = !busy,
+                )
+                OutlinedTextField(
+                    value = result.author, onValueChange = { onEditMetadata(result.title, it) },
+                    label = { Text("Author") }, modifier = Modifier.fillMaxWidth(), enabled = !busy,
+                )
             }
 
             result.description?.takeIf { it.isNotBlank() }?.let { text ->
@@ -172,9 +192,10 @@ internal fun ResultSheet(
             }
 
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                result.websiteUrl?.let { url ->
+                result.websiteUrl?.let {
                     OutlinedButton(
-                        onClick = { uriHandler.openUri(url) },
+                        onClick = onOpenWebsite,
+                        enabled = !busy,
                         modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp),
                         shape = MaterialTheme.shapes.small,
                     ) { Text("Open ${result.sourceName}") }

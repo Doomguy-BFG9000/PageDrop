@@ -8,13 +8,17 @@ enum class BookFormat(val extension: String) {
     val kindleNative: Boolean get() = this == AZW3 || this == MOBI
 }
 
-enum class SourceKind { GUTENBERG, STANDARD_EBOOKS, INTERNET_ARCHIVE, DIGITAL_LIBRARY_INDIA, OPEN_LIBRARY, HINDI_WIKISOURCE, HINDWI, REKHTA, ENGLISH_WIKISOURCE, FADED_PAGE, MANYBOOKS, OPDS }
+enum class SourceKind { GUTENBERG, STANDARD_EBOOKS, INTERNET_ARCHIVE, DIGITAL_LIBRARY_INDIA, OPEN_LIBRARY, HINDI_WIKISOURCE, HINDWI, REKHTA, ENGLISH_WIKISOURCE, FADED_PAGE, MANYBOOKS, OPDS, WEBSITE;
+    val isBuiltIn: Boolean get() = this != OPDS && this != WEBSITE
+}
 
 data class DownloadOption(
     val format: BookFormat,
     val url: String,
     val sizeBytes: Long? = null,
     val label: String? = null,
+    /** Transient browser context; never persisted with library books. */
+    val browserSession: BrowserDownloadSession? = null,
 )
 
 data class BookResult(

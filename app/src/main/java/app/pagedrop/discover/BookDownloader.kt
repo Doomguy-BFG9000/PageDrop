@@ -66,10 +66,14 @@ class BookDownloader internal constructor(
 
     private suspend fun stream(result: BookResult, option: DownloadOption, temp: File, onProgress: (Float?) -> Unit) {
         val auth = authFor(result, option.url)
-        http.open(option.url, auth).use { response ->
+        (option.browserSession?.let { http.openBrowser(option.url, it) } ?: http.open(option.url, auth)).use { response ->
             when {
                 response.code == 401 || response.code == 403 ->
-                    throw DownloadException(if (auth != null) "The catalog rejected the saved sign-in." else "This download needs permission, so it can't be fetched here.")
+                    throw DownloadException(when {
+                        option.browserSession != null -> "Website verification expired. Open the source and choose the download again."
+                        auth != null -> "The catalog rejected the saved sign-in."
+                        else -> "This download needs permission, so it can't be fetched here."
+                    })
                 response.code == 404 || response.code == 410 -> throw DownloadException("That file is no longer available at ${result.sourceName}.")
                 response.code !in 200..299 -> throw DownloadException("${result.sourceName} couldn't send the file (HTTP ${response.code}).")
             }

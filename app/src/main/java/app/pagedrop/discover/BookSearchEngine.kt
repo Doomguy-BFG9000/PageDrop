@@ -169,6 +169,7 @@ internal object Ranking {
         SourceKind.STANDARD_EBOOKS -> 0
         SourceKind.GUTENBERG -> 1
         SourceKind.OPDS -> 2
+        SourceKind.WEBSITE -> 5
         SourceKind.INTERNET_ARCHIVE -> 3
         SourceKind.DIGITAL_LIBRARY_INDIA -> 3
         SourceKind.OPEN_LIBRARY -> 4

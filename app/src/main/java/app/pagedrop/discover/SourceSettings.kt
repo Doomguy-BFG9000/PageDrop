@@ -114,7 +114,7 @@ class SourceSettings internal constructor(
     private val lock = Any()
 
     fun setEnabled(kind: SourceKind, on: Boolean) {
-        if (kind == SourceKind.OPDS) return // individual catalogs are toggled with setCatalogEnabled
+        if (!kind.isBuiltIn) return // catalogs and browser downloads are not search switches
         synchronized(lock) {
             val next = if (on) _enabledBuiltIns.value + kind else _enabledBuiltIns.value - kind
             prefs.edit().putStringSet(KEY_BUILTINS, next.map { it.name }.toSet())
@@ -202,7 +202,7 @@ class SourceSettings internal constructor(
     private fun loadBuiltIns(): Set<SourceKind> {
         val stored = prefs.getStringSet(KEY_BUILTINS, null) ?: return DEFAULT_BUILTINS
         val enabled = stored.mapNotNull { runCatching { SourceKind.valueOf(it) }.getOrNull() }
-            .filter { it != SourceKind.OPDS }.toSet()
+            .filter { it.isBuiltIn }.toSet()
         val known = prefs.getStringSet(KEY_KNOWN_BUILTINS, null) ?: setOf("GUTENBERG", "STANDARD_EBOOKS", "INTERNET_ARCHIVE")
         // Add new built-ins once on upgrade, while preserving switches and an explicit "all off" choice.
         val migrated = if (enabled.isEmpty()) enabled else enabled + DEFAULT_BUILTINS.filter { it.name !in known }
@@ -244,7 +244,7 @@ class SourceSettings internal constructor(
         private const val KEY_BUILTINS = "enabled_builtins"
         private const val KEY_KNOWN_BUILTINS = "known_builtins"
         private const val KEY_CATALOGS = "catalogs"
-        val DEFAULT_BUILTINS = SourceKind.entries.filter { it != SourceKind.OPDS }.toSet()
+        val DEFAULT_BUILTINS = SourceKind.entries.filter { it.isBuiltIn }.toSet()
 
         fun normalizeUrl(raw: String): String? {
             var s = raw.trim()

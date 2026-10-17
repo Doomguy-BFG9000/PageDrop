@@ -16,7 +16,7 @@ class SourceSettingsTest {
         val prefs = app.pagedrop.data.NullSharedPreferences()
         val http = FakeHttp()
         val s1 = SourceSettings(prefs, MemorySecrets(), http)
-        assertEquals(SourceKind.entries.filter { it != SourceKind.OPDS }.toSet(), s1.enabledBuiltIns.value)
+        assertEquals(SourceKind.entries.filter { it.isBuiltIn }.toSet(), s1.enabledBuiltIns.value)
         s1.setEnabled(SourceKind.INTERNET_ARCHIVE, false)
         assertFalse(SourceKind.INTERNET_ARCHIVE in s1.enabledBuiltIns.value)
         val s2 = SourceSettings(prefs, MemorySecrets(), http) // "restart"

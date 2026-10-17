@@ -41,7 +41,6 @@ import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
-import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextOverflow
@@ -51,6 +50,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import app.pagedrop.data.local.database.Book
 import app.pagedrop.discover.BookResult
 import app.pagedrop.discover.SourceError
+import app.pagedrop.discover.SourceKind
 import app.pagedrop.ui.components.HairlineCard
 import app.pagedrop.ui.theme.BookSerif
 import coil.compose.SubcomposeAsyncImage
@@ -60,6 +60,11 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.layout.ContentScale
 import app.pagedrop.ui.components.CoverPlaceholder
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.key
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.saveable.rememberSaveable
 
 /**
  * Full-screen "Find a book": query field, results, recent searches. Picking a result opens
@@ -83,8 +88,18 @@ fun FindScreen(
     val focus = remember { FocusRequester() }
     val keyboard = LocalSoftwareKeyboardController.current
     val focusManager = LocalFocusManager.current
-    val uriHandler = LocalUriHandler.current
-    LaunchedEffect(Unit) { if (search.results == null) focus.requestFocus() }
+    var browserName by rememberSaveable { mutableStateOf<String?>(null) }
+    var browserUrl by rememberSaveable { mutableStateOf<String?>(null) }
+    var browserInstance by rememberSaveable { mutableIntStateOf(0) }
+    fun openSource(name: String, url: String) {
+        keyboard?.hide()
+        focusManager.clearFocus()
+        viewModel.dismissSelected()
+        browserName = name
+        browserUrl = url
+        browserInstance++
+    }
+    LaunchedEffect(Unit) { if (search.results == null && browserUrl == null) focus.requestFocus() }
 
     BackHandler { if (selected != null) viewModel.dismissSelected() else onBack() }
 
@@ -103,111 +118,125 @@ fun FindScreen(
         viewModel.runSearch(query)
     }
 
-    Column(
-        modifier
-            .fillMaxSize()
-            .background(MaterialTheme.colorScheme.background)
-            .statusBarsPadding()
-            .pointerInput(Unit) { detectTapGestures { } }
-    ) {
-        Row(
-            Modifier.fillMaxWidth().padding(start = 4.dp, end = 16.dp, top = 8.dp),
-            verticalAlignment = Alignment.CenterVertically,
+    Box(modifier.fillMaxSize()) {
+        Column(
+            Modifier
+                .fillMaxSize()
+                .background(MaterialTheme.colorScheme.background)
+                .statusBarsPadding()
+                .pointerInput(Unit) { detectTapGestures { } }
         ) {
-            IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back") }
-            OutlinedTextField(
-                value = search.query,
-                onValueChange = viewModel::onQueryChange,
-                modifier = Modifier.weight(1f).focusRequester(focus),
-                singleLine = true,
-                shape = MaterialTheme.shapes.small,
-                textStyle = MaterialTheme.typography.bodyLarge.copy(fontFamily = BookSerif),
-                placeholder = {
-                    Text("Search for a book…", style = MaterialTheme.typography.bodyLarge.copy(fontFamily = BookSerif))
-                },
-                leadingIcon = { Icon(Icons.Outlined.Search, contentDescription = null) },
-                trailingIcon = {
-                    if (search.query.isNotEmpty()) {
-                        IconButton(onClick = { viewModel.clearQuery(); focus.requestFocus() }) {
-                            Icon(Icons.Outlined.Close, "Clear")
+            Row(
+                Modifier.fillMaxWidth().padding(start = 4.dp, end = 16.dp, top = 8.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back") }
+                OutlinedTextField(
+                    value = search.query,
+                    onValueChange = viewModel::onQueryChange,
+                    modifier = Modifier.weight(1f).focusRequester(focus),
+                    singleLine = true,
+                    shape = MaterialTheme.shapes.small,
+                    textStyle = MaterialTheme.typography.bodyLarge.copy(fontFamily = BookSerif),
+                    placeholder = {
+                        Text("Search for a book…", style = MaterialTheme.typography.bodyLarge.copy(fontFamily = BookSerif))
+                    },
+                    leadingIcon = { Icon(Icons.Outlined.Search, contentDescription = null) },
+                    trailingIcon = {
+                        if (search.query.isNotEmpty()) {
+                            IconButton(onClick = { viewModel.clearQuery(); focus.requestFocus() }) {
+                                Icon(Icons.Outlined.Close, "Clear")
+                            }
+                        }
+                    },
+                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
+                    keyboardActions = KeyboardActions(onSearch = { submit() }),
+                )
+            }
+            if (search.searching) {
+                LinearProgressIndicator(Modifier.fillMaxWidth().padding(top = 8.dp).height(2.dp))
+            } else {
+                Spacer(Modifier.height(2.dp))
+            }
+
+            val results = search.results
+            LazyColumn(
+                modifier = Modifier.weight(1f).fillMaxWidth(),
+                contentPadding = androidx.compose.foundation.layout.PaddingValues(16.dp),
+                verticalArrangement = Arrangement.spacedBy(10.dp),
+            ) {
+                if (results != null && results.errors.isNotEmpty()) {
+                    item { SourceErrorChips(results.errors) }
+                }
+                when {
+                    results != null && results.results.isNotEmpty() -> items(results.results, key = { it.id }) { r ->
+                        ResultRow(
+                            result = r,
+                            bestLabel = formatChipLabel(viewModel.bestFormat(r)),
+                            inLibrary = library.any { matchesLibraryBook(r, it) },
+                            onClick = { keyboard?.hide(); viewModel.select(r) },
+                        )
+                    }
+                    results != null && !search.searching -> item {
+                        NoticeText(
+                            if (results.errors.isNotEmpty()) "Nothing found, and some sources couldn’t be reached."
+                            else "No books found for “${results.query}”. Try the title and author, or fewer words."
+                        )
+                    }
+                    search.failure != null -> item { NoticeText(search.failure!!) }
+                    !search.searching -> item {
+                        IdleContent(
+                            recent = recent,
+                            hasSources = search.hasSources,
+                            onRecent = { viewModel.onQueryChange(it); submit(it) },
+                            onClearRecent = viewModel::clearRecent,
+                            onOpenSources = onOpenSources,
+                        )
+                    }
+                }
+                if (results != null && !search.searching && results.websiteSearches.isNotEmpty()) {
+                    item {
+                        Text("SEARCH MORE LIBRARIES", style = MaterialTheme.typography.labelSmall,
+                            modifier = Modifier.padding(top = 16.dp), color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                    items(results.websiteSearches, key = { it.sourceName }) { link ->
+                        HairlineCard(Modifier.fillMaxWidth(), onClick = { openSource(link.sourceName, link.url) }) {
+                            Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                                Text("Search ${link.sourceName}", style = MaterialTheme.typography.titleMedium)
+                                Text(link.description, style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            }
                         }
                     }
-                },
-                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
-                keyboardActions = KeyboardActions(onSearch = { submit() }),
+                }
+            }
+        }
+
+        browserUrl?.let { url ->
+            key(browserInstance) {
+                SourceBrowserScreen(
+                    SourceBrowserTarget(browserName.orEmpty(), url),
+                    onClose = { browserUrl = null; browserName = null },
+                    onDownload = viewModel::select,
+                )
+            }
+        }
+
+        selected?.let { result ->
+            ResultSheet(
+                result = result,
+                action = action,
+                chosen = chosen,
+                libraryBook = if (result.source == SourceKind.WEBSITE) null else library.firstOrNull { matchesLibraryBook(result, it) },
+                onChoose = viewModel::chooseOption,
+                onSend = viewModel::sendToKindle,
+                onAdd = viewModel::addToLibrary,
+                onRetry = viewModel::retry,
+                onEditMetadata = viewModel::editBrowserMetadata,
+                onOpenWebsite = { result.websiteUrl?.let { openSource(result.sourceName, it) } },
+                onDismiss = viewModel::dismissSelected,
             )
         }
-        if (search.searching) {
-            LinearProgressIndicator(Modifier.fillMaxWidth().padding(top = 8.dp).height(2.dp))
-        } else {
-            Spacer(Modifier.height(2.dp))
-        }
-
-        val results = search.results
-        LazyColumn(
-            modifier = Modifier.weight(1f).fillMaxWidth(),
-            contentPadding = androidx.compose.foundation.layout.PaddingValues(16.dp),
-            verticalArrangement = Arrangement.spacedBy(10.dp),
-        ) {
-            if (results != null && results.errors.isNotEmpty()) {
-                item { SourceErrorChips(results.errors) }
-            }
-            when {
-                results != null && results.results.isNotEmpty() -> items(results.results, key = { it.id }) { r ->
-                    ResultRow(
-                        result = r,
-                        bestLabel = formatChipLabel(viewModel.bestFormat(r)),
-                        inLibrary = library.any { matchesLibraryBook(r, it) },
-                        onClick = { keyboard?.hide(); viewModel.select(r) },
-                    )
-                }
-                results != null && !search.searching -> item {
-                    NoticeText(
-                        if (results.errors.isNotEmpty()) "Nothing found, and some sources couldn’t be reached."
-                        else "No books found for “${results.query}”. Try the title and author, or fewer words."
-                    )
-                }
-                search.failure != null -> item { NoticeText(search.failure!!) }
-                !search.searching -> item {
-                    IdleContent(
-                        recent = recent,
-                        hasSources = search.hasSources,
-                        onRecent = { viewModel.onQueryChange(it); submit(it) },
-                        onClearRecent = viewModel::clearRecent,
-                        onOpenSources = onOpenSources,
-                    )
-                }
-            }
-            if (results != null && !search.searching && results.websiteSearches.isNotEmpty()) {
-                item {
-                    Text("SEARCH MORE LIBRARIES", style = MaterialTheme.typography.labelSmall,
-                        modifier = Modifier.padding(top = 16.dp), color = MaterialTheme.colorScheme.onSurfaceVariant)
-                }
-                items(results.websiteSearches, key = { it.sourceName }) { link ->
-                    HairlineCard(Modifier.fillMaxWidth(), onClick = { uriHandler.openUri(link.url) }) {
-                        Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                            Text("Search ${link.sourceName}", style = MaterialTheme.typography.titleMedium)
-                            Text(link.description, style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant)
-                        }
-                    }
-                }
-            }
-        }
-    }
-
-    selected?.let { result ->
-        ResultSheet(
-            result = result,
-            action = action,
-            chosen = chosen,
-            libraryBook = library.firstOrNull { matchesLibraryBook(result, it) },
-            onChoose = viewModel::chooseOption,
-            onSend = viewModel::sendToKindle,
-            onAdd = viewModel::addToLibrary,
-            onRetry = viewModel::retry,
-            onDismiss = viewModel::dismissSelected,
-        )
     }
 }
 

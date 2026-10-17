@@ -56,6 +56,7 @@ private fun SourceKind.title(): String = when (this) {
     SourceKind.FADED_PAGE -> "Faded Page"
     SourceKind.MANYBOOKS -> "ManyBooks"
     SourceKind.OPDS -> "Your catalogs"
+    SourceKind.WEBSITE -> "Website downloads"
 }
 
 private fun SourceKind.blurb(): String = when (this) {
@@ -70,10 +71,10 @@ private fun SourceKind.blurb(): String = when (this) {
     SourceKind.ENGLISH_WIKISOURCE -> "Classic English texts; read and check exports on the website"
     SourceKind.FADED_PAGE -> "English title search with EPUB and Kindle downloads"
     SourceKind.MANYBOOKS -> "English ebooks; downloads on the website may require an account"
-    SourceKind.OPDS -> ""
+    SourceKind.OPDS, SourceKind.WEBSITE -> ""
 }
 
-private val builtIns = SourceKind.entries.filter { it != SourceKind.OPDS }
+private val builtIns = SourceKind.entries.filter { it.isBuiltIn }
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -128,7 +129,7 @@ fun BookSourcesScreen(
 
             Text(
                 "Website shortcuts for ePustakalay, Anna’s Archive, Global Grey and OceanofPDF appear below book results. " +
-                    "These searches open on their websites; download access varies.",
+                    "Search inside PageDrop and capture supported book downloads; access varies.",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )

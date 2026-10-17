@@ -116,12 +116,16 @@ dependencies {
     // Local tests: jUnit, coroutines, Android runner
     testImplementation(libs.junit)
     testImplementation(libs.kotlinx.coroutines.test)
+    testImplementation("com.squareup.okhttp3:mockwebserver:4.12.0")
+    testImplementation("com.squareup.okhttp3:okhttp-tls:4.12.0")
 
     // Instrumented tests: jUnit rules and runners
 
     androidTestImplementation(libs.androidx.test.core)
     androidTestImplementation(libs.androidx.test.ext.junit)
     androidTestImplementation(libs.androidx.test.runner)
+    // Compose's transitive Espresso version predates Android 17's input API changes.
+    androidTestImplementation("androidx.test.espresso:espresso-core:3.7.0")
 
     // Navigation
     implementation(libs.androidx.navigation3.ui)

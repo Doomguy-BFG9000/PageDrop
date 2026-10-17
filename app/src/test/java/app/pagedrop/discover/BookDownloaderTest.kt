@@ -137,4 +137,29 @@ class BookDownloaderTest {
         run(d, DownloadOption(BookFormat.PDF, "https://lib.example.org/a.pdf"), book())
         assertNull(http.requests[2].second)
     }
+
+    @Test
+    fun browserDownloadUsesItsSessionAndStillValidatesTheFile() = runBlocking {
+        val fake = FakeHttp().apply { streamBytes = mapOf("a.epub" to epub()) }
+        val session = BrowserDownloadSession("WebView UA", "https://site.example/book", { "verified=yes" })
+        var browserCalls = 0
+        val http = object : DiscoverHttp by fake {
+            override fun openBrowser(url: String, session: BrowserDownloadSession): HttpStream {
+                browserCalls++
+                assertEquals("WebView UA", session.userAgent)
+                return fake.open(url)
+            }
+        }
+        val dir = tempDir()
+        val d = BookDownloader(dir, http) { _, _ -> error("Browser downloads must not use OPDS credentials") }
+        val option = DownloadOption(BookFormat.EPUB, "https://files.example/a.epub", browserSession = session)
+        val file = d.download(book(SourceKind.WEBSITE), option) {}
+        assertEquals(1, browserCalls)
+        assertTrue(file.length() > 0)
+        fake.streamBytes = mapOf("a.epub" to "<!DOCTYPE html><html>Verify again</html>".toByteArray())
+        assertTrue(runCatching { d.download(book(SourceKind.WEBSITE), option) {} }.exceptionOrNull() is DownloadException)
+        fake.streamCode = 403
+        val error = runCatching { d.download(book(SourceKind.WEBSITE), option) {} }.exceptionOrNull()!!
+        assertTrue(error.message!!.contains("verification expired"))
+    }
 }

@@ -45,10 +45,20 @@ PageDrop's own UI and APIs.
   exports can be blocked or incomplete depending on the book's chapter structure;
   PageDrop does not guess a downloadable edition. Open Library borrowing also
   stays on its website; open editions are checked for direct downloads.
-- ePustakalay, Anna’s Archive, Global Grey, and OceanofPDF have website shortcuts below results.
-  ePustakalay uses an interactive search widget; shadow-library availability and
-  download access vary. OceanofPDF blocks automated access and opens its homepage
-  for a manual search. Failed built-in sources also offer website search fallbacks.
+- ePustakalay, Anna’s Archive, Global Grey, and OceanofPDF have website searches below
+  results. These and source detail links open in PageDrop's browser, where the user
+  can browse editions, sign in if needed, and complete website verification.
+  OceanofPDF opens its homepage for manual search. Access still depends on each site.
+- Tapping a supported book download opens the book sheet with editable title and
+  author. Choose Send to Kindle to download, validate, import and convert EPUB, then
+  continue into the existing transfer flow; Add to library keeps the original format.
+  The downloader uses the browser's user agent and live cookies for each destination,
+  including redirects, without forwarding another host's cookies or full referring URL.
+  Expired verification can be retried by reopening the source for a fresh download.
+  Website guesses never silently reuse an existing library edition.
+- Supported website downloads are HTTPS EPUB/MOBI/AZW3/PDF/TXT links or file attachments.
+  Blob URLs, DRM readers, and pages without downloadable files remain unsupported.
+  No JavaScript-to-native bridge, file access, or certificate-error bypass is enabled.
 - Sources can be switched off in Settings → Book sources. Existing switches are
   preserved when new sources are introduced, including an explicit all-off choice.
 
@@ -58,6 +68,11 @@ are opt-in: `PAGEDROP_LIVE=1 ./gradlew testDebugUnitTest --tests
 'app.pagedrop.discover.LiveSmokeTest.indianSourcesAndRealArchiveEpub'`.
 For English searches and real EPUB downloads, use `PAGEDROP_LIVE=1 ./gradlew
 testDebugUnitTest --tests 'app.pagedrop.discover.LiveSmokeTest.englishSourcesAndRealEpubDownloads'`.
+
+The Android WebView regression tests run on a connected device with
+`./gradlew connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.class=app.pagedrop.ui.discover.SourceBrowserScreenTest`.
+They exercise English links, Hindi extensionless attachments, session cookies and
+in-app review using local fixtures. Live website CAPTCHAs require user interaction.
 
 ### Tools Suite
 

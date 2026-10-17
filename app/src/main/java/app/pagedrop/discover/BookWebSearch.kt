@@ -18,7 +18,7 @@ object BookWebSearch {
                 SourceKind.ENGLISH_WIKISOURCE -> BookSearchLink("English Wikisource", "https://en.wikisource.org/w/index.php?title=Special:Search&search=$q", "Search English texts on the website")
                 SourceKind.FADED_PAGE -> BookSearchLink("Faded Page", "https://www.fadedpage.com/csearch.php?title=$q", "Search English titles on Faded Page")
                 SourceKind.MANYBOOKS -> BookSearchLink("ManyBooks", "https://manybooks.net/search-book?search=$q", "Search ebooks on ManyBooks; an account may be required")
-                SourceKind.OPDS -> null
+                SourceKind.OPDS, SourceKind.WEBSITE -> null
             }
         }
         return fallbacks + listOf(

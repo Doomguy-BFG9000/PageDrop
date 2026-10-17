@@ -7,6 +7,7 @@ import app.pagedrop.data.local.database.Book
 import app.pagedrop.discover.BookResult
 import app.pagedrop.discover.DownloadOption
 import app.pagedrop.discover.SearchResults
+import app.pagedrop.discover.SourceKind
 import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
 import kotlinx.coroutines.CancellationException
@@ -144,6 +145,13 @@ class DiscoverViewModel @Inject constructor(
         if (_action.value !is ActionState.Working) _chosenOption.value = option
     }
 
+    fun editBrowserMetadata(title: String, author: String) {
+        if (_action.value is ActionState.Working || importedBook != null) return
+        _selected.update { result ->
+            if (result?.source == SourceKind.WEBSITE) result.copy(title = title.take(300), author = author.take(200)) else result
+        }
+    }
+
     /** Closes the sheet; a running download is cancelled. */
     fun dismissSelected() {
         actionJob?.cancel()
@@ -175,7 +183,8 @@ class DiscoverViewModel @Inject constructor(
             var stage = "download"
             try {
                 // Already in the library: no download, just (convert and) send.
-                var book = importedBook ?: libraryMatch(result)
+                // Filename guesses from a website must never select an existing edition automatically.
+                var book = importedBook ?: if (result.source == SourceKind.WEBSITE) null else libraryMatch(result)
                 if (book == null) {
                     _action.value = ActionState.Working(WorkStage.Preparing)
                     val resolved = if (result.needsResolve && result.options.isEmpty()) finder.resolve(result) else result

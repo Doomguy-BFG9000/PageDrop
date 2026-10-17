@@ -26,6 +26,7 @@ import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.test.setMain
 import androidx.lifecycle.viewModelScope
 import org.junit.After
+import org.junit.Assert.assertSame
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
@@ -318,6 +319,40 @@ class DiscoverViewModelTest {
         advanceUntilIdle()
         assertNull(vm.selected.value)
         assertEquals(ActionState.Idle, vm.action.value)
+    }
+
+    @Test
+    fun browserDownloadReviewsMetadataAndUsesExistingConvertSendFlow() = runTest(dispatcher) {
+        val session = app.pagedrop.discover.BrowserDownloadSession("UA", "https://site.example/book", { null })
+        val browser = app.pagedrop.discover.BrowserDownloads.capture(
+            "https://files.example/गोदान.epub", null, null, "Library", session,
+        )!!
+        val repo = FakeRepo().apply { nextFormat = "EPUB" }
+        val vm = vm(repo)
+        vm.select(browser)
+        vm.editBrowserMetadata("गोदान", "प्रेमचंद")
+        assertSame(session, vm.chosenOption.value!!.browserSession)
+        vm.sendToKindle()
+        advanceUntilIdle()
+        val done = vm.action.value as ActionState.Finished
+        assertEquals("गोदान", done.book.title)
+        assertEquals("प्रेमचंद", done.book.author)
+        assertEquals("MOBI", done.book.format)
+        assertTrue(done.sendRequested)
+        assertEquals(1, repo.converted)
+    }
+
+    @Test
+    fun browserFilenameGuessDoesNotReuseDifferentExistingEdition() = runTest(dispatcher) {
+        val existing = Book(uid = 3, title = "Frankenstein", author = "Unknown Author", fileName = "old.epub", filePath = "/old.epub", format = "EPUB", fileSize = 1)
+        val repo = FakeRepo(listOf(existing))
+        val vm = vm(repo)
+        advanceUntilIdle()
+        vm.select(result(title = "Frankenstein", author = "").copy(source = SourceKind.WEBSITE))
+        vm.addToLibrary()
+        advanceUntilIdle()
+        assertEquals(1, fetcher.calls)
+        assertEquals(10, (vm.action.value as ActionState.Finished).book.uid)
     }
 
     @Test

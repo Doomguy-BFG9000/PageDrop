@@ -38,6 +38,8 @@ class HttpStream(
 interface DiscoverHttp {
     fun get(url: String, auth: BasicAuth? = null, accept: String? = null): HttpReply
     fun open(url: String, auth: BasicAuth? = null): HttpStream
+    fun openBrowser(url: String, session: BrowserDownloadSession): HttpStream =
+        throw IOException("Browser downloads are not supported by this connection")
     fun postForm(url: String, fields: Map<String, String>): HttpReply =
         throw SourceUnavailableException("This source's search is not supported")
     /** Bound synchronous network I/O too; coroutine interruption alone cannot reliably stop a socket read. */
@@ -45,10 +47,13 @@ interface DiscoverHttp {
 }
 
 @Singleton
-class OkHttpDiscoverHttp private constructor(private val requestTimeoutMs: Long) : DiscoverHttp {
+class OkHttpDiscoverHttp internal constructor(
+    private val requestTimeoutMs: Long,
+    private val httpClient: OkHttpClient = client,
+) : DiscoverHttp {
     @Inject constructor() : this(20_000L)
 
-    override fun withTimeout(timeoutMs: Long): DiscoverHttp = OkHttpDiscoverHttp(timeoutMs)
+    override fun withTimeout(timeoutMs: Long): DiscoverHttp = OkHttpDiscoverHttp(timeoutMs, httpClient)
 
     override fun get(url: String, auth: BasicAuth?, accept: String?): HttpReply {
         return execute(request(url, auth, accept))
@@ -60,7 +65,7 @@ class OkHttpDiscoverHttp private constructor(private val requestTimeoutMs: Long)
     }
 
     private fun execute(request: Request): HttpReply {
-        client.newBuilder().callTimeout(requestTimeoutMs, TimeUnit.MILLISECONDS).build().newCall(request).execute().use { response ->
+        httpClient.newBuilder().callTimeout(requestTimeoutMs, TimeUnit.MILLISECONDS).build().newCall(request).execute().use { response ->
             val body = response.body ?: return HttpReply(response.code, "", request.url.toString(), null)
             val text = readCapped(body.byteStream(), MAX_TEXT_BYTES)
             return HttpReply(response.code, text, response.request.url.toString(), body.contentType()?.toString())
@@ -68,8 +73,26 @@ class OkHttpDiscoverHttp private constructor(private val requestTimeoutMs: Long)
     }
 
     override fun open(url: String, auth: BasicAuth?): HttpStream {
-        val response = client.newBuilder().readTimeout(30, TimeUnit.SECONDS).build()
-            .newCall(request(url, auth, "*/*")).execute()
+        return openStream(httpClient.newBuilder().readTimeout(30, TimeUnit.SECONDS).build(), request(url, auth, "*/*"))
+    }
+
+    override fun openBrowser(url: String, session: BrowserDownloadSession): HttpStream {
+        val req = request(url, null, "*/*")
+        if (!req.url.isHttps) throw IOException("Use a secure download address")
+        val browserClient = httpClient.newBuilder()
+            .readTimeout(30, TimeUnit.SECONDS)
+            .followSslRedirects(false)
+            .cookieJar(session.cookieJar)
+            .addNetworkInterceptor { chain ->
+                val builder = chain.request().newBuilder().header("User-Agent", session.userAgent)
+                session.refererFor(chain.request().url)?.let { builder.header("Referer", it) }
+                chain.proceed(builder.build())
+            }.build()
+        return openStream(browserClient, req)
+    }
+
+    private fun openStream(httpClient: OkHttpClient, request: Request): HttpStream {
+        val response = httpClient.newCall(request).execute()
         val body = response.body
         if (body == null) {
             response.close()
