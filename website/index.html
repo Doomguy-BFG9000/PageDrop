@@ -1,0 +1,391 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>PageDrop — the store closed, the Kindle didn't</title>
+<meta name="description" content="PageDrop finds books on your phone and sends them to your old, jailbroken Kindle over Wi-Fi. Free and open source.">
+<meta property="og:title" content="PageDrop — the store closed, the Kindle didn't">
+<meta property="og:description" content="Find a book on your phone. It's on your old Kindle before you put the phone down. No cable, no Calibre, no permission.">
+<meta property="og:image" content="assets/poster.png">
+<meta name="theme-color" content="#efebe1">
+<link rel="icon" href="assets/icon.svg" type="image/svg+xml">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=Literata:ital,opsz,wght@0,7..72,400;0,7..72,600;0,7..72,800;1,7..72,400;1,7..72,500&family=UnifrakturCook:wght@700&display=swap" rel="stylesheet">
+<style>
+:root {
+  --paper: #efebe1;
+  --paper-deep: #e6e1d4;
+  --ink: #121212;
+  --ink-soft: #3a3833;
+  --muted: #6d6a62;
+  --red: #b3261e;
+  --rule: rgba(18, 18, 18, 0.18);
+  --serif: "Literata", Georgia, serif;
+  --mono: "IBM Plex Mono", ui-monospace, Menlo, monospace;
+  --black: "UnifrakturCook", "Literata", serif;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+html { scroll-behavior: smooth; }
+body {
+  background: var(--paper);
+  color: var(--ink);
+  font-family: var(--serif);
+  font-size: 19px;
+  line-height: 1.7;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+/* halftone grain over the whole sheet */
+body::before {
+  content: "";
+  position: fixed; inset: 0; z-index: 0; pointer-events: none;
+  background-image: radial-gradient(rgba(18,18,18,.07) 0.6px, transparent 0.7px);
+  background-size: 4px 4px;
+}
+a { color: inherit; }
+::selection { background: var(--ink); color: var(--paper); }
+
+/* ── the poster, pinned to the right of the sheet ── */
+.poster {
+  position: fixed; top: 0; right: 0; bottom: 0;
+  width: min(48vw, 75vh);
+  z-index: 1;
+  background: url("assets/poster.png") right center / contain no-repeat;
+  mix-blend-mode: multiply;   /* the poster's white becomes our paper */
+  filter: contrast(1.08);
+}
+.poster::after {               /* the red censor bar across the eyes */
+  content: "";
+  position: absolute; left: 30%; right: -4%; top: 56.5%;
+  height: 4.2%;
+  background: var(--red);
+  transform: rotate(-4deg) scaleX(0);
+  transform-origin: right center;
+  mix-blend-mode: multiply;
+  animation: censor 1.1s 0.6s cubic-bezier(.7,0,.2,1) forwards;
+}
+@keyframes censor { to { transform: rotate(-4deg) scaleX(1); } }
+
+.sheet {
+  position: relative; z-index: 2;
+  width: min(100% - 48px, 1180px);
+  margin: 0 auto;
+}
+.col { max-width: 600px; }
+
+/* ── masthead ── */
+.masthead {
+  display: flex; justify-content: space-between; align-items: center; gap: 16px;
+  padding: 22px 0 14px;
+  border-bottom: 2px solid var(--ink);
+  font-family: var(--mono); font-size: 12px; letter-spacing: .14em; text-transform: uppercase;
+}
+.brand { display: flex; align-items: center; gap: 10px; text-decoration: none; letter-spacing: .2em; font-weight: 500; }
+.brand img { width: 30px; height: 30px; border-radius: 50%; }
+.masthead nav { display: flex; gap: 18px; }
+.masthead nav a { text-decoration: none; opacity: .75; }
+.masthead nav a:hover { opacity: 1; text-decoration: underline; text-underline-offset: 4px; }
+.dateline {
+  display: flex; justify-content: space-between; gap: 12px; flex-wrap: wrap;
+  padding: 7px 0; border-bottom: 1px solid var(--ink);
+  font-family: var(--mono); font-size: 11px; letter-spacing: .12em; text-transform: uppercase; color: var(--ink-soft);
+}
+
+/* ── hero ── */
+.hero { min-height: calc(100vh - 110px); display: flex; flex-direction: column; justify-content: center; padding: 72px 0 96px; }
+.stamp {
+  display: inline-block; align-self: flex-start;
+  font-family: var(--mono); font-size: 12px; letter-spacing: .22em; text-transform: uppercase;
+  color: var(--red); border: 2px solid var(--red); padding: 5px 12px 4px;
+  transform: rotate(-3deg); margin-bottom: 34px;
+}
+h1 {
+  font-family: var(--serif); font-weight: 800;
+  font-size: clamp(46px, 7.2vw, 96px); line-height: .98; letter-spacing: -.025em;
+  max-width: 11ch;
+}
+h1 em { font-style: italic; font-weight: 400; }
+.lede { margin-top: 30px; font-size: clamp(19px, 1.9vw, 23px); line-height: 1.55; max-width: 31ch; color: var(--ink-soft); }
+.actions { display: flex; flex-wrap: wrap; gap: 14px; margin-top: 40px; }
+.btn {
+  display: inline-flex; align-items: center; gap: 10px;
+  font-family: var(--mono); font-size: 13px; letter-spacing: .12em; text-transform: uppercase;
+  text-decoration: none; padding: 15px 22px 14px; border: 2px solid var(--ink);
+  transition: transform .15s ease, background .15s ease, color .15s ease;
+}
+.btn:hover { transform: translate(-2px, -2px); box-shadow: 4px 4px 0 var(--ink); }
+.btn.solid { background: var(--ink); color: var(--paper); }
+.btn.solid:hover { box-shadow: 4px 4px 0 var(--red); }
+.fine { margin-top: 16px; font-family: var(--mono); font-size: 12px; color: var(--muted); letter-spacing: .04em; }
+
+/* ── sections ── */
+section { padding: 96px 0; border-top: 1px solid var(--ink); position: relative; }
+.kicker {
+  font-family: var(--mono); font-size: 12px; letter-spacing: .2em; text-transform: uppercase;
+  color: var(--ink-soft); display: flex; gap: 14px; align-items: baseline; margin-bottom: 26px;
+}
+.kicker b { color: var(--red); font-weight: 500; }
+h2 { font-weight: 800; font-size: clamp(34px, 4.4vw, 54px); line-height: 1.04; letter-spacing: -.02em; margin-bottom: 34px; max-width: 16ch; }
+h2 em { font-style: italic; font-weight: 400; }
+
+/* story: a clipping taped to the sheet */
+.clipping {
+  background: var(--paper);
+  padding: 46px 46px 40px;
+  border: 1px solid var(--rule);
+  position: relative;
+  box-shadow: 0 1px 0 var(--rule), 0 18px 40px -28px rgba(0,0,0,.35);
+  transform: rotate(-.6deg);
+}
+.clipping::before, .clipping::after {
+  content: ""; position: absolute; width: 120px; height: 30px;
+  background: rgba(205, 202, 194, .72);
+  box-shadow: inset 0 0 0 1px rgba(0,0,0,.04);
+}
+.clipping::before { top: -14px; left: 34px; transform: rotate(-5deg); }
+.clipping::after { bottom: -12px; right: 40px; transform: rotate(4deg); }
+.story p + p { margin-top: 1.05em; }
+.story p:first-of-type::first-letter {
+  font-family: var(--serif); font-weight: 800; float: left; font-size: 92px; line-height: .78;
+  padding: 10px 12px 0 0; color: var(--red);
+}
+.story .pull {
+  font-style: italic; font-size: 26px; line-height: 1.35; margin: 34px 0 30px;
+  padding-left: 22px; border-left: 4px solid var(--red);
+}
+.signoff { margin-top: 28px; font-family: var(--mono); font-size: 12px; letter-spacing: .12em; text-transform: uppercase; color: var(--muted); }
+
+/* redaction bars that peel away */
+.redact { position: relative; white-space: nowrap; }
+.redact::after {
+  content: ""; position: absolute; left: -3px; right: -3px; top: .12em; bottom: .02em;
+  background: var(--ink);
+  transform-origin: right center;
+  transition: transform .9s cubic-bezier(.7,0,.2,1);
+}
+.redact.revealed::after { transform: scaleX(0); }
+.redact.keep::after { transition: none; }
+.redact.keep:hover::after { transform: scaleX(0); transition: transform .5s ease; }
+
+/* problems → fixes, as a declassified list */
+.ledger { list-style: none; border-top: 2px solid var(--ink); }
+.ledger li {
+  display: grid; grid-template-columns: 54px 1fr; gap: 6px 18px;
+  padding: 26px 0; border-bottom: 1px solid var(--rule);
+}
+.ledger .n { font-family: var(--mono); font-size: 13px; color: var(--red); padding-top: 6px; }
+.ledger .was { font-family: var(--mono); font-size: 13px; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); text-decoration: line-through; text-decoration-color: var(--red); text-decoration-thickness: 2px; }
+.ledger h3 { grid-column: 2; font-size: 25px; font-weight: 600; line-height: 1.25; letter-spacing: -.01em; }
+.ledger p { grid-column: 2; color: var(--ink-soft); font-size: 18px; }
+
+/* how it works */
+.steps { display: grid; gap: 0; border-top: 2px solid var(--ink); counter-reset: s; }
+.steps div { padding: 26px 0 26px 92px; border-bottom: 1px solid var(--rule); position: relative; }
+.steps div::before {
+  counter-increment: s; content: counter(s, decimal-leading-zero);
+  position: absolute; left: 0; top: 14px;
+  font-family: var(--black); font-size: 58px; line-height: 1;
+}
+.steps h3 { font-size: 24px; font-weight: 600; }
+.steps p { color: var(--ink-soft); font-size: 18px; margin-top: 4px; }
+
+/* screens: polaroid-ish prints on the sheet */
+.prints {
+  display: flex; gap: 22px; overflow-x: auto; padding: 18px 4px 34px;
+  scroll-snap-type: x mandatory; scrollbar-width: thin;
+}
+.print {
+  flex: 0 0 auto; width: 210px; scroll-snap-align: start;
+  background: #fbfaf6; padding: 10px 10px 14px; border: 1px solid var(--rule);
+  box-shadow: 0 16px 30px -22px rgba(0,0,0,.45);
+}
+.print:nth-child(odd) { transform: rotate(-1.4deg); }
+.print:nth-child(even) { transform: rotate(1.2deg) translateY(10px); }
+.print img { display: block; width: 100%; height: auto; filter: grayscale(.15) contrast(1.02); }
+.print figcaption { font-family: var(--mono); font-size: 11px; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); margin-top: 10px; }
+
+/* fine print */
+.notes { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 28px 40px; }
+.notes h3 { font-family: var(--mono); font-size: 12px; letter-spacing: .18em; text-transform: uppercase; font-weight: 500; margin-bottom: 10px; color: var(--ink-soft); }
+.notes p { font-size: 17px; color: var(--ink-soft); }
+
+.closing { text-align: left; padding: 120px 0 80px; }
+.closing .big { font-family: var(--black); font-size: clamp(54px, 8vw, 110px); line-height: .95; }
+.closing .big span { color: var(--red); }
+footer {
+  border-top: 2px solid var(--ink); padding: 20px 0 40px;
+  display: flex; flex-wrap: wrap; justify-content: space-between; gap: 12px;
+  font-family: var(--mono); font-size: 11px; letter-spacing: .08em; text-transform: uppercase; color: var(--muted);
+}
+
+/* ── phones and narrow windows: poster becomes the hero ── */
+@media (max-width: 900px) {
+  body { font-size: 18px; }
+  .masthead, .dateline { position: relative; z-index: 3; background: var(--paper); }
+  .masthead { margin: 0 -24px; padding-left: 24px; padding-right: 24px; }
+  .dateline { margin: 0 -24px; padding-left: 24px; padding-right: 24px; }
+  .masthead nav { display: none; }
+  .dateline span:last-child { display: none; }
+  .poster {               /* the whole poster, at its own proportions, under the masthead */
+    position: absolute; top: var(--poster-top, 112px); left: 0; right: 0; bottom: auto;
+    width: 100%; height: auto; aspect-ratio: 637 / 850;
+    background-position: center top; background-size: contain;
+  }
+  .poster::after { left: 33%; right: -2%; top: 56.5%; height: 4.2%; }
+  .hero { min-height: 0; padding-top: calc(100vw * 850 / 637 - 40px); padding-bottom: 72px; }
+  .hero .card {
+    background: var(--paper); padding: 30px 24px 34px; margin: 0 -24px;
+    border-top: 2px solid var(--ink); position: relative;
+  }
+  .stamp { margin-bottom: 22px; }
+  .clipping { padding: 34px 24px 30px; transform: none; }
+  section { padding: 72px 0; }
+  .steps div { padding-left: 74px; }
+  .steps div::before { font-size: 46px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .poster::after { animation: none; transform: rotate(-4deg); }
+  .redact::after { transition: none; }
+  html { scroll-behavior: auto; }
+}
+</style>
+</head>
+<body>
+<div class="poster" role="img" aria-label="Poster: 'Big Brother is watching you' over a halftone portrait with a red censor bar across the eyes"></div>
+
+<div class="sheet">
+  <header class="masthead col">
+    <a class="brand" href="#top"><img src="assets/icon.svg" alt="">PageDrop</a>
+    <nav>
+      <a href="#story">The story</a>
+      <a href="#solves">What it solves</a>
+      <a href="#how">How it works</a>
+      <a href="https://github.com/spandan-kumar/PageDrop">Source</a>
+    </nav>
+  </header>
+  <div class="dateline col">
+    <span>Vol. 0.8 · Free &amp; open source</span>
+    <span>Filed after May 20, 2026</span>
+  </div>
+
+  <main id="top">
+    <div class="hero col">
+      <div class="card">
+        <span class="stamp">Unsupported device</span>
+        <h1>The store closed. <em>The Kindle didn't.</em></h1>
+        <p class="lede">PageDrop finds books on your phone and sends them to your old, jailbroken Kindle over Wi-Fi. No cable. No Calibre. No permission.</p>
+        <div class="actions">
+          <a class="btn solid" href="https://github.com/spandan-kumar/PageDrop/releases/latest">Download for Android</a>
+          <a class="btn" href="obtainium://add/https://github.com/spandan-kumar/PageDrop">Get it with Obtainium</a>
+        </div>
+        <p class="fine">Android 8+ · needs a jailbroken Kindle with KOReader · GPL-3.0</p>
+      </div>
+    </div>
+
+    <section id="story" class="col">
+      <div class="kicker"><b>File 01</b> How this came to be</div>
+      <article class="clipping story">
+        <p>I have a Kindle Paperwhite from 2012. The screen is perfect, the battery lasts weeks, and in all those years it has never once tried to sell me something I didn't ask for.</p>
+        <p>On May 20, 2026, Amazon decided it was done with it. Every Kindle made in 2012 or earlier lost the store: no buying, no borrowing, no downloading. The books already on it could stay. Everything else was <span class="redact">gone</span>.</p>
+        <p class="pull">The device still worked. It just wasn't allowed to get anything new.</p>
+        <p>So I jailbroke it. That part is easy now; the Kindle Modding Wiki walks you through it. What wasn't easy was everything after: Calibre on a laptop, a cable, an SFTP client, shell commands, PDFs that sliced a line in half at the bottom of every page, and books named <span class="redact">OD4388757722</span> with no author and a grey square for a cover.</p>
+        <p>Reading had become an IT job.</p>
+        <p>PageDrop is what I built so it stops being one. Type a title on your phone. Tap send. It's on the Kindle across the room before you've put the phone down.</p>
+        <p class="signoff">— Written on a phone, read on a Kindle Amazon gave up on</p>
+      </article>
+    </section>
+
+    <section id="solves" class="col">
+      <div class="kicker"><b>File 02</b> What it solves</div>
+      <h2>Six things that made reading <em>a chore.</em></h2>
+      <ol class="ledger">
+        <li><span class="n">01</span><div><span class="was">The store is gone</span></div>
+          <h3>Search, then send</h3>
+          <p>Find books from Project Gutenberg, Standard Ebooks, the Internet Archive and your own catalogs. Pick one; it arrives in the best format your Kindle can read.</p></li>
+        <li><span class="n">02</span><div><span class="was">Cables and Calibre</span></div>
+          <h3>Your phone is the whole toolchain</h3>
+          <p>Everything travels over Wi-Fi through KOReader's SSH server. Books land on the Kindle's home screen and in KOReader at the same time.</p></li>
+        <li><span class="n">03</span><div><span class="was">PDFs that cut lines off</span></div>
+          <h3>PDFs that read like books</h3>
+          <p>Hard line breaks unwrapped, running headers and page numbers stripped, and paragraphs rejoined across pages, instead of a scan pretending to be a book.</p></li>
+        <li><span class="n">04</span><div><span class="was">“Unknown Author”, no cover</span></div>
+          <h3>Books that know their names</h3>
+          <p>Title, author and cover come from the file itself and from open catalogs, then get written into the book, so the Kindle shows them properly too.</p></li>
+        <li><span class="n">05</span><div><span class="was">What's even on it?</span></div>
+          <h3>The Kindle, from your pocket</h3>
+          <p>See every book on the device, delete what you've finished, and save Kindle-only books back to your phone.</p></li>
+        <li><span class="n">06</span><div><span class="was">Where do I even start</span></div>
+          <h3>A setup that holds your hand</h3>
+          <p>A step-by-step checklist sends you to the Kindle Modding Wiki for the jailbreak, then handles KOReader, updates and Wi-Fi with you.</p></li>
+      </ol>
+    </section>
+
+    <section id="how" class="col">
+      <div class="kicker"><b>File 03</b> How it works</div>
+      <h2>Three steps. <em>One of them, once.</em></h2>
+      <div class="steps">
+        <div><h3>Get your Kindle ready</h3><p>Jailbreak, install KOReader, switch on its SSH server. PageDrop walks you through it and finds your Kindle on the network.</p></div>
+        <div><h3>Find a book</h3><p>Type a title. Or share a file to PageDrop from anywhere on your phone.</p></div>
+        <div><h3>It's on your Kindle</h3><p>Converted if it needs to be, named and covered properly, sent over Wi-Fi. Done.</p></div>
+      </div>
+    </section>
+
+    <section class="col" aria-label="Screens">
+      <div class="kicker"><b>File 04</b> Evidence</div>
+      <div class="prints">
+        <figure class="print"><img src="assets/screens/1.png" alt="Library with covers and a search field" loading="lazy" width="360" height="800"><figcaption>The library</figcaption></figure>
+        <figure class="print"><img src="assets/screens/2.png" alt="Search results for Frankenstein" loading="lazy" width="360" height="800"><figcaption>Find a book</figcaption></figure>
+        <figure class="print"><img src="assets/screens/3.png" alt="A book ready to send to the Kindle" loading="lazy" width="360" height="800"><figcaption>Send to Kindle</figcaption></figure>
+        <figure class="print"><img src="assets/screens/4.png" alt="Books currently on the Kindle" loading="lazy" width="360" height="800"><figcaption>On your Kindle</figcaption></figure>
+        <figure class="print"><img src="assets/screens/5.png" alt="Book sources settings" loading="lazy" width="360" height="800"><figcaption>Your sources</figcaption></figure>
+      </div>
+    </section>
+
+    <section class="col">
+      <div class="kicker"><b>File 05</b> The fine print</div>
+      <div class="notes">
+        <div><h3>You'll need</h3><p>An Android phone and a jailbroken Kindle running KOReader, on the same Wi-Fi. Built and tested on a 2012 Paperwhite; any jailbroken Kindle with KOReader should work.</p></div>
+        <div><h3>Your books stay yours</h3><p>No sign-up, no tracking. Books convert on your phone; an optional conversion server can help with stubborn files, and one switch turns it off.</p></div>
+        <div><h3>Open source</h3><p>GPL-3.0. Read it, fork it, fix it on <a href="https://github.com/spandan-kumar/PageDrop">GitHub</a>. Jailbreak guides live on the <a href="https://kindlemodding.org/">Kindle Modding Wiki</a>.</p></div>
+      </div>
+    </section>
+
+    <div class="closing col">
+      <p class="big">Big Brother is watching. <span>Read anyway.</span></p>
+      <div class="actions">
+        <a class="btn solid" href="https://github.com/spandan-kumar/PageDrop/releases/latest">Download PageDrop</a>
+      </div>
+    </div>
+  </main>
+
+  <footer>
+    <span>PageDrop · GPL-3.0</span>
+    <span>Not affiliated with or endorsed by Amazon. Kindle is a trademark of Amazon.com, Inc.</span>
+    <span>Poster art: <a href="https://bezos.click">bezos.click</a></span>
+  </footer>
+</div>
+
+<script>
+  // On phones the poster sits right under the masthead; measure it instead of guessing.
+  const placePoster = () => {
+    const d = document.querySelector('.dateline');
+    document.documentElement.style.setProperty('--poster-top', (d.getBoundingClientRect().bottom + scrollY) + 'px');
+  };
+  placePoster(); addEventListener('resize', placePoster);
+  // Redactions peel away as they scroll into view; the reader is allowed to see.
+  const bars = document.querySelectorAll('.redact');
+  if ('IntersectionObserver' in window && !matchMedia('(prefers-reduced-motion: reduce)').matches) {
+    const io = new IntersectionObserver((entries) => {
+      entries.forEach((e) => {
+        if (e.isIntersecting) { setTimeout(() => e.target.classList.add('revealed'), 500); io.unobserve(e.target); }
+      });
+    }, { threshold: 1, rootMargin: '0px 0px -15% 0px' });
+    bars.forEach((b) => io.observe(b));
+  } else {
+    bars.forEach((b) => b.classList.add('revealed'));
+  }
+</script>
+</body>
+</html>
