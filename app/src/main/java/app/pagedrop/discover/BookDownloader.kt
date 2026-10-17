@@ -11,6 +11,7 @@ import java.io.File
 import java.io.IOException
 import java.net.UnknownHostException
 import java.net.SocketTimeoutException
+import java.util.zip.ZipFile
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -110,7 +111,7 @@ class BookDownloader internal constructor(
         if (read == 0) throw DownloadException("The downloaded file was empty.")
         val ok = when (format) {
             BookFormat.PDF -> head.indexOfAscii("%PDF-", read).let { it in 0..1023 }
-            BookFormat.EPUB -> read >= 4 && head[0] == 'P'.code.toByte() && head[1] == 'K'.code.toByte()
+            BookFormat.EPUB -> isEpub(file)
             BookFormat.AZW3, BookFormat.MOBI -> read >= 68 && head.indexOfAscii("BOOKMOBI", read) == 60
             BookFormat.TXT -> looksLikeText(head, read)
         }
@@ -124,6 +125,18 @@ class BookDownloader internal constructor(
             )
         }
     }
+
+    private fun isEpub(file: File): Boolean = try {
+        ZipFile(file).use { zip ->
+            val mime = zip.getEntry("mimetype")
+            if (mime == null || zip.getEntry("META-INF/container.xml") == null) false
+            else zip.getInputStream(mime).use { input ->
+                val bytes = ByteArray(64)
+                val size = input.read(bytes)
+                size > 0 && String(bytes, 0, size, Charsets.US_ASCII).trim() == "application/epub+zip"
+            }
+        }
+    } catch (e: IOException) { false }
 
     private fun looksLikeText(b: ByteArray, n: Int): Boolean {
         if (String(b, 0, minOf(n, 512), Charsets.ISO_8859_1).trimStart().let {

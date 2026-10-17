@@ -16,13 +16,33 @@ class SourceSettingsTest {
         val prefs = app.pagedrop.data.NullSharedPreferences()
         val http = FakeHttp()
         val s1 = SourceSettings(prefs, MemorySecrets(), http)
-        assertEquals(setOf(SourceKind.GUTENBERG, SourceKind.STANDARD_EBOOKS, SourceKind.INTERNET_ARCHIVE), s1.enabledBuiltIns.value)
+        assertEquals(SourceKind.entries.filter { it != SourceKind.OPDS }.toSet(), s1.enabledBuiltIns.value)
         s1.setEnabled(SourceKind.INTERNET_ARCHIVE, false)
         assertFalse(SourceKind.INTERNET_ARCHIVE in s1.enabledBuiltIns.value)
         val s2 = SourceSettings(prefs, MemorySecrets(), http) // "restart"
         assertFalse(SourceKind.INTERNET_ARCHIVE in s2.enabledBuiltIns.value)
         s2.setEnabled(SourceKind.INTERNET_ARCHIVE, true)
         assertTrue(SourceKind.INTERNET_ARCHIVE in s2.enabledBuiltIns.value)
+    }
+
+    @Test
+    fun upgradeAddsNewSourcesOnceAndKeepsDisabledChoices() {
+        val prefs = app.pagedrop.data.NullSharedPreferences()
+        prefs.edit().putStringSet("enabled_builtins", setOf("GUTENBERG")).apply()
+        val first = SourceSettings(prefs, MemorySecrets(), FakeHttp())
+        assertFalse(SourceKind.INTERNET_ARCHIVE in first.enabledBuiltIns.value)
+        assertTrue(SourceKind.HINDWI in first.enabledBuiltIns.value)
+        first.setEnabled(SourceKind.HINDWI, false)
+        val restarted = SourceSettings(prefs, MemorySecrets(), FakeHttp())
+        assertFalse(SourceKind.HINDWI in restarted.enabledBuiltIns.value)
+        assertTrue(SourceKind.OPEN_LIBRARY in restarted.enabledBuiltIns.value)
+    }
+
+    @Test
+    fun upgradePreservesAllSourcesOff() {
+        val prefs = app.pagedrop.data.NullSharedPreferences()
+        prefs.edit().putStringSet("enabled_builtins", emptySet()).apply()
+        assertTrue(SourceSettings(prefs, MemorySecrets(), FakeHttp()).enabledBuiltIns.value.isEmpty())
     }
 
     @Test

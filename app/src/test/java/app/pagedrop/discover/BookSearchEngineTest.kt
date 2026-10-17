@@ -85,6 +85,71 @@ class BookSearchEngineTest {
     }
 
     @Test
+    fun timeoutInterruptsBlockingSourceInsteadOfWaitingForIt() = runBlocking {
+        val settings = newSettings().apply {
+            SourceKind.entries.filter { it != SourceKind.GUTENBERG }.forEach { setEnabled(it, false) }
+        }
+        val http = FakeHttp().apply {
+            routes += FakeHttp.Route("gutendex.com") { Thread.sleep(5_000); HttpReply(200, "{}", "x", null) }
+        }
+        val started = System.nanoTime()
+        val res = BookSearchEngine(settings, http, 100).search("गोदान")
+        assertTrue(res.errors.single().message.contains("too long"))
+        assertTrue((System.nanoTime() - started) / 1_000_000 < 2_000)
+    }
+
+    @Test
+    fun hindiTitlesKeepVowelsAndRankExactMatches() {
+        assertEquals(listOf("गुनाहों", "का", "देवता"), TextUtil.words("गुनाहों का देवता"))
+        assertFalse(TextUtil.normTitle("गोदान") == TextUtil.normTitle("गबन"))
+        assertFalse(TextUtil.normTitle("दिन") == TextUtil.normTitle("दीन"))
+        assertEquals("jose", TextUtil.words("José").single())
+        val exact = result("1", SourceKind.HINDWI, "गोदान", "प्रेमचंद")
+        val other = result("2", SourceKind.GUTENBERG, "गबन", "प्रेमचंद", BookFormat.MOBI)
+        assertTrue(Ranking.score("गोदान", exact) > Ranking.score("गोदान", other))
+    }
+
+    @Test
+    fun translationsAndUnresolvedEditionsAreNotLostInDedupe() = runBlocking {
+        val http = FakeHttp().apply {
+            on("standardebooks.org/ebooks?query", fixture("standardebooks_search_frankenstein.html"))
+            on("gutendex.com", fixture("gutendex_frankenstein.json").replace("\"en\"", "\"hi\""))
+            on("archive.org/advancedsearch", """{"response":{"docs":[
+                {"identifier":"first","title":"Frankenstein","creator":"Mary Shelley","language":"en"},
+                {"identifier":"second","title":"Frankenstein","creator":"Mary Shelley","language":"en"}
+            ]}}""")
+        }
+        val results = BookSearchEngine(newSettings(), http, 5_000).search("frankenstein").results
+        assertTrue(results.any { it.source == SourceKind.STANDARD_EBOOKS })
+        assertTrue(results.any { it.source == SourceKind.GUTENBERG && it.language == "hi" })
+        assertEquals(2, results.count { it.source == SourceKind.INTERNET_ARCHIVE })
+    }
+
+    @Test
+    fun newSourcesParticipateAndWebSearchesAreSeparateFromBookResults() = runBlocking {
+        val settings = newSettings(allSources = true).apply {
+            setEnabled(SourceKind.GUTENBERG, false); setEnabled(SourceKind.STANDARD_EBOOKS, false)
+            setEnabled(SourceKind.ENGLISH_WIKISOURCE, false); setEnabled(SourceKind.FADED_PAGE, false); setEnabled(SourceKind.MANYBOOKS, false)
+        }
+        val http = FakeHttp().apply {
+            on("archive.org/advancedsearch", """{"response":{"docs":[{"identifier":"hindi-edition","title":"गोदान","creator":"प्रेमचंद","language":"hin"}]}}""")
+            on("hindwi.org/search", fixture("hindwi_search_godaan.html"))
+            on("rekhta.org/search", fixture("rekhta_search_raag.html"))
+            on("hi.wikisource.org", fixture("wikisource_search_godaan.json"))
+            on("openlibrary.org", fixture("openlibrary_search.json"))
+        }
+        val res = BookSearchEngine(settings, http, 5_000).search("गोदान")
+        assertTrue(res.errors.isEmpty())
+        assertTrue(res.results.any { it.source == SourceKind.HINDWI })
+        assertTrue(res.results.any { it.source == SourceKind.REKHTA })
+        assertTrue(res.results.any { it.source == SourceKind.HINDI_WIKISOURCE })
+        assertTrue(res.results.any { it.source == SourceKind.OPEN_LIBRARY })
+        assertEquals(1, res.results.count { it.archiveIdentifier == "hindi-edition" })
+        assertTrue(http.requests.any { it.first.contains("collection%3Adigitallibraryindia") })
+        assertEquals(listOf("ePustakalay", "Anna’s Archive", "Global Grey", "OceanofPDF"), res.websiteSearches.map { it.sourceName })
+    }
+
+    @Test
     fun disabledSourcesAreNotQueried() = runBlocking {
         val http = frankensteinHttp()
         val settings = newSettings().apply {

@@ -28,6 +28,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -63,6 +64,7 @@ internal fun ResultSheet(
     onDismiss: () -> Unit,
 ) {
     val working = action as? ActionState.Working
+    val uriHandler = LocalUriHandler.current
     val busy = working != null
     val added = action is ActionState.Finished
     var expanded by remember(result.id) { mutableStateOf(false) }
@@ -144,7 +146,8 @@ internal fun ResultSheet(
                 }
             } else if (libraryBook == null && !added && working == null && action !is ActionState.Failed) {
                 Text(
-                    "No downloadable file for this book.",
+                    if (result.websiteUrl != null) "Read on the source website. Downloads or borrowing may require sign-in."
+                    else "No downloadable file for this book.",
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -169,21 +172,30 @@ internal fun ResultSheet(
             }
 
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Button(
-                    onClick = onSend,
-                    enabled = !busy && canTake && action !is ActionState.Failed,
-                    shape = MaterialTheme.shapes.small,
-                    modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp),
-                ) { Text(if (inLibrary) "Send again" else "Send to Kindle") }
-                if (!inLibrary) {
+                result.websiteUrl?.let { url ->
                     OutlinedButton(
-                        onClick = onAdd,
+                        onClick = { uriHandler.openUri(url) },
+                        modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp),
+                        shape = MaterialTheme.shapes.small,
+                    ) { Text("Open ${result.sourceName}") }
+                }
+                if (canTake || busy) {
+                    Button(
+                        onClick = onSend,
                         enabled = !busy && canTake && action !is ActionState.Failed,
                         shape = MaterialTheme.shapes.small,
                         modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp),
-                    ) { Text("Add to library") }
-                } else if (added) {
-                    TextButton(onClick = onDismiss, modifier = Modifier.fillMaxWidth()) { Text("Done") }
+                    ) { Text(if (inLibrary) "Send again" else "Send to Kindle") }
+                    if (!inLibrary) {
+                        OutlinedButton(
+                            onClick = onAdd,
+                            enabled = !busy && canTake && action !is ActionState.Failed,
+                            shape = MaterialTheme.shapes.small,
+                            modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp),
+                        ) { Text("Add to library") }
+                    } else if (added) {
+                        TextButton(onClick = onDismiss, modifier = Modifier.fillMaxWidth()) { Text("Done") }
+                    }
                 }
             }
         }

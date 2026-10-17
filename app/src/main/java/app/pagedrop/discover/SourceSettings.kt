@@ -117,7 +117,8 @@ class SourceSettings internal constructor(
         if (kind == SourceKind.OPDS) return // individual catalogs are toggled with setCatalogEnabled
         synchronized(lock) {
             val next = if (on) _enabledBuiltIns.value + kind else _enabledBuiltIns.value - kind
-            prefs.edit().putStringSet(KEY_BUILTINS, next.map { it.name }.toSet()).apply()
+            prefs.edit().putStringSet(KEY_BUILTINS, next.map { it.name }.toSet())
+                .putStringSet(KEY_KNOWN_BUILTINS, DEFAULT_BUILTINS.map { it.name }.toSet()).apply()
             _enabledBuiltIns.value = next
         }
     }
@@ -200,8 +201,14 @@ class SourceSettings internal constructor(
 
     private fun loadBuiltIns(): Set<SourceKind> {
         val stored = prefs.getStringSet(KEY_BUILTINS, null) ?: return DEFAULT_BUILTINS
-        return stored.mapNotNull { runCatching { SourceKind.valueOf(it) }.getOrNull() }
+        val enabled = stored.mapNotNull { runCatching { SourceKind.valueOf(it) }.getOrNull() }
             .filter { it != SourceKind.OPDS }.toSet()
+        val known = prefs.getStringSet(KEY_KNOWN_BUILTINS, null) ?: setOf("GUTENBERG", "STANDARD_EBOOKS", "INTERNET_ARCHIVE")
+        // Add new built-ins once on upgrade, while preserving switches and an explicit "all off" choice.
+        val migrated = if (enabled.isEmpty()) enabled else enabled + DEFAULT_BUILTINS.filter { it.name !in known }
+        prefs.edit().putStringSet(KEY_BUILTINS, migrated.map { it.name }.toSet())
+            .putStringSet(KEY_KNOWN_BUILTINS, DEFAULT_BUILTINS.map { it.name }.toSet()).apply()
+        return migrated
     }
 
     private fun loadCatalogs(): List<OpdsCatalog> = try {
@@ -235,8 +242,9 @@ class SourceSettings internal constructor(
 
     internal companion object {
         private const val KEY_BUILTINS = "enabled_builtins"
+        private const val KEY_KNOWN_BUILTINS = "known_builtins"
         private const val KEY_CATALOGS = "catalogs"
-        val DEFAULT_BUILTINS = setOf(SourceKind.GUTENBERG, SourceKind.STANDARD_EBOOKS, SourceKind.INTERNET_ARCHIVE)
+        val DEFAULT_BUILTINS = SourceKind.entries.filter { it != SourceKind.OPDS }.toSet()
 
         fun normalizeUrl(raw: String): String? {
             var s = raw.trim()

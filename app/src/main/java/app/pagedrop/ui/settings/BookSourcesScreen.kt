@@ -47,6 +47,14 @@ private fun SourceKind.title(): String = when (this) {
     SourceKind.GUTENBERG -> "Project Gutenberg"
     SourceKind.STANDARD_EBOOKS -> "Standard Ebooks"
     SourceKind.INTERNET_ARCHIVE -> "Internet Archive"
+    SourceKind.DIGITAL_LIBRARY_INDIA -> "Digital Library of India"
+    SourceKind.OPEN_LIBRARY -> "Open Library"
+    SourceKind.HINDI_WIKISOURCE -> "Hindi Wikisource"
+    SourceKind.HINDWI -> "Hindwi"
+    SourceKind.REKHTA -> "Rekhta"
+    SourceKind.ENGLISH_WIKISOURCE -> "English Wikisource"
+    SourceKind.FADED_PAGE -> "Faded Page"
+    SourceKind.MANYBOOKS -> "ManyBooks"
     SourceKind.OPDS -> "Your catalogs"
 }
 
@@ -54,10 +62,18 @@ private fun SourceKind.blurb(): String = when (this) {
     SourceKind.GUTENBERG -> "Public-domain classics, many already in Kindle format"
     SourceKind.STANDARD_EBOOKS -> "Carefully formatted public-domain editions"
     SourceKind.INTERNET_ARCHIVE -> "Freely downloadable books and scans"
+    SourceKind.DIGITAL_LIBRARY_INDIA -> "Indian-language books and scans from Internet Archive"
+    SourceKind.OPEN_LIBRARY -> "Open editions and borrowing through its website"
+    SourceKind.HINDI_WIKISOURCE -> "Classic Hindi texts; read and check exports on the website"
+    SourceKind.HINDWI -> "Hindi literature; opens in Hindwi’s web reader"
+    SourceKind.REKHTA -> "Urdu and related literature; opens in Rekhta’s web reader"
+    SourceKind.ENGLISH_WIKISOURCE -> "Classic English texts; read and check exports on the website"
+    SourceKind.FADED_PAGE -> "English title search with EPUB and Kindle downloads"
+    SourceKind.MANYBOOKS -> "English ebooks; downloads on the website may require an account"
     SourceKind.OPDS -> ""
 }
 
-private val builtIns = listOf(SourceKind.GUTENBERG, SourceKind.STANDARD_EBOOKS, SourceKind.INTERNET_ARCHIVE)
+private val builtIns = SourceKind.entries.filter { it != SourceKind.OPDS }
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -91,7 +107,7 @@ fun BookSourcesScreen(
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
             Text(
-                "Where “Find a book” looks. Only free and legally shared libraries are built in.",
+                "Where “Find a book” looks. Download available files or open a source’s web reader.",
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
@@ -109,6 +125,13 @@ fun BookSourcesScreen(
                     }
                 }
             }
+
+            Text(
+                "Website shortcuts for ePustakalay, Anna’s Archive, Global Grey and OceanofPDF appear below book results. " +
+                    "These searches open on their websites; download access varies.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
 
             SectionLabel("OPDS catalogs")
             if (catalogs.isEmpty()) {

@@ -8,7 +8,7 @@ enum class BookFormat(val extension: String) {
     val kindleNative: Boolean get() = this == AZW3 || this == MOBI
 }
 
-enum class SourceKind { GUTENBERG, STANDARD_EBOOKS, INTERNET_ARCHIVE, OPDS }
+enum class SourceKind { GUTENBERG, STANDARD_EBOOKS, INTERNET_ARCHIVE, DIGITAL_LIBRARY_INDIA, OPEN_LIBRARY, HINDI_WIKISOURCE, HINDWI, REKHTA, ENGLISH_WIKISOURCE, FADED_PAGE, MANYBOOKS, OPDS }
 
 data class DownloadOption(
     val format: BookFormat,
@@ -29,15 +29,26 @@ data class BookResult(
     val language: String? = null,
     val coverUrl: String? = null,
     val description: String? = null,
-    /** May be empty for Internet Archive until [BookSearchEngine.resolve] runs. */
+    /** Empty for web-reader results, or until [BookSearchEngine.resolve] checks an Archive edition. */
     val options: List<DownloadOption>,
     /** True means call [BookSearchEngine.resolve] to fill [options]. */
     val needsResolve: Boolean = false,
+    /** Reader/details page, also available when a download is blocked or requires borrowing. */
+    val websiteUrl: String? = null,
+    /** Exact Archive edition to check for downloadable files; never a guessed filename. */
+    val archiveIdentifier: String? = null,
 )
 
 data class SourceError(val sourceName: String, val offline: Boolean, val message: String)
 
-data class SearchResults(val query: String, val results: List<BookResult>, val errors: List<SourceError>)
+data class BookSearchLink(val sourceName: String, val url: String, val description: String)
+
+data class SearchResults(
+    val query: String,
+    val results: List<BookResult>,
+    val errors: List<SourceError>,
+    val websiteSearches: List<BookSearchLink> = emptyList(),
+)
 
 data class OpdsCatalog(
     val id: String,

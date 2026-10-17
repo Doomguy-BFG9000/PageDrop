@@ -7,12 +7,22 @@ import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.io.File
+import java.io.ByteArrayOutputStream
+import java.util.zip.ZipEntry
+import java.util.zip.ZipOutputStream
 
 class BookDownloaderTest {
     private fun book(source: SourceKind = SourceKind.GUTENBERG, id: String = "gutenberg:84") =
         BookResult(id, source, "Src", "Frankenstein", "Mary Shelley", options = emptyList())
 
     private fun mobi(size: Int = 200) = ByteArray(size).also { "BOOKMOBI".toByteArray().copyInto(it, 60) }
+    private fun epub(): ByteArray = ByteArrayOutputStream().also { bytes ->
+        ZipOutputStream(bytes).use { zip ->
+            for ((name, text) in mapOf("mimetype" to "application/epub+zip", "META-INF/container.xml" to "<container/>")) {
+                zip.putNextEntry(ZipEntry(name)); zip.write(text.toByteArray()); zip.closeEntry()
+            }
+        }
+    }.toByteArray()
     private fun downloader(http: FakeHttp, dir: File = tempDir(), creds: (String, String) -> BasicAuth? = { _, _ -> null }) =
         BookDownloader(dir, http, creds)
 
@@ -39,12 +49,26 @@ class BookDownloaderTest {
     @Test
     fun acceptsEpubPdfAndText() {
         val http = FakeHttp().apply {
-            streamBytes = mapOf("e.epub" to "PK\u0003\u0004rest".toByteArray(), "p.pdf" to "%PDF-1.7\n...".toByteArray(), "t.txt" to "Hello world".toByteArray())
+            streamBytes = mapOf("e.epub" to epub(), "p.pdf" to "%PDF-1.7\n...".toByteArray(), "t.txt" to "Hello world".toByteArray())
         }
         val d = downloader(http)
         assertEquals("epub", run(d, DownloadOption(BookFormat.EPUB, "https://x/e.epub")).extension)
         assertEquals("pdf", run(d, DownloadOption(BookFormat.PDF, "https://x/p.pdf")).extension)
         assertEquals("txt", run(d, DownloadOption(BookFormat.TXT, "https://x/t.txt")).extension)
+    }
+
+    @Test
+    fun ordinaryZipAndTruncatedZipAreNotEpubs() {
+        val bytes = ByteArrayOutputStream().also { out ->
+            ZipOutputStream(out).use { zip -> zip.putNextEntry(ZipEntry("readme.txt")); zip.write("not a book".toByteArray()); zip.closeEntry() }
+        }.toByteArray()
+        val http = FakeHttp().apply { streamBytes = mapOf("ordinary.epub" to bytes, "cut.epub" to epub().copyOf(40)) }
+        val dir = tempDir()
+        val d = downloader(http, dir)
+        for (name in listOf("ordinary", "cut")) {
+            assertTrue(runCatching { run(d, DownloadOption(BookFormat.EPUB, "https://x/$name.epub")) }.exceptionOrNull() is DownloadException)
+        }
+        assertTrue(dir.listFiles()!!.isEmpty())
     }
 
     @Test

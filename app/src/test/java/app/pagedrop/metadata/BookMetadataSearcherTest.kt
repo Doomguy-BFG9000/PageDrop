@@ -18,7 +18,8 @@ class BookMetadataSearcherTest {
 
     private fun http(ol: () -> MetadataHttp.Reply, google: () -> MetadataHttp.Reply, urls: MutableList<String>? = null) =
         MetadataHttp { url ->
-            urls?.add(url)
+            // Both catalog callbacks run on IO threads; an unsynchronized ArrayList can lose a request.
+            urls?.let { synchronized(it) { it.add(url) } }
             if ("openlibrary.org" in url) ol() else google()
         }
 
@@ -94,7 +95,7 @@ class BookMetadataSearcherTest {
         val urls = mutableListOf<String>()
         var calls = 0
         val h = MetadataHttp { url ->
-            urls.add(url)
+            synchronized(urls) { urls.add(url) }
             if ("openlibrary" in url) { if (calls++ == 0) ok("""{"docs":[]}""") else ok(olJson) } else ok("""{"totalItems":0}""")
         }
         val r = BookMetadataSearcher(h).lookup("The Great Gatsby", "Wrong Person")

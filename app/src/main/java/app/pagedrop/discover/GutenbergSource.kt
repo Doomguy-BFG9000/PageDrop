@@ -9,6 +9,9 @@ import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
+import org.jsoup.Jsoup
+import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
+import java.io.IOException
 
 /** Project Gutenberg through the public Gutendex mirror of its catalog. */
 internal class GutenbergSource(private val http: DiscoverHttp) : BookSource {
@@ -16,14 +19,61 @@ internal class GutenbergSource(private val http: DiscoverHttp) : BookSource {
     override val name = "Project Gutenberg"
 
     override fun search(query: String): List<BookResult> {
-        val reply = http.get("https://gutendex.com/books/?search=${TextUtil.enc(query)}", accept = "application/json")
-            .requireOk(name)
-        return parse(reply.body)
+        try {
+            val reply = http.withTimeout(2_500).get("https://gutendex.com/books/?search=${TextUtil.enc(query)}", accept = "application/json")
+                .requireOk(name)
+            return parse(reply.body)
+        } catch (first: IOException) {
+            try {
+                val reply = http.withTimeout(5_000).get("https://www.gutenberg.org/ebooks/search/?query=${TextUtil.enc(query)}", accept = "text/html").requireOk(name)
+                return parseWebsiteSearch(reply.body)
+            } catch (fallback: IOException) { throw first }
+        }
+    }
+
+    fun resolve(result: BookResult): BookResult {
+        val id = result.id.removePrefix("gutenberg:")
+        if (!Regex("[0-9]+").matches(id)) throw SourceUnavailableException("Project Gutenberg couldn't identify this edition")
+        val reply = http.get("https://www.gutenberg.org/ebooks/$id", accept = "text/html").requireOk(name)
+        return result.copy(options = parseWebsiteOptions(id, reply.body), needsResolve = false)
     }
 
     companion object {
         private val json = Json { ignoreUnknownKeys = true; isLenient = true }
         private const val MAX_RESULTS = 12
+
+        fun parseWebsiteSearch(html: String): List<BookResult> {
+            val doc = Jsoup.parse(html, "https://www.gutenberg.org")
+            if (doc.selectFirst("ul.results") == null && !doc.text().contains("No records found", true)) {
+                throw SourceUnavailableException("Project Gutenberg couldn't show its search results")
+            }
+            return doc.select("li.booklink").mapNotNull { card ->
+                val link = card.selectFirst("a.link[href]") ?: return@mapNotNull null
+                val url = link.absUrl("href").toHttpUrlOrNull() ?: return@mapNotNull null
+                if (url.host != "www.gutenberg.org" || !Regex("/ebooks/[0-9]+").matches(url.encodedPath)) return@mapNotNull null
+                val title = card.selectFirst(".title")?.text()?.takeIf { it.isNotBlank() } ?: return@mapNotNull null
+                BookResult(
+                    id = "gutenberg:${url.encodedPath.substringAfterLast('/')}", source = SourceKind.GUTENBERG,
+                    sourceName = "Project Gutenberg", title = title,
+                    author = card.selectFirst(".subtitle")?.text()?.let(TextUtil::displayAuthor).orEmpty(),
+                    coverUrl = card.selectFirst("img[src]")?.absUrl("src"),
+                    options = emptyList(), needsResolve = true, websiteUrl = url.toString(),
+                )
+            }.distinctBy { it.id }.take(MAX_RESULTS)
+        }
+
+        fun parseWebsiteOptions(id: String, html: String): List<DownloadOption> =
+            Jsoup.parse(html, "https://www.gutenberg.org").select("a[href][title^=Download]").mapNotNull { link ->
+                val url = link.absUrl("href").toHttpUrlOrNull() ?: return@mapNotNull null
+                if (!url.isHttps || url.host != "www.gutenberg.org" || !url.encodedPath.startsWith("/ebooks/$id.")) return@mapNotNull null
+                val format = when {
+                    ".kf8." in url.encodedPath -> BookFormat.AZW3
+                    ".kindle." in url.encodedPath -> BookFormat.MOBI
+                    else -> OpdsParser.formatOf(link.attr("type"), url.toString())
+                        ?: if (".epub" in url.encodedPath) BookFormat.EPUB else null
+                } ?: return@mapNotNull null
+                DownloadOption(format, url.toString(), label = link.attr("title"))
+            }.sortedBy { if (".epub.images" in it.url) 0 else 1 }.distinctBy { it.format }
 
         fun parse(body: String): List<BookResult> {
             val root = try {
@@ -63,6 +113,7 @@ internal class GutenbergSource(private val http: DiscoverHttp) : BookSource {
                 coverUrl = formats["image/jpeg"]?.takeIf { it.startsWith("http") },
                 description = summary,
                 options = options(id, formats),
+                websiteUrl = "https://www.gutenberg.org/ebooks/$id",
             )
         }
 

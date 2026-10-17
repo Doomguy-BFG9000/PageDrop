@@ -161,7 +161,10 @@ class DiscoverViewModel @Inject constructor(
 
     fun sendToKindle() = start(send = true)
 
-    fun retry() = start(lastSend)
+    fun retry() {
+        val result = _selected.value ?: return
+        if (result.needsResolve && _chosenOption.value == null) select(result) else start(lastSend)
+    }
 
     private fun start(send: Boolean) {
         val result = _selected.value ?: return

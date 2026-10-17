@@ -54,12 +54,16 @@ class DiscoverViewModelTest {
     private class FakeFinder(var results: SearchResults? = null) : BookFinder {
         var error: Exception? = null
         var resolved: BookResult? = null
+        var resolveError: Exception? = null
         var sources = true
         override suspend fun search(query: String): SearchResults {
             error?.let { throw it }
             return results ?: SearchResults(query, emptyList(), emptyList())
         }
-        override suspend fun resolve(result: BookResult) = resolved ?: result
+        override suspend fun resolve(result: BookResult): BookResult {
+            resolveError?.let { throw it }
+            return resolved ?: result
+        }
         override fun bestOption(result: BookResult): DownloadOption? =
             result.options.minByOrNull { it.format.ordinal }
         override fun hasEnabledSources() = sources
@@ -279,6 +283,30 @@ class DiscoverViewModelTest {
         val book = Book(uid = 1, title = "Dracula", author = "Unknown Author", fileName = "d", filePath = "/d", format = "PDF", fileSize = 1)
         assertTrue(matchesLibraryBook(result(title = "Dracula", author = "Bram Stoker"), book))
         assertFalse(matchesLibraryBook(result(title = "Carmilla", author = "Bram Stoker"), book))
+    }
+
+    @Test
+    fun hindiLibraryMatchesPreserveVowelMarks() {
+        val book = Book(uid = 1, title = "दिन", author = "कवि", fileName = "d", filePath = "/d", format = "EPUB", fileSize = 1)
+        assertTrue(matchesLibraryBook(result(title = "दिन", author = "कवि"), book))
+        assertFalse(matchesLibraryBook(result(title = "दीन", author = "कवि"), book))
+    }
+
+    @Test
+    fun retryAfterResolutionFailureShowsFormatsBeforeDownloading() = runTest(dispatcher) {
+        val vm = vm()
+        val pending = result(options = emptyList(), needsResolve = true)
+        finder.resolveError = IOException("Temporarily unavailable")
+        vm.select(pending)
+        advanceUntilIdle()
+        assertTrue(vm.action.value is ActionState.Failed)
+        finder.resolveError = null
+        finder.resolved = pending.copy(needsResolve = false, options = listOf(epub))
+        vm.retry()
+        advanceUntilIdle()
+        assertEquals(ActionState.Idle, vm.action.value)
+        assertEquals(epub, vm.chosenOption.value)
+        assertEquals(0, fetcher.calls)
     }
 
     @Test

@@ -3,6 +3,7 @@ package app.pagedrop.discover
 import okhttp3.Credentials
 import okhttp3.OkHttpClient
 import okhttp3.Request
+import okhttp3.FormBody
 import java.io.Closeable
 import java.io.IOException
 import java.io.InputStream
@@ -37,15 +38,30 @@ class HttpStream(
 interface DiscoverHttp {
     fun get(url: String, auth: BasicAuth? = null, accept: String? = null): HttpReply
     fun open(url: String, auth: BasicAuth? = null): HttpStream
+    fun postForm(url: String, fields: Map<String, String>): HttpReply =
+        throw SourceUnavailableException("This source's search is not supported")
+    /** Bound synchronous network I/O too; coroutine interruption alone cannot reliably stop a socket read. */
+    fun withTimeout(timeoutMs: Long): DiscoverHttp = this
 }
 
 @Singleton
-class OkHttpDiscoverHttp @Inject constructor() : DiscoverHttp {
+class OkHttpDiscoverHttp private constructor(private val requestTimeoutMs: Long) : DiscoverHttp {
+    @Inject constructor() : this(20_000L)
+
+    override fun withTimeout(timeoutMs: Long): DiscoverHttp = OkHttpDiscoverHttp(timeoutMs)
 
     override fun get(url: String, auth: BasicAuth?, accept: String?): HttpReply {
-        val request = request(url, auth, accept)
-        client.newBuilder().callTimeout(20, TimeUnit.SECONDS).build().newCall(request).execute().use { response ->
-            val body = response.body ?: return HttpReply(response.code, "", url, null)
+        return execute(request(url, auth, accept))
+    }
+
+    override fun postForm(url: String, fields: Map<String, String>): HttpReply {
+        val form = FormBody.Builder().apply { fields.forEach { (key, value) -> add(key, value) } }.build()
+        return execute(request(url, null, "application/json").newBuilder().post(form).build())
+    }
+
+    private fun execute(request: Request): HttpReply {
+        client.newBuilder().callTimeout(requestTimeoutMs, TimeUnit.MILLISECONDS).build().newCall(request).execute().use { response ->
+            val body = response.body ?: return HttpReply(response.code, "", request.url.toString(), null)
             val text = readCapped(body.byteStream(), MAX_TEXT_BYTES)
             return HttpReply(response.code, text, response.request.url.toString(), body.contentType()?.toString())
         }
@@ -100,6 +116,7 @@ class OkHttpDiscoverHttp @Inject constructor() : DiscoverHttp {
                 .connectTimeout(10, TimeUnit.SECONDS)
                 .readTimeout(20, TimeUnit.SECONDS)
                 .writeTimeout(20, TimeUnit.SECONDS)
+                .cookieJar(FadedPageCookieJar())
                 .followRedirects(true)
                 .followSslRedirects(true)
                 .build()

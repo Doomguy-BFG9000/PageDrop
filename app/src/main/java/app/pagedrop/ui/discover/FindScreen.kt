@@ -41,6 +41,7 @@ import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
+import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextOverflow
@@ -82,6 +83,7 @@ fun FindScreen(
     val focus = remember { FocusRequester() }
     val keyboard = LocalSoftwareKeyboardController.current
     val focusManager = LocalFocusManager.current
+    val uriHandler = LocalUriHandler.current
     LaunchedEffect(Unit) { if (search.results == null) focus.requestFocus() }
 
     BackHandler { if (selected != null) viewModel.dismissSelected() else onBack() }
@@ -176,6 +178,21 @@ fun FindScreen(
                     )
                 }
             }
+            if (results != null && !search.searching && results.websiteSearches.isNotEmpty()) {
+                item {
+                    Text("SEARCH MORE LIBRARIES", style = MaterialTheme.typography.labelSmall,
+                        modifier = Modifier.padding(top = 16.dp), color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+                items(results.websiteSearches, key = { it.sourceName }) { link ->
+                    HairlineCard(Modifier.fillMaxWidth(), onClick = { uriHandler.openUri(link.url) }) {
+                        Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                            Text("Search ${link.sourceName}", style = MaterialTheme.typography.titleMedium)
+                            Text(link.description, style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
+                    }
+                }
+            }
         }
     }
 
@@ -209,6 +226,7 @@ private fun SourceErrorChips(errors: List<SourceError>) {
     Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
         errors.forEach { e ->
             TagChip(if (e.offline) "${e.sourceName} unavailable (offline)" else "${e.sourceName} unavailable")
+            Text(e.message, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
     }
 }
@@ -261,9 +279,10 @@ private fun IdleContent(
                 Text("Finding free books", style = MaterialTheme.typography.titleMedium)
                 Text(
                     "Search by title, author, or both: “Pride and Prejudice”, “Jane Austen”.\n" +
-                        "PageDrop looks in free libraries such as Project Gutenberg, Standard Ebooks and the Internet Archive, " +
-                        "plus any catalogs you add in Settings.\n" +
-                        "Books that are still in copyright usually won’t appear.",
+                        "Try Hindi titles too: “गोदान”, “प्रेमचंद”. Try English spellings like “Godaan” as well.\n" +
+                        "Search includes Gutenberg, Standard Ebooks, Internet Archive, Digital Library of India, " +
+                        "Open Library, Faded Page, ManyBooks, English and Hindi Wikisource, Hindwi and Rekhta, plus your catalogs. " +
+                        "Some books open in their source’s web reader. More library searches appear below the results.",
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -303,6 +322,7 @@ private fun ResultRow(result: BookResult, bestLabel: String?, inLibrary: Boolean
                 ChipRow {
                     TagChip(result.sourceName)
                     bestLabel?.let { TagChip(it, emphasized = it == "Kindle-ready") }
+                    if (result.options.isEmpty()) TagChip(if (result.needsResolve) "Check formats" else "Web reader")
                     if (inLibrary) TagChip("In your library", emphasized = true)
                 }
             }

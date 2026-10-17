@@ -37,7 +37,7 @@ internal object OpdsParser {
     }
 
     private fun root(xml: String): Element {
-        val trimmed = xml.trimStart('﻿', ' ', '\n', '\r', '\t')
+        val trimmed = xml.trimStart('\uFEFF', ' ', '\n', '\r', '\t')
         if (trimmed.startsWith("{") || trimmed.startsWith("[")) {
             throw SourceUnavailableException("This looks like an OPDS 2 (JSON) catalog. PageDrop reads OPDS 1.x (Atom) catalogs.")
         }

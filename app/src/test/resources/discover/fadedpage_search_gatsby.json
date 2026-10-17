@@ -1,0 +1,72 @@
+{
+  "debug": "",
+  "nrows": 1,
+  "rows": [
+    {
+      "sequence": 4416,
+      "first_publication": 1926,
+      "pid": "20181181",
+      "title": "The Great Gatsby",
+      "detail": "<a href=\"/showbook.php?pid=20181181\">detail</a>",
+      "lang": "en",
+      "description": "The Great Gatsby follows a cast of characters living in the fictional towns of West Egg and East Egg on prosperous Long Island in the summer of 1922. The story primarily concerns the young and mysterious millionaire Jay Gatsby and his quixotic passion and obsession with the beautiful former debutante Daisy Buchanan. Considered to be Fitzgerald’s magnum opus, The Great Gatsby explores themes of decadence, idealism, resistance to change, social upheaval, and excess, creating a portrait of the Roaring Twenties that has been described as a cautionary tale regarding the American Dream.—Wikipedia.",
+      "cover": "books/20181181/images/cover.jpg",
+      "authors": [
+        {
+          "realid": 692,
+          "pseudoid": null,
+          "type": "author",
+          "realname": "Fitzgerald, F. Scott (Francis Scott Key)"
+        }
+      ],
+      "pages": 137,
+      "downloads": 6746
+    }
+  ],
+  "facets": {
+    "tags": {
+      "fiction": {
+        "count": 1,
+        "desc": null
+      },
+      "historical": {
+        "count": 1,
+        "desc": null
+      },
+      "Modern Library's 100 Best Novels": {
+        "count": 1,
+        "desc": "<p>Since the “100 Best” story first broke in The New York Times on Monday, July 20, 1998, all kinds of opinions about the list – and theories about the Modern Library’s purpose in concocting such a contest of sorts – emerged.\n\nThe goal of the “100 Best” project was to get people talking about great books. We succeeded beyond our wildest imaginings — more than 400,000 avid readers rushed online to cast votes for their favorite books.\n\n<p>The reader’s poll for the best nonfiction published in the English language since 1900 opened on April 29, 1999 and closed on September 30, 1999 with a total of 194,829 votes cast.\n\nThe readers’ poll for the best novels published in the English language since 1900 opened on July 20, 1998 and closed on October 20, 1998, with 217,520 votes cast.\n\n<p>—From the Modern Library website. The full list can be found at <a href='http://www.modernlibrary.com/top-100/100-best-novels/'>Modern Library's 100 Best Novels</a>"
+      },
+      "Guardian's 100 Greatest Novels of All Time (2003)": {
+        "count": 1,
+        "desc": "In 2003, Robert McCrum of the Guardian made a list of the top 100 novels of all time.  The full list can be found <a href='https://www.theguardian.com/books/2003/oct/12/features.fiction'>here</a>."
+      },
+      "film/TV adaptation": {
+        "count": 1,
+        "desc": null
+      }
+    },
+    "langs": {
+      "English": 1
+    },
+    "authors": {
+      "Fitzgerald, F. Scott (Francis Scott Key)": 1
+    }
+  },
+  "langmap": {
+    "en": "English",
+    "eo": "Esperanto",
+    "fr": "French",
+    "gd": "Gaelic",
+    "de": "German",
+    "el": "Greek",
+    "iw": "Hebrew",
+    "hu": "Hungarian",
+    "it": "Italian",
+    "la": "Latin",
+    "pl": "Polish",
+    "pt": "Portuguese",
+    "es": "Spanish",
+    "cy": "Welsh"
+  }
+}

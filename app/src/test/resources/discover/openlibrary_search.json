@@ -1,0 +1,68 @@
+{
+  "numFound": 65,
+  "start": 0,
+  "numFoundExact": true,
+  "num_found": 65,
+  "documentation_url": "https://openlibrary.org/dev/docs/api/search",
+  "q": "godan",
+  "offset": null,
+  "docs": [
+    {
+      "author_name": [
+        "Munshi Premchand"
+      ],
+      "cover_i": 1152596,
+      "ebook_access": "borrowable",
+      "first_publish_year": 1939,
+      "ia": [
+        "giftofcowtransla0000prem"
+      ],
+      "key": "/works/OL332076W",
+      "language": [
+        "hin",
+        "guj",
+        "eng"
+      ],
+      "title": "Godāna",
+      "availability": {
+        "status": "borrow_available",
+        "available_to_browse": true,
+        "available_to_borrow": false,
+        "available_to_waitlist": false,
+        "is_printdisabled": true,
+        "is_readable": false,
+        "is_lendable": true,
+        "is_previewable": true,
+        "identifier": "giftofcowtransla0000prem",
+        "isbn": null,
+        "oclc": null,
+        "openlibrary_work": "OL332076W",
+        "openlibrary_edition": "OL5609249M",
+        "last_loan_date": null,
+        "num_waitlist": null,
+        "last_waitlist_date": null,
+        "is_restricted": true,
+        "is_browseable": true,
+        "__src__": "core.models.lending.get_availability"
+      }
+    },
+    {
+      "key": "/works/OL100W",
+      "title": "गोदान",
+      "author_name": [
+        "प्रेमचंद"
+      ],
+      "ebook_access": "public",
+      "availability": {
+        "status": "open",
+        "is_restricted": false,
+        "identifier": "godaan-open"
+      }
+    },
+    {
+      "key": "/works/OL101W",
+      "title": "No ebook",
+      "ebook_access": "no_ebook"
+    }
+  ]
+}

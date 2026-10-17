@@ -144,6 +144,7 @@ dependencies {
     // Server API client — OkHttp calls Supabase REST API directly
     implementation(libs.kotlinx.serialization.json)
     implementation(libs.okhttp)
+    implementation("org.jsoup:jsoup:1.23.2")
 
     // Archive extraction for dictionary/font installers
     implementation("org.apache.commons:commons-compress:1.27.1")

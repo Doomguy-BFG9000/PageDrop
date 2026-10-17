@@ -12,10 +12,11 @@ internal class FakeHttp : DiscoverHttp {
     class Route(val match: String, val reply: () -> HttpReply)
 
     val routes = mutableListOf<Route>()
-    val requests = mutableListOf<Pair<String, BasicAuth?>>()
+    val requests: MutableList<Pair<String, BasicAuth?>> = java.util.Collections.synchronizedList(mutableListOf())
     var streamBytes: Map<String, ByteArray> = emptyMap()
     var streamCode: Int = 200
     var streamContentLength: Long? = null
+    val postedForms = mutableListOf<Pair<String, Map<String, String>>>()
 
     fun on(match: String, body: String, code: Int = 200, finalUrl: String? = null) {
         routes += Route(match) { HttpReply(code, body, finalUrl ?: match, null) }
@@ -36,13 +37,22 @@ internal class FakeHttp : DiscoverHttp {
         val bytes = streamBytes.entries.firstOrNull { url.contains(it.key) }?.value ?: ByteArray(0)
         return HttpStream(streamCode, streamContentLength ?: bytes.size.toLong(), null, url, ByteArrayInputStream(bytes))
     }
+
+    override fun postForm(url: String, fields: Map<String, String>): HttpReply {
+        postedForms += url to fields
+        return get(url)
+    }
 }
 
 internal fun tempDir(prefix: String = "pagedrop-test"): File =
     java.nio.file.Files.createTempDirectory(prefix).toFile().also { it.deleteOnExit() }
 
-internal fun newSettings(http: DiscoverHttp = FakeHttp(), secrets: SecretStore = MemorySecrets()): SourceSettings =
-    SourceSettings(app.pagedrop.data.NullSharedPreferences(), secrets, http)
+internal fun newSettings(http: DiscoverHttp = FakeHttp(), secrets: SecretStore = MemorySecrets(), allSources: Boolean = false): SourceSettings =
+    SourceSettings(app.pagedrop.data.NullSharedPreferences(), secrets, http).apply {
+        // Existing fixtures cover the original three catalogs; new-source tests opt into the full registry.
+        if (!allSources) SourceKind.entries.filter { it !in setOf(SourceKind.GUTENBERG, SourceKind.STANDARD_EBOOKS, SourceKind.INTERNET_ARCHIVE, SourceKind.OPDS) }
+            .forEach { setEnabled(it, false) }
+    }
 
 internal class MemorySecrets : SecretStore {
     val map = mutableMapOf<String, String>()

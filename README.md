@@ -27,6 +27,38 @@ PageDrop's own UI and APIs.
 - Kindle library rescan trigger via `lipc-set-prop`
 - Transfer history tracking with `lastTransferred` timestamps
 
+### Find a book
+
+- Searches Project Gutenberg, Standard Ebooks, Internet Archive, Digital Library
+  of India, Open Library, English and Hindi Wikisource, Hindwi, Rekhta, Faded Page,
+  ManyBooks, and user-added OPDS catalogs.
+- Gutenberg falls back to its official search and edition pages when Gutendex
+  cannot respond. Faded Page uses its public title-search form and resolves the
+  actual EPUB/MOBI/PDF/TXT links on the chosen edition before downloading. Its
+  required session cookie stays in memory and is sent only to its HTTPS host.
+- Hindi and other scripts retain their letters and vowel marks for ranking,
+  duplicate detection, and matching against the phone library. Different languages
+  and unresolved Archive editions remain separate.
+- Open Archive editions resolve their actual file list before downloading. EPUB
+  downloads are checked for their ZIP structure, EPUB mimetype, and container.
+- Hindwi, Rekhta, ManyBooks, and Wikisource results open their websites. Wikisource
+  exports can be blocked or incomplete depending on the book's chapter structure;
+  PageDrop does not guess a downloadable edition. Open Library borrowing also
+  stays on its website; open editions are checked for direct downloads.
+- ePustakalay, Anna’s Archive, Global Grey, and OceanofPDF have website shortcuts below results.
+  ePustakalay uses an interactive search widget; shadow-library availability and
+  download access vary. OceanofPDF blocks automated access and opens its homepage
+  for a manual search. Failed built-in sources also offer website search fallbacks.
+- Sources can be switched off in Settings → Book sources. Existing switches are
+  preserved when new sources are introduced, including an explicit all-off choice.
+
+Run the discovery regression tests with `./gradlew testDebugUnitTest --tests
+'app.pagedrop.discover.*' --tests 'app.pagedrop.ui.discover.*'`. Real-site checks
+are opt-in: `PAGEDROP_LIVE=1 ./gradlew testDebugUnitTest --tests
+'app.pagedrop.discover.LiveSmokeTest.indianSourcesAndRealArchiveEpub'`.
+For English searches and real EPUB downloads, use `PAGEDROP_LIVE=1 ./gradlew
+testDebugUnitTest --tests 'app.pagedrop.discover.LiveSmokeTest.englishSourcesAndRealEpubDownloads'`.
+
 ### Tools Suite
 
 - **Screensaver Optimizer** — pick any image, select Kindle model, auto crop/resize/grayscale, upload to LinkSS

@@ -46,6 +46,7 @@ internal class StandardEbooksSource(private val http: DiscoverHttp) : BookSource
                     language = "en",
                     coverUrl = "$BASE/ebooks/$slug/downloads/cover.jpg",
                     options = options(slug),
+                    websiteUrl = "$BASE/ebooks/$slug",
                 )
             }.take(MAX_RESULTS).toList()
 

@@ -2,6 +2,7 @@ package app.pagedrop.discover
 
 import java.net.URLEncoder
 import java.text.Normalizer
+import java.util.Locale
 
 internal object TextUtil {
     fun enc(s: String): String = URLEncoder.encode(s, "UTF-8")
@@ -37,10 +38,13 @@ internal object TextUtil {
     }
 
     fun deAccent(s: String): String =
-        Normalizer.normalize(s, Normalizer.Form.NFD).replace(Regex("\\p{M}+"), "")
+        Normalizer.normalize(
+            Normalizer.normalize(s, Normalizer.Form.NFD).replace(Regex("(?<=\\p{IsLatin})\\p{M}+"), ""),
+            Normalizer.Form.NFC,
+        )
 
     fun words(s: String): List<String> =
-        deAccent(s).lowercase().replace(Regex("[^a-z0-9]+"), " ").trim().split(' ').filter { it.isNotEmpty() }
+        deAccent(s).lowercase(Locale.ROOT).replace(Regex("[^\\p{L}\\p{M}\\p{N}]+"), " ").trim().split(' ').filter { it.isNotEmpty() }
 
     /** Title with subtitles (after ; or :) and a leading article removed, as a word list string. */
     fun normTitle(title: String): String {
@@ -59,7 +63,19 @@ internal object TextUtil {
 
     fun shortLanguage(raw: String?): String? {
         val l = raw?.trim()?.lowercase()?.takeIf { it.isNotEmpty() } ?: return null
-        return if (l == "eng" || l == "english") "en" else l
+        return when (l) {
+            "eng", "english" -> "en"
+            "hin", "hindi", "हिंदी", "हिन्दी" -> "hi"
+            "urd", "urdu", "उर्दू" -> "ur"
+            "ben", "bengali", "bangla" -> "bn"
+            "mar", "marathi" -> "mr"
+            "san", "sanskrit" -> "sa"
+            "tam", "tamil" -> "ta"
+            "tel", "telugu" -> "te"
+            "guj", "gujarati" -> "gu"
+            "pan", "punjabi" -> "pa"
+            else -> l
+        }
     }
 
     fun cleanQuery(q: String): String = q.trim().replace(Regex("\\s+"), " ")

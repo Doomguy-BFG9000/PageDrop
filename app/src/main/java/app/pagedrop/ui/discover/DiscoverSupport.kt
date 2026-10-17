@@ -10,6 +10,7 @@ import app.pagedrop.discover.BookSearchEngine
 import app.pagedrop.discover.DownloadOption
 import app.pagedrop.discover.SearchResults
 import app.pagedrop.discover.SourceSettings
+import app.pagedrop.discover.TextUtil
 import dagger.Binds
 import dagger.Module
 import dagger.hilt.InstallIn
@@ -102,10 +103,8 @@ internal fun withRecent(current: List<String>, query: String): List<String> {
     return (listOf(q) + current.filterNot { it.equals(q, ignoreCase = true) }).take(MAX_RECENT)
 }
 
-private val NON_WORD = Regex("[^\\p{L}\\p{N}]+")
-
 internal fun normalizeForMatch(text: String): String =
-    text.lowercase().replace(NON_WORD, " ").trim()
+    TextUtil.words(text).joinToString(" ")
 
 /** Same book when titles match and the authors match (or one side doesn't know its author). */
 internal fun matchesLibraryBook(result: BookResult, book: Book): Boolean {
