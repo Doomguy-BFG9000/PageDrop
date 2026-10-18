@@ -7,15 +7,18 @@
 <meta name="description" content="PageDrop finds books on your phone and sends them to your old, jailbroken Kindle over Wi-Fi. Free and open source.">
 <meta property="og:title" content="PageDrop — the store closed, the Kindle didn't">
 <meta property="og:description" content="Find a book on your phone. It's on your old Kindle before you put the phone down. No cable, no Calibre, no permission.">
-<meta property="og:image" content="assets/social-preview.png">
+<link rel="canonical" href="https://pagedrop.example/">
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://pagedrop.example/">
+<meta property="og:image" content="https://pagedrop.example/assets/social-preview.png">
 <meta property="og:image:width" content="1280">
 <meta property="og:image:height" content="640">
 <meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:image" content="https://pagedrop.example/assets/social-preview.png">
 <meta name="theme-color" content="#efebe1">
 <link rel="icon" href="assets/icon.svg" type="image/svg+xml">
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=Literata:ital,opsz,wght@0,7..72,400;0,7..72,600;0,7..72,800;1,7..72,400;1,7..72,500&family=UnifrakturCook:wght@700&display=swap" rel="stylesheet">
+<link rel="preload" href="assets/fonts/literata.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="stylesheet" href="assets/fonts/fonts.css">
 <style>
 :root {
   --paper: #efebe1;
@@ -314,8 +317,8 @@ footer {
       <div class="kicker"><b>File 01</b> How this came to be</div>
       <article class="clipping story">
         <p>I have a Kindle Paperwhite from 2012. The screen is perfect, the battery lasts weeks, and in all those years it has never once tried to sell me something I didn't ask for.</p>
-        <p>On May 20, 2026, Amazon decided it was done with it. Every Kindle made in 2012 or earlier lost the store: no buying, no borrowing, no downloading. The books already on it could stay. Everything else was <span class="redact">gone</span>.</p>
-        <p class="pull">The device still worked. It just wasn't allowed to get anything new.</p>
+        <p>On May 20, 2026, Amazon decided it was done with it. Every Kindle and Fire tablet released in 2012 or earlier lost the ability to buy, borrow or download Kindle Store content on the device. The books already on it could stay. Sideloading still worked. The <span class="redact">store</span> was closed to it.</p>
+        <p class="pull">The device still worked. It just couldn't get anything new from the store.</p>
         <p>So I jailbroke it. That part is easy now; the Kindle Modding Wiki walks you through it. What wasn't easy was everything after: Calibre on a laptop, a cable, an SFTP client, shell commands, PDFs that sliced a line in half at the bottom of every page, and books named <span class="redact">OD4388757722</span> with no author and a grey square for a cover.</p>
         <p>Reading had become an IT job.</p>
         <p>PageDrop is what I built so it stops being one. Type a title on your phone. Tap send. It's on the Kindle across the room before you've put the phone down.</p>
@@ -327,15 +330,15 @@ footer {
       <div class="kicker"><b>File 02</b> What it solves</div>
       <h2>Six things that made reading <em>a chore.</em></h2>
       <ol class="ledger">
-        <li><span class="n">01</span><div><span class="was">The store is gone</span></div>
+        <li><span class="n">01</span><div><span class="was">No store on the device</span></div>
           <h3>Search, then send</h3>
           <p>Find books from Project Gutenberg, Standard Ebooks, the Internet Archive and your own catalogs. Pick one; it arrives in the best format your Kindle can read.</p></li>
         <li><span class="n">02</span><div><span class="was">Cables and Calibre</span></div>
           <h3>Your phone is the whole toolchain</h3>
-          <p>Everything travels over Wi-Fi through KOReader's SSH server. Books land on the Kindle's home screen and in KOReader at the same time.</p></li>
+          <p>Books travel to the Kindle over your Wi-Fi, through KOReader's SSH server. Books land on the Kindle's home screen and in KOReader at the same time.</p></li>
         <li><span class="n">03</span><div><span class="was">PDFs that cut lines off</span></div>
           <h3>PDFs that read like books</h3>
-          <p>Hard line breaks unwrapped, running headers and page numbers stripped, and paragraphs rejoined across pages, instead of a scan pretending to be a book.</p></li>
+          <p>Hard line breaks unwrapped, running headers and page numbers stripped, and paragraphs rejoined across pages. This works on PDFs that contain text. Scanned pages aren't OCRed; keep those as PDF.</p></li>
         <li><span class="n">04</span><div><span class="was">“Unknown Author”, no cover</span></div>
           <h3>Books that know their names</h3>
           <p>Title, author and cover come from the file itself and from open catalogs, then get written into the book, so the Kindle shows them properly too.</p></li>
@@ -372,8 +375,8 @@ footer {
     <section class="col">
       <div class="kicker"><b>File 05</b> The fine print</div>
       <div class="notes">
-        <div><h3>You'll need</h3><p>An Android phone and a jailbroken Kindle running KOReader, on the same Wi-Fi. Built and tested on a 2012 Paperwhite; any jailbroken Kindle with KOReader should work.</p></div>
-        <div><h3>Your books stay yours</h3><p>No sign-up, no tracking. Books convert on your phone; an optional conversion server can help with stubborn files, and one switch turns it off.</p></div>
+        <div><h3>You'll need</h3><p>An Android phone and a jailbroken Kindle running KOReader, on the same Wi-Fi. Tested on a 2012 Paperwhite, firmware 5.6.1.1. Other Kindles with KOReader should work but are untested; see the <a href="https://github.com/spandan-kumar/PageDrop#tested-devices">device list</a>.</p></div>
+        <div><h3>What leaves your phone</h3><p>No account, no analytics, no ads. By default, a book that needs converting goes to PageDrop's conversion server and is deleted after 24 hours. One switch keeps everything on the phone. <a href="https://github.com/spandan-kumar/PageDrop/blob/main/docs/PRIVACY.md">The full list</a>.</p></div>
         <div><h3>Open source</h3><p>GPL-3.0. Read it, fork it, fix it on <a href="https://github.com/spandan-kumar/PageDrop">GitHub</a>, or come argue about fonts on <a href="https://discord.gg/cfsqhuHVfb">Discord</a>. Jailbreak guides live on the <a href="https://kindlemodding.org/">Kindle Modding Wiki</a>.</p></div>
       </div>
     </section>

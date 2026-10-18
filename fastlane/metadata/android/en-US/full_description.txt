@@ -5,13 +5,15 @@ Requires a jailbroken Kindle with KOReader and its SSH server enabled. The in-ap
 Features:
 - Find books in-app across public-domain and open libraries (Project Gutenberg, Standard Ebooks, Internet Archive, Wikisource and more) and your own OPDS catalogs
 - Add books from your phone, or capture downloads from websites inside PageDrop
-- Converts EPUB, PDF and text to MOBI on the phone, with improved PDF conversion
+- Converts EPUB, PDF and text to MOBI, with PDF reflow for text PDFs (scanned PDFs are not OCRed)
 - Automatic book details: titles, authors and covers
 - Send to the Kindle over SSH/SFTP and refresh its library
 - Kindle tab: see what is on the Kindle and manage those books
-- Optional conversion server, which can be switched off so everything stays on your phone
+- Conversion server, on by default: books that need converting are uploaded to PageDrop's server and deleted after 24 hours. One switch in Settings keeps everything on the phone
 - Free and open source (GPL-3.0)
 
 PageDrop does not host or provide books. Some book sources and websites may offer material that is not freely licensed; you are responsible for respecting copyright law in your country.
+
+No account, no analytics, no ads. What leaves your phone: https://github.com/spandan-kumar/PageDrop/blob/main/docs/PRIVACY.md
 
 Not affiliated with or endorsed by Amazon.

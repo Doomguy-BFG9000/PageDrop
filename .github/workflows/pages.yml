@@ -1,0 +1,48 @@
+name: Website
+
+# Publishes website/ to GitHub Pages. Manual only for now: run it from the
+# Actions tab once Pages is enabled (Settings → Pages → Source: GitHub Actions)
+# and the domain is decided. Before the first run, replace the placeholder
+# https://pagedrop.example in website/index.html with the real domain, and add
+# website/CNAME if it is a custom domain.
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Refuse to publish the placeholder domain
+        run: |
+          if grep -rq 'pagedrop.example' website; then
+            echo "::error::website/ still uses the placeholder domain pagedrop.example"
+            exit 1
+          fi
+
+      - name: Configure Pages
+        uses: actions/configure-pages@v5
+
+      - name: Upload site
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: website
+
+      - name: Deploy
+        id: deployment
+        uses: actions/deploy-pages@v4

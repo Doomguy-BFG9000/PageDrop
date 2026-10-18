@@ -27,20 +27,34 @@ PageDrop finds books on your phone and sends them over Wi-Fi to your old, jailbr
 
 ## Why
 
-On May 20, 2026, Amazon switched off the Kindle Store for every Kindle made in 2012 or earlier. No buying, no borrowing, no downloading. Perfectly good e-readers, some of them in drawers, some still in people's hands, were told they were done.
+On May 20, 2026, every Kindle and Fire tablet released in 2012 or earlier lost the ability to buy, borrow or download Kindle Store content on the device. Books already on them stay. Sideloading still works. Perfectly good e-readers, some of them in drawers, some still in people's hands, can no longer get anything from the store on their own.
 
-They aren't. A jailbroken Kindle running KOReader is a fine reader for the rest of its life, but getting books onto it meant cables, desktop tools and shell commands. PageDrop turns that into one app on your phone. It was built and tested on a 2012 Kindle Paperwhite (firmware 5.6.1.1).
+They still read fine. A jailbroken Kindle running KOReader is a fine reader for the rest of its life, but getting books onto it meant cables, desktop tools and shell commands. PageDrop turns that into one app on your phone. It was built and tested on a 2012 Kindle Paperwhite (firmware 5.6.1.1); see [tested devices](#tested-devices).
 
 ## What it does
 
 - **Find books in the app.** Search Project Gutenberg, Standard Ebooks, free Internet Archive items and your own OPDS catalogs, or browse other book websites in PageDrop's built-in browser and capture downloads right there.
 - **Send over Wi-Fi.** Books land in both the Kindle home screen (`/mnt/us/documents`) and KOReader's library (`/mnt/us/Books`).
-- **Make PDFs readable.** PDF reflow unwraps broken lines and strips running headers and page numbers, so a scan reads like a book on a small screen.
+- **Make PDFs readable.** PDF reflow unwraps broken lines and strips running headers and page numbers, so a text PDF reads like a book on a small screen. It needs PDFs that contain text; it does not OCR scanned pages. Keep scans as PDF.
 - **Fix the details.** Title, author and cover are pulled from the file and open catalogs, then written into the book.
 - **Manage the Kindle.** See what is on it, delete books, save copies back to your phone.
 - **Get your Kindle ready.** A walkthrough that hands off to the [Kindle Modding Wiki](https://kindlemodding.org/)'s jailbreak wizard.
-- **Extras.** Screensavers, fonts, dictionaries, saved articles and KOReader sync.
-- **Optional conversion server.** Self-hostable (Supabase + Calibre worker). Switch it off and everything stays on your phone.
+- **Extras.** Screensavers, fonts, dictionaries, saved articles, and a read-only import of KOReader highlights and reading progress to your phone.
+- **Conversion server, on by default.** When a book needs converting, PageDrop uploads it to PageDrop's conversion server (Calibre), which deletes it after 24 hours. One switch in Settings keeps everything on the phone. You can also self-host the server. Details: [What leaves your phone](docs/PRIVACY.md).
+
+## Tested devices
+
+PageDrop talks to KOReader over SSH, so any jailbroken Kindle that runs KOReader should work. Only one has actually been tested.
+
+| Kindle | Firmware | Status |
+|---|---|---|
+| Kindle Paperwhite (1st gen, 2012) | 5.6.1.1 | Confirmed |
+| Kindle Touch (2011) | | Untested |
+| Kindle 4 (2011) | | Untested |
+| Kindle Keyboard (2010) | | Untested |
+| Later Kindles (2013 on) running KOReader | | Untested |
+
+Tried it on something else? [Open an issue](https://github.com/spandan-kumar/PageDrop/issues/new/choose) or say so on [Discord](https://discord.gg/cfsqhuHVfb) with the model and firmware, and it goes in the table as "Reported".
 
 ## Screenshots
 
@@ -67,6 +81,10 @@ They aren't. A jailbroken Kindle running KOReader is a fine reader for the rest 
 1. Not jailbroken yet? Open **Get your Kindle ready**. Its checklist takes you through the Kindle Modding Wiki's jailbreak wizard, KOReader and blocking updates.
 2. In KOReader, open Tools (cog) → Network → SSH server and switch it on. Keep the Kindle on the same Wi-Fi as your phone.
 3. In PageDrop, tap **Find my Kindle**, then search for a book and send it.
+
+## Privacy
+
+No account to create, no analytics, no ads. Your phone talks to your Kindle over local Wi-Fi only. It also talks to the book sources you search, to Open Library and Google Books for book details, and, unless you switch it off, to PageDrop's conversion server. The full list is in [What leaves your phone](docs/PRIVACY.md).
 
 ## Community
 
@@ -99,18 +117,18 @@ More: [CONTRIBUTING.md](CONTRIBUTING.md) and [docs/ARCHITECTURE.md](docs/ARCHITE
 
 ## Self-hosting the conversion server
 
-Optional. A Supabase project plus a worker running Calibre handles heavy conversions and article extraction when the phone can't. Setup is in [server/README.md](server/README.md).
+Release builds use PageDrop's own conversion server. It is a Supabase project plus a worker running Calibre, and it handles conversions and article extraction. You can run your own and build the app against it. Setup is in [server/README.md](server/README.md).
 
 ## Project structure
 
 ```
 app/        Android app (Kotlin, Jetpack Compose, MVVM + Hilt, Room)
-server/     Optional conversion server (Supabase + Calibre worker)
+server/     Conversion server (Supabase + Calibre worker)
 website/    Project website
 fastlane/   Store listing text, icon and screenshots
 fdroid/     F-Droid submission recipe
 licenses/   Third-party licenses
-docs/       Architecture and technical notes
+docs/       Architecture, privacy and technical notes
 ```
 
 The full package layout, sources and test notes are in [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
