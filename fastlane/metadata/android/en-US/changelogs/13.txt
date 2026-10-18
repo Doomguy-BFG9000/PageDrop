@@ -4,4 +4,4 @@
 - New "Get your Kindle ready" setup walkthrough
 - Better PDF conversion
 - Automatic book details and covers
-- Optional conversion server: turn it off in Settings to convert everything on the phone
+- Conversion server, on by default: turn it off in Settings to convert everything on the phone
