@@ -40,7 +40,7 @@ They still read fine. A jailbroken Kindle running KOReader is a fine reader for 
 - **Manage the Kindle.** See what is on it, delete books, save copies back to your phone.
 - **Get your Kindle ready.** A walkthrough that hands off to the [Kindle Modding Wiki](https://kindlemodding.org/)'s jailbreak wizard.
 - **Extras.** Screensavers, fonts, dictionaries, saved articles, and a read-only import of KOReader highlights and reading progress to your phone.
-- **Conversion server, on by default.** When a book needs converting, PageDrop uploads it to PageDrop's conversion server (Calibre), which deletes it after 24 hours. One switch in Settings keeps everything on the phone. You can also self-host the server. Details: [What leaves your phone](docs/PRIVACY.md).
+- **Conversion server, on by default.** When a book needs converting, PageDrop uploads it to PageDrop's conversion server (Calibre), whose cleanup job deletes it about 24 hours later. PageDrop asks before the first upload. One switch in Settings keeps everything on the phone, and if the server fails PageDrop converts on the phone instead. You can also self-host the server. Details: [What leaves your phone](docs/PRIVACY.md).
 
 ## Tested devices
 
@@ -84,7 +84,7 @@ Tried it on something else? [Open an issue](https://github.com/spandan-kumar/Pag
 
 ## Privacy
 
-No account to create, no analytics, no ads. Your phone talks to your Kindle over local Wi-Fi only. It also talks to the book sources you search, to Open Library and Google Books for book details, and, unless you switch it off, to PageDrop's conversion server. The full list is in [What leaves your phone](docs/PRIVACY.md).
+No account to create, no analytics, no ads. Your phone talks to your Kindle over local Wi-Fi. It also contacts the book sources you search, Open Library and Google Books for book details, GitHub and SourceForge when you install fonts or dictionaries, and, unless you switch it off, PageDrop's conversion server. Websites you open in the built-in browser see you like any browser would. The full host-by-host list is in [What leaves your phone](docs/PRIVACY.md).
 
 ## Community
 

@@ -18,6 +18,7 @@ Builds:
     subdir: app
     gradle:
       - yes
+    # Empty values build without the hosted conversion server (so no NonFreeNet anti-feature; see fdroid/README.md).
     gradleprops:
       - PAGEDROP_SUPABASE_URL=
       - PAGEDROP_SUPABASE_ANON_KEY=

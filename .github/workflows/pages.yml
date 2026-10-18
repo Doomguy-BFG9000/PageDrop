@@ -1,10 +1,11 @@
 name: Website
 
 # Publishes website/ to GitHub Pages. Manual only for now: run it from the
-# Actions tab once Pages is enabled (Settings → Pages → Source: GitHub Actions)
-# and the domain is decided. Before the first run, replace the placeholder
-# https://pagedrop.example in website/index.html with the real domain, and add
-# website/CNAME if it is a custom domain.
+# Actions tab once Pages is enabled (Settings → Pages → Source: GitHub Actions).
+# The site uses relative paths and works from any host. When a real domain is
+# chosen, add website/CNAME and the canonical/og:url tags (see the TODO in
+# website/index.html). The step below refuses to publish if the old placeholder
+# domain pagedrop.example ever reappears.
 
 on:
   workflow_dispatch:

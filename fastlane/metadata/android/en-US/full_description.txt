@@ -9,11 +9,11 @@ Features:
 - Automatic book details: titles, authors and covers
 - Send to the Kindle over SSH/SFTP and refresh its library
 - Kindle tab: see what is on the Kindle and manage those books
-- Conversion server, on by default: books that need converting are uploaded to PageDrop's server and deleted after 24 hours. One switch in Settings keeps everything on the phone
+- Conversion server, on by default: books that need converting are uploaded to PageDrop's server (it asks first) and deleted about 24 hours later. One switch in Settings keeps everything on the phone, and if the server fails the phone converts instead
 - Free and open source (GPL-3.0)
 
 PageDrop does not host or provide books. Some book sources and websites may offer material that is not freely licensed; you are responsible for respecting copyright law in your country.
 
-No account, no analytics, no ads. What leaves your phone: https://github.com/spandan-kumar/PageDrop/blob/main/docs/PRIVACY.md
+No account, no analytics, no ads. Which hosts PageDrop contacts: https://github.com/spandan-kumar/PageDrop/blob/main/docs/PRIVACY.md
 
 Not affiliated with or endorsed by Amazon.
