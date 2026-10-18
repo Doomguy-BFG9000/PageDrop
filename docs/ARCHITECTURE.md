@@ -31,10 +31,18 @@ Details that used to live in the README. For the friendly overview see the [READ
   exports can be blocked or incomplete depending on the book's chapter structure;
   PageDrop does not guess a downloadable edition. Open Library borrowing also
   stays on its website; open editions are checked for direct downloads.
-- ePustakalay, Anna’s Archive, Global Grey, and OceanofPDF have website searches below
-  results. These and source detail links open in PageDrop's browser, where the user
-  can browse editions, sign in if needed, and complete website verification.
-  OceanofPDF opens its homepage for manual search. Access still depends on each site.
+- ePustakalay and Global Grey have website searches below results. Anna’s Archive and
+  OceanofPDF shortcuts appear only when "Show shadow-library search shortcuts" is turned on in
+  Settings -> Book sources (off by default); the list is filtered at render time, so the
+  toggle applies to cached results too. These and source detail links open in PageDrop's
+  browser, where the user can browse editions, sign in if needed, and complete website
+  verification. OceanofPDF opens its homepage for manual search. Access still depends on each site.
+- Server conversion: book files, covers and article links are sent to the conversion
+  server only after the one-time upload notice (`ServerUploadConsent`) is accepted. Every
+  upload path (Add book sheet, shared links, Articles tool, import conversion) calls
+  `PageDropApiClient.confirmUpload()` before any request, including anonymous sign-in. Declining
+  switches the server off and converts MOBI on the phone; server-only output formats are not uploaded.
+  The "deleted 24 hours after the job" copy relies on the server-side retention job being deployed.
 - Tapping a supported book download opens the book sheet with editable title and
   author. Choose Send to Kindle to download, validate, import and convert EPUB, then
   continue into the existing transfer flow; Add to library keeps the original format.
@@ -134,3 +142,9 @@ app/src/test/java/app/pagedrop/
 ├── transfer/thumbnails/      KindleThumbnailGeneratorTest
 └── ui/book/                  BookViewModelTest
 ```
+
+## Release note (pending next version bump)
+
+Add to the next `fastlane/metadata/android/en-US/changelogs/<versionCode>.txt`:
+- Anna’s Archive and OceanofPDF search shortcuts are now opt-in (Settings -> Book sources)
+- PageDrop asks once before sending books, covers or article links to the conversion server

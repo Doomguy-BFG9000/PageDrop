@@ -221,6 +221,40 @@ class BookViewModel @Inject constructor(
     val isServerConversionAvailable: Boolean
         get() = pageDropApiClient?.isAvailable == true
 
+    /** Whether the user has already answered the first-upload notice (so the sheet may say "by the server"). */
+    val isUploadNoticeAnswered: Boolean
+        get() = pageDropApiClient?.uploadNoticeAnswered == true
+
+    /** Asked before any request to the server (even sign-in); false means nothing may leave the phone. Replaceable in tests. */
+    internal var confirmUploadFn: suspend () -> Boolean = { pageDropApiClient?.confirmUpload() == true }
+
+    /** The only place a book/cover is sent to the server from this screen; reached only after [confirmUploadFn]. Replaceable in tests. */
+    internal var serverConvertFn: suspend (Context, Uri, String?, String?, String, String?) -> PageDropApiClient.PreparedArtifact =
+        { context, uri, title, author, format, coverPath ->
+            val server = pageDropApiClient
+                ?: throw IllegalStateException("PageDrop conversion service is unavailable")
+            val connection = server.testConnection()
+            if (connection.isFailure) throw connection.exceptionOrNull()!!
+            server.convertUriToLocalArtifact(
+                uri = uri,
+                outputDir = File(context.filesDir, "server-conversions"),
+                title = title,
+                author = author,
+                targetFormat = format,
+                coverUri = coverPath?.let { Uri.fromFile(File(it)) },
+                coverUrl = null,
+            ) ?: throw IllegalStateException("The PageDrop conversion service could not convert this file")
+        }
+
+    internal var sourceFormatFn: (Context, Uri) -> String = { context, uri ->
+        DefaultBookRepository.detectFormat(
+            context.contentResolver.query(uri, null, null, null, null)?.use { c ->
+                val col = c.getColumnIndex(android.provider.OpenableColumns.DISPLAY_NAME)
+                if (col >= 0 && c.moveToFirst()) c.getString(col) else null
+            } ?: uri.lastPathSegment.orEmpty()
+        )
+    }
+
     /**
      * @property best confident top match (safe to pre-fill, the user still confirms); null for weak matches.
      * @property auto true when the lookup started by itself (sheet opened), false for "Find details".
@@ -316,23 +350,26 @@ class BookViewModel @Inject constructor(
         viewModelScope.launch {
             _isConverting.value = true
             _conversionError.value = null
+            // Consent comes before any network request (sign-in, connection test, book or cover upload).
+            val mayUpload = try {
+                confirmUploadFn()
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                false
+            }
+            if (!mayUpload) {
+                try {
+                    convertWithoutServer(context, uri, outputTitle, outputAuthor, targetFormat, coverUri, coverUrl, sendAfterAdd, originalBookId)
+                } finally {
+                    _isConverting.value = false
+                }
+                return@launch
+            }
             // Fetch the cover once; the server and the final applyMetadata both use this file.
             val cover = resolveCover(coverUri, coverUrl)
             try {
-                val server = pageDropApiClient
-                    ?: throw IllegalStateException("PageDrop conversion service is unavailable")
-                val connection = server.testConnection()
-                if (connection.isFailure) throw connection.exceptionOrNull()!!
-
-                val prepared = server.convertUriToLocalArtifact(
-                    uri = uri,
-                    outputDir = File(context.filesDir, "server-conversions"),
-                    title = outputTitle,
-                    author = outputAuthor,
-                    targetFormat = targetFormat,
-                    coverUri = cover?.let { Uri.fromFile(File(it)) },
-                    coverUrl = null,
-                ) ?: throw IllegalStateException("The PageDrop conversion service could not convert this file")
+                val prepared = serverConvertFn(context, uri, outputTitle, outputAuthor, targetFormat, cover)
 
                 val book = Book(
                     title = prepared.title,
@@ -362,12 +399,7 @@ class BookViewModel @Inject constructor(
                 if (sendAfterAdd) sendBooks(listOf(saved))
             } catch (e: Exception) {
                 Log.w("BookViewModel", "Server conversion failed: ${e.message}")
-                val sourceFormat = DefaultBookRepository.detectFormat(
-                    context.contentResolver.query(uri, null, null, null, null)?.use { c ->
-                        val col = c.getColumnIndex(android.provider.OpenableColumns.DISPLAY_NAME)
-                        if (col >= 0 && c.moveToFirst()) c.getString(col) else null
-                    } ?: uri.lastPathSegment.orEmpty()
-                )
+                val sourceFormat = sourceFormatFn(context, uri)
                 if (targetFormat.equals("mobi", ignoreCase = true) && BookConverter.canConvert(sourceFormat)) {
                     // The phone's own converter makes MOBI too; use it rather than losing the book.
                     _events.trySend(LibraryEvent.Message("Conversion server unavailable — converting on this phone instead"))
@@ -386,6 +418,33 @@ class BookViewModel @Inject constructor(
             } finally {
                 _isConverting.value = false
             }
+        }
+    }
+
+    /** The user kept everything on the phone: MOBI is made here; server-only formats are not uploaded. */
+    private suspend fun convertWithoutServer(
+        context: Context,
+        uri: Uri,
+        outputTitle: String?,
+        outputAuthor: String?,
+        targetFormat: String,
+        coverUri: Uri?,
+        coverUrl: String?,
+        sendAfterAdd: Boolean,
+        originalBookId: Int?,
+    ) {
+        if (!targetFormat.equals("mobi", ignoreCase = true) || !BookConverter.canConvert(sourceFormatFn(context, uri))) {
+            _events.trySend(LibraryEvent.Message("Server conversion is off — choose MOBI to convert on this phone"))
+            return
+        }
+        try {
+            val cover = resolveCover(coverUri, coverUrl)
+            val book = bookRepository.convertAndAddBookWithMetadata(context, uri, outputTitle, outputAuthor, cover)
+            completeAdd(book, AddOptions(sendAfterAdd = sendAfterAdd, originalBookId = originalBookId))
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            _conversionError.value = e.localizedMessage ?: "Conversion failed"
         }
     }
 

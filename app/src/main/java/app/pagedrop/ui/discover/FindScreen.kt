@@ -77,7 +77,9 @@ fun FindScreen(
     onOpenSources: () -> Unit,
     modifier: Modifier = Modifier,
     viewModel: DiscoverViewModel = hiltViewModel(),
+    sourcesViewModel: app.pagedrop.ui.settings.BookSourcesViewModel = hiltViewModel(),
 ) {
+    val showShadow by sourcesViewModel.showShadowLibraries.collectAsStateWithLifecycle()
     val search by viewModel.search.collectAsStateWithLifecycle()
     val recent by viewModel.recent.collectAsStateWithLifecycle()
     val library by viewModel.libraryBooks.collectAsStateWithLifecycle()
@@ -194,12 +196,15 @@ fun FindScreen(
                         )
                     }
                 }
-                if (results != null && !search.searching && results.websiteSearches.isNotEmpty()) {
+                val websiteSearches = results?.let {
+                    app.pagedrop.discover.BookWebSearch.visibleLinks(it.websiteSearches, showShadow)
+                }.orEmpty()
+                if (results != null && !search.searching && websiteSearches.isNotEmpty()) {
                     item {
                         Text("SEARCH MORE LIBRARIES", style = MaterialTheme.typography.labelSmall,
                             modifier = Modifier.padding(top = 16.dp), color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
-                    items(results.websiteSearches, key = { it.sourceName }) { link ->
+                    items(websiteSearches, key = { it.sourceName }) { link ->
                         HairlineCard(Modifier.fillMaxWidth(), onClick = { openSource(link.sourceName, link.url) }) {
                             Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                                 Text("Search ${link.sourceName}", style = MaterialTheme.typography.titleMedium)

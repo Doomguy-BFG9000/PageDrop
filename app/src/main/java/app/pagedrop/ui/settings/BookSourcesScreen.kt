@@ -85,6 +85,7 @@ fun BookSourcesScreen(
 ) {
     val enabled by viewModel.enabledBuiltIns.collectAsStateWithLifecycle()
     val catalogs by viewModel.catalogs.collectAsStateWithLifecycle()
+    val showShadow by viewModel.showShadowLibraries.collectAsStateWithLifecycle()
     val addState by viewModel.add.collectAsStateWithLifecycle()
     var showAdd by remember { mutableStateOf(false) }
     var removeTarget by remember { mutableStateOf<OpdsCatalog?>(null) }
@@ -127,12 +128,26 @@ fun BookSourcesScreen(
                 }
             }
 
+            SectionLabel("Website shortcuts")
             Text(
-                "Website shortcuts for ePustakalay, Anna’s Archive, Global Grey and OceanofPDF appear below book results. " +
+                "Shortcuts for ePustakalay and Global Grey appear below book results. " +
                     "Search inside PageDrop and capture supported book downloads; access varies.",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
+            HairlineCard(Modifier.fillMaxWidth()) {
+                Row(Modifier.padding(horizontal = 16.dp, vertical = 16.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Column(Modifier.weight(1f)) {
+                        Text("Show shadow-library search shortcuts", style = MaterialTheme.typography.titleMedium)
+                        Text(
+                            "Adds Anna’s Archive and OceanofPDF. Their availability and legality vary by country.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                    Switch(checked = showShadow, onCheckedChange = viewModel::setShowShadowLibraries)
+                }
+            }
 
             SectionLabel("OPDS catalogs")
             if (catalogs.isEmpty()) {

@@ -23,10 +23,19 @@ class EnglishSourcesTest {
     private fun Cookie.newBuilderForTest(name: String) = Cookie.Builder().name(name).value(value).hostOnlyDomain(domain).path(path).build()
 
     @Test fun oceanOfPdfIsAWebsiteShortcutWhenAutomatedAccessIsBlocked() {
-        val link = BookWebSearch.links("Frankenstein").single { it.sourceName == "OceanofPDF" }
+        val link = BookWebSearch.links("Frankenstein", includeShadowLibraries = true).single { it.sourceName == "OceanofPDF" }
         assertEquals("https://oceanofpdf.com/", link.url)
         assertTrue(link.description.contains("Frankenstein"))
         assertTrue(link.description.contains("blocked"))
+    }
+
+    @Test fun shadowLibraryShortcutsAreHiddenUnlessTurnedOn() {
+        val shadow = setOf("Anna’s Archive", "OceanofPDF")
+        val hidden = BookWebSearch.links("Frankenstein").map { it.sourceName }
+        assertTrue(hidden.none { it in shadow })
+        assertTrue("Global Grey" in hidden)
+        val shown = BookWebSearch.links("Frankenstein", includeShadowLibraries = true).map { it.sourceName }
+        assertTrue(shown.containsAll(shadow))
     }
 
     @Test fun fadedPagePostsTheTitleInsteadOfFetchingAnUnfilteredCatalog() {
