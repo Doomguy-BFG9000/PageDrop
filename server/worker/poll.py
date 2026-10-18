@@ -20,6 +20,8 @@ from pathlib import Path
 import httpx
 import trafilatura
 
+from safe_fetch import UnsafeURL, fetch_html
+
 # ── Config ──────────────────────────────────────────────────────────────────
 
 SUPABASE_URL = os.environ["SUPABASE_URL"]
@@ -65,6 +67,21 @@ def supabase_patch(path: str, data: dict):
     with httpx.Client() as c:
         r = c.patch(url, headers=headers, json=data)
         r.raise_for_status()
+
+
+def supabase_claim(job_id: str) -> dict | None:
+    """Atomically move a pending job to processing; return the claimed row, or None if another worker won."""
+    url = f"{SUPABASE_URL}/rest/v1/jobs"
+    headers = {**HEADERS, "Prefer": "return=representation"}
+    with httpx.Client() as c:
+        r = c.patch(
+            url, headers=headers,
+            params={"id": f"eq.{job_id}", "status": "eq.pending"},
+            json={"status": "processing", "started_at": datetime.now(timezone.utc).isoformat()},
+        )
+        r.raise_for_status()
+        rows = r.json()
+    return rows[0] if rows else None
 
 
 def supabase_upload(bucket: str, storage_path: str, file_bytes: bytes, content_type: str = "application/octet-stream"):
@@ -344,10 +361,11 @@ async def apply_metadata(
 async def write_article_source(url: str, output_path: Path, timeout: int = JOB_TIMEOUT) -> tuple[bool, str | None, str | None]:
     """Fetch and extract a readable article into a simple HTML file."""
     try:
-        if not url.startswith(("http://", "https://")):
-            return False, None, "Only http/https URLs are supported"
-
-        downloaded = await asyncio.to_thread(trafilatura.fetch_url, url)
+        try:
+            # SSRF guard: validated per hop, pinned to the checked IP, size and time capped.
+            downloaded = await fetch_html(url, timeout=min(timeout, 60))
+        except UnsafeURL as exc:
+            return False, None, str(exc)
         if not downloaded:
             return False, None, "Failed to fetch URL"
 
@@ -593,34 +611,72 @@ async def process_job(job: dict) -> dict:
 # ── Retention ───────────────────────────────────────────────────────────────
 
 
+RECORDED_PATH_COLUMNS = {
+    "sources": ("source_storage_path", "input_cover_storage_path"),
+    "artifacts": ("result_storage_path", "cover_storage_path"),
+}
+
+
+def _list_job_objects(bucket: str, prefix: str, job_id: str) -> list[str]:
+    """Full paths of everything the listing shows for a job, asking with and without the trailing slash."""
+    found = [prefix + name for name in supabase_list(bucket, prefix)]
+    # Some storage versions treat "<user>/<job>" differently from "<user>/<job>/"; that
+    # listing may also echo the job folder itself, which is not an object.
+    bare = prefix.rstrip("/")
+    found += [f"{bare}/{name}" for name in supabase_list(bucket, bare) if name != job_id]
+    return found
+
+
+def expire_job_files(job: dict) -> bool:
+    """Remove every stored file of a job. True only if both buckets are verified empty afterwards."""
+    prefix = job_storage_prefix(job)
+    if prefix is None:
+        return True  # nothing trustworthy to look for; the row can go
+    job_id = str(job["id"])
+    clean = True
+    for bucket, columns in RECORDED_PATH_COLUMNS.items():
+        # Exact recorded paths (only if they sit inside this job's folder), plus whatever is listed.
+        targets = {job[c] for c in columns if is_job_storage_path(job, job.get(c))}
+        targets.update(_list_job_objects(bucket, prefix, job_id))
+        if targets:
+            supabase_remove(bucket, sorted(targets))
+        if _list_job_objects(bucket, prefix, job_id):
+            print(f"[cleanup] Job {job_id}: files still present in {bucket} after removal, will retry")
+            clean = False
+    return clean
+
+
 def cleanup_expired_jobs(now: datetime | None = None, batch: int = 200) -> int:
     """Delete the storage files and rows of jobs older than RETENTION_HOURS.
 
-    Files go first, so a failure leaves the row behind for the next pass to retry.
+    A row is deleted only after its files are removed and a fresh listing shows nothing
+    left in either bucket; otherwise it stays for the next pass to retry.
     Returns the number of job rows deleted.
     """
     cutoff = (now or datetime.now(timezone.utc)) - timedelta(hours=RETENTION_HOURS)
     jobs = supabase_get("/jobs", params={
-        "select": "id,user_id",
+        "select": "id,user_id,source_storage_path,input_cover_storage_path,result_storage_path,cover_storage_path",
         "created_at": f"lt.{cutoff.isoformat()}",
         "order": "created_at.asc",
         "limit": str(batch),
     })
     deleted = 0
     for job in jobs:
-        prefix = job_storage_prefix(job)
         try:
-            if prefix is not None:
-                for bucket in ("sources", "artifacts"):
-                    names = supabase_list(bucket, prefix)
-                    if names:
-                        supabase_remove(bucket, [prefix + name for name in names])
+            if not expire_job_files(job):
+                continue
             supabase_delete("/jobs", params={"id": f"eq.{job['id']}"})
             deleted += 1
         except Exception as e:
-            print(f"[cleanup] Could not expire job {job.get('id')}: {e}")
+            print(f"[cleanup] Could not expire job {job.get('id')}: {type(e).__name__}: {e}")
     # Daily counters are only read for today; keep yesterday's for debugging.
-    supabase_delete("/rate_limits", params={"date": f"lt.{(cutoff - timedelta(days=1)).date().isoformat()}"})
+    old_day = (cutoff - timedelta(days=1)).date().isoformat()
+    supabase_delete("/rate_limits", params={"date": f"lt.{old_day}"})
+    for table in ("ip_rate_limits", "daily_totals"):
+        try:
+            supabase_delete(f"/{table}", params={"date": f"lt.{old_day}"})
+        except Exception as e:  # table missing until migration 004 is applied
+            print(f"[cleanup] Could not prune {table}: {type(e).__name__}")
     return deleted
 
 
@@ -686,10 +742,12 @@ async def poll_loop():
             job = jobs[0]
             job_id = job["id"]
 
-            supabase_patch(f"/jobs?id=eq.{job_id}&status=eq.pending", {
-                "status": "processing",
-                "started_at": datetime.now(timezone.utc).isoformat(),
-            })
+            # The PATCH only matches while the row is still pending; an empty
+            # response means someone else claimed it first, so skip it.
+            claimed = supabase_claim(job_id)
+            if not claimed:
+                return
+            job = claimed
 
             result = await process_job(job)
             supabase_patch(f"/jobs?id=eq.{job_id}", result)

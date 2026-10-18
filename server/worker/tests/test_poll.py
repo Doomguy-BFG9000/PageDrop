@@ -1,4 +1,4 @@
-# Unit tests for the worker's storage-path trust, size checks and retention.
+# Unit tests for the worker's storage-path trust and size checks.
 #   pip install -r server/worker/requirements-dev.txt
 #   python -m pytest server/worker/tests
 import asyncio
@@ -99,50 +99,4 @@ def test_process_job_rejects_oversized_upload(monkeypatch):
     assert "larger than the size declared" in result["error_message"]
 
 
-def test_cleanup_deletes_files_then_rows(monkeypatch):
-    calls = []
-    now = datetime(2026, 11, 10, 12, 0, tzinfo=timezone.utc)
-
-    def fake_get(path, params=None):
-        calls.append(("get", path, params))
-        return [{"id": JOB, "user_id": USER}, {"id": "bad", "user_id": USER}]
-
-    def fake_list(bucket, prefix):
-        calls.append(("list", bucket, prefix))
-        return {"sources": ["book.epub", "cover_c.jpg"], "artifacts": ["output.mobi"]}[bucket]
-
-    monkeypatch.setattr(poll, "supabase_get", fake_get)
-    monkeypatch.setattr(poll, "supabase_list", fake_list)
-    monkeypatch.setattr(poll, "supabase_remove", lambda bucket, paths: calls.append(("remove", bucket, paths)))
-    monkeypatch.setattr(poll, "supabase_delete", lambda path, params=None: calls.append(("delete", path, params)))
-    monkeypatch.setattr(poll, "RETENTION_HOURS", 24)
-
-    assert poll.cleanup_expired_jobs(now=now) == 2
-
-    _, path, params = calls[0]
-    assert path == "/jobs" and params["created_at"] == "lt.2026-11-09T12:00:00+00:00"
-    prefix = f"{USER}/{JOB}/"
-    assert calls[1:6] == [
-        ("list", "sources", prefix),
-        ("remove", "sources", [prefix + "book.epub", prefix + "cover_c.jpg"]),
-        ("list", "artifacts", prefix),
-        ("remove", "artifacts", [prefix + "output.mobi"]),
-        ("delete", "/jobs", {"id": f"eq.{JOB}"}),
-    ]
-    # A row with a malformed id gets no storage calls (its prefix is untrusted) but is still removed.
-    assert calls[6] == ("delete", "/jobs", {"id": "eq.bad"})
-    assert calls[7] == ("delete", "/rate_limits", {"date": "lt.2026-11-08"})
-
-
-def test_cleanup_keeps_row_when_file_deletion_fails(monkeypatch):
-    deleted = []
-    monkeypatch.setattr(poll, "supabase_get", lambda path, params=None: [{"id": JOB, "user_id": USER}])
-    monkeypatch.setattr(poll, "supabase_list", lambda bucket, prefix: ["book.epub"])
-
-    def failing_remove(bucket, paths):
-        raise RuntimeError("storage down")
-
-    monkeypatch.setattr(poll, "supabase_remove", failing_remove)
-    monkeypatch.setattr(poll, "supabase_delete", lambda path, params=None: deleted.append(path))
-    assert poll.cleanup_expired_jobs() == 0
-    assert deleted == ["/rate_limits"]
+# Retention tests live in ../test_cleanup.py (stdlib unittest, fake Supabase client).
