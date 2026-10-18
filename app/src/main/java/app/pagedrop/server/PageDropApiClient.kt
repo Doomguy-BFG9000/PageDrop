@@ -443,6 +443,25 @@ class PageDropApiClient @Inject constructor(
         }
     }
 
+    /** True once the user has answered the first-upload notice (either way). */
+    val uploadNoticeAnswered: Boolean get() = serverSettings.uploadNoticeAnswered
+
+    /**
+     * Whether anything (book, cover or article link) may be sent to the server. Call before any network request,
+     * including [testConnection]; shows the first-upload notice if it hasn't been answered. False when the server
+     * is off or not configured.
+     */
+    suspend fun confirmUpload(): Boolean = uploadConsent.confirm()
+
+    /**
+     * Sends [url] to the server for extraction only after [confirmUpload]; null (nothing sent) when the user keeps
+     * things on the phone, so callers fall back to on-phone extraction.
+     */
+    suspend fun convertArticleWithConsent(url: String, outputDir: File): PreparedArtifact? {
+        if (!confirmUpload()) return null
+        return convertArticleToLocalArtifact(url, outputDir)
+    }
+
     suspend fun shouldUseServer(format: String): Boolean {
         if (!serverSettings.isConfigured) return false
         val nativeFormats = setOf("AZW3", "MOBI", "PRC")

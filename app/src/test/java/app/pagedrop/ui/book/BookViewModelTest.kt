@@ -21,6 +21,7 @@ import android.content.ContextWrapper
 import android.net.Uri
 import androidx.lifecycle.viewModelScope
 import kotlinx.coroutines.cancel
+import android.net.TestUri
 import app.pagedrop.share.PendingSharedFile
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -32,6 +33,7 @@ import org.junit.After
 import org.junit.Before
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.async
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
@@ -439,6 +441,55 @@ class BookViewModelTest {
         val viewModel = newVm(ContextWrapper(null), repo, KindleSettings())
         assertEquals(BookViewModel.TransferState.Idle, viewModel.transferState.first())
     }
+
+    private fun prepared() = app.pagedrop.server.PageDropApiClient.PreparedArtifact(
+        file = File("/fake/server.mobi"), title = "T", author = "A", format = "MOBI", coverFile = null,
+    )
+
+    @Test
+    fun addWithServer_declinedConsentNeverUploadsAndConvertsMobiOnThePhone() = runTest(dispatcher) {
+        val repo = FakeBookRepository()
+        val vm = newVm(ContextWrapper(null), repo, KindleSettings())
+        val calls = mutableListOf<String>()
+        vm.confirmUploadFn = { calls += "confirm"; false }
+        vm.serverConvertFn = { _, _, _, _, _, _ -> calls += "upload"; prepared() }
+        vm.sourceFormatFn = { _, _ -> "EPUB" }
+        vm.addBookWithServerConversion(ContextWrapper(null), TestUri(), targetFormat = "mobi")
+        advanceUntilIdle()
+        assertEquals(listOf("confirm"), calls)
+        assertEquals(1, repo.localConversions)
+        assertFalse(vm.isConverting.value)
+    }
+
+    @Test
+    fun addWithServer_declinedConsentDoesNotUploadServerOnlyFormats() = runTest(dispatcher) {
+        val repo = FakeBookRepository()
+        val vm = newVm(ContextWrapper(null), repo, KindleSettings())
+        var uploaded = false
+        vm.confirmUploadFn = { false }
+        vm.serverConvertFn = { _, _, _, _, _, _ -> uploaded = true; prepared() }
+        vm.sourceFormatFn = { _, _ -> "EPUB" }
+        val message = async { vm.events.first() }
+        vm.addBookWithServerConversion(ContextWrapper(null), TestUri(), targetFormat = "pdf")
+        advanceUntilIdle()
+        assertFalse(uploaded)
+        assertEquals(0, repo.localConversions)
+        val event = message.await()
+        assertTrue(event is BookViewModel.LibraryEvent.Message && "choose MOBI" in event.text)
+    }
+
+    @Test
+    fun addWithServer_uploadsOnlyAfterConsentIsGiven() = runTest(dispatcher) {
+        val repo = FakeBookRepository()
+        val vm = newVm(ContextWrapper(null), repo, KindleSettings())
+        val calls = mutableListOf<String>()
+        vm.confirmUploadFn = { calls += "confirm"; true }
+        vm.serverConvertFn = { _, _, _, _, _, _ -> calls += "upload"; prepared() }
+        vm.addBookWithServerConversion(ContextWrapper(null), TestUri(), targetFormat = "mobi")
+        advanceUntilIdle()
+        assertEquals(listOf("confirm", "upload"), calls)
+        assertEquals(0, repo.localConversions)
+    }
 }
 
 private class FakeBookRepository : BookRepository {
@@ -469,6 +520,14 @@ private class FakeBookRepository : BookRepository {
     }
 
     override suspend fun convertAndAddBook(context: Context, uri: Uri, outputTitle: String?): Book = addBook(context, uri)
+
+    var localConversions = 0
+    override suspend fun convertAndAddBookWithMetadata(
+        context: Context, uri: Uri, title: String?, author: String?, coverPath: String?,
+    ): Book {
+        localConversions++
+        return addBook(context, uri)
+    }
 
     override suspend fun deleteBook(book: Book) { data.removeAll { it.uid == book.uid } }
 

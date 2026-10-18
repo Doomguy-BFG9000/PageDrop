@@ -45,9 +45,10 @@ class ArticlesViewModel @Inject constructor(
             val articlesDir = File(app.filesDir, "articles")
             articlesDir.mkdirs()
 
-            if (pageDropApiClient.isAvailable) {
+            // The link only goes to the server after the first-upload notice; "keep on phone" extracts locally.
+            if (pageDropApiClient.isAvailable && pageDropApiClient.confirmUpload()) {
                 _state.update { it.copy(progressMessage = "Converting on PageDrop server...") }
-                val prepared = pageDropApiClient.convertArticleToLocalArtifact(url, articlesDir)
+                val prepared = pageDropApiClient.convertArticleWithConsent(url, articlesDir)
                 if (prepared != null) {
                     sendPreparedArticle(prepared)
                     return@launch

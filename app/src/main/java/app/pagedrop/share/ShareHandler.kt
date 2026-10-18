@@ -111,7 +111,8 @@ object ShareHandler {
         if (pageDropApiClient?.isAvailable == true) {
             val articlesDir = File(application.filesDir, "articles")
             articlesDir.mkdirs()
-            val prepared = pageDropApiClient.convertArticleToLocalArtifact(url, articlesDir)
+            // Null when the user kept conversion on the phone: nothing is sent, fall through to local extraction.
+            val prepared = pageDropApiClient.convertArticleWithConsent(url, articlesDir)
             if (prepared != null) {
                 bookRepository.addBookFromFile(
                     Book(
