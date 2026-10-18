@@ -14,11 +14,13 @@ import subprocess
 import tempfile
 import time
 import uuid
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 import httpx
 import trafilatura
+
+from safe_fetch import UnsafeURL, fetch_html
 
 # ── Config ──────────────────────────────────────────────────────────────────
 
@@ -29,6 +31,17 @@ POLL_INTERVAL = int(os.environ.get("POLL_INTERVAL", "5"))  # seconds
 MAX_CONCURRENT = int(os.environ.get("MAX_CONCURRENT", "1"))
 JOB_TIMEOUT = int(os.environ.get("JOB_TIMEOUT", "300"))    # 5 minutes
 ARTIFACT_DIR = Path("/tmp/pagedrop-artifacts")
+# Sources, artifacts and job rows older than this are deleted (README: 24-hour expiry).
+RETENTION_HOURS = float(os.environ.get("RETENTION_HOURS", "24"))
+CLEANUP_INTERVAL = int(os.environ.get("CLEANUP_INTERVAL", "600"))  # seconds
+
+# Keep in sync with create-job and 003_launch_hardening.sql.
+MAX_SOURCE_BYTES = 100 * 1024 * 1024
+MAX_COVER_BYTES = 15 * 1024 * 1024
+ALLOWED_TARGET_FORMATS = {
+    "azw3", "epub", "mobi", "docx", "fb2", "htmlz", "kepub", "lit", "lrf", "pdb",
+    "pdf", "pmlz", "rb", "rtf", "snb", "tcr", "txt", "txtz", "zip",
+}
 
 HEADERS = {
     "apikey": SUPABASE_SERVICE_KEY,
@@ -56,6 +69,21 @@ def supabase_patch(path: str, data: dict):
         r.raise_for_status()
 
 
+def supabase_claim(job_id: str) -> dict | None:
+    """Atomically move a pending job to processing; return the claimed row, or None if another worker won."""
+    url = f"{SUPABASE_URL}/rest/v1/jobs"
+    headers = {**HEADERS, "Prefer": "return=representation"}
+    with httpx.Client() as c:
+        r = c.patch(
+            url, headers=headers,
+            params={"id": f"eq.{job_id}", "status": "eq.pending"},
+            json={"status": "processing", "started_at": datetime.now(timezone.utc).isoformat()},
+        )
+        r.raise_for_status()
+        rows = r.json()
+    return rows[0] if rows else None
+
+
 def supabase_upload(bucket: str, storage_path: str, file_bytes: bytes, content_type: str = "application/octet-stream"):
     """Upload a file to Supabase Storage using the service role."""
     url = f"{SUPABASE_URL}/storage/v1/object/{bucket}/{storage_path}"
@@ -71,6 +99,36 @@ def supabase_upload(bucket: str, storage_path: str, file_bytes: bytes, content_t
     return storage_path
 
 
+def supabase_delete(path: str, params: dict = None):
+    url = f"{SUPABASE_URL}/rest/v1/{path.lstrip('/')}"
+    headers = {**HEADERS, "Prefer": "return=minimal"}
+    with httpx.Client() as c:
+        r = c.delete(url, headers=headers, params=params)
+        r.raise_for_status()
+
+
+def supabase_list(bucket: str, prefix: str) -> list[str]:
+    """Names of the objects directly under prefix (a folder ending in "/")."""
+    url = f"{SUPABASE_URL}/storage/v1/object/list/{bucket}"
+    names = []
+    with httpx.Client() as c:
+        while True:
+            r = c.post(url, headers=HEADERS, json={"prefix": prefix, "limit": 1000, "offset": len(names)})
+            r.raise_for_status()
+            page = [item["name"] for item in r.json()]
+            names.extend(page)
+            if len(page) < 1000:
+                return names
+
+
+def supabase_remove(bucket: str, storage_paths: list[str]):
+    """Delete objects from Supabase Storage."""
+    url = f"{SUPABASE_URL}/storage/v1/object/{bucket}"
+    with httpx.Client() as c:
+        r = c.request("DELETE", url, headers=HEADERS, json={"prefixes": storage_paths})
+        r.raise_for_status()
+
+
 def supabase_download(bucket: str, storage_path: str) -> bytes:
     """Download a file from Supabase Storage."""
     url = f"{SUPABASE_URL}/storage/v1/object/{bucket}/{storage_path}"
@@ -82,6 +140,65 @@ def supabase_download(bucket: str, storage_path: str) -> bytes:
         r = c.get(url, headers=headers)
         r.raise_for_status()
         return r.content
+
+
+# ── Job validation ──────────────────────────────────────────────────────────
+
+UUID_RE = re.compile(r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$")
+# The characters create-job's sanitizeFileName() leaves in a file name.
+STORAGE_FILE_NAME_RE = re.compile(r"^[A-Za-z0-9._ -]{1,255}$")
+
+
+def job_storage_prefix(job: dict) -> str | None:
+    """The job owner's folder for this job, "<user_id>/<job_id>/", or None if either id is malformed."""
+    user_id, job_id = str(job.get("user_id", "")), str(job.get("id", ""))
+    if not (UUID_RE.match(user_id) and UUID_RE.match(job_id)):
+        return None
+    return f"{user_id}/{job_id}/"
+
+
+def is_job_storage_path(job: dict, path) -> bool:
+    """True if path is a single file directly inside the job owner's folder for this job.
+
+    The worker runs as the service role and bypasses Storage RLS, so a path pointing
+    anywhere else (another user's upload, "..", nested folders) must never be read.
+    """
+    prefix = job_storage_prefix(job)
+    if prefix is None or not isinstance(path, str) or not path.startswith(prefix):
+        return False
+    name = path[len(prefix):]
+    return bool(STORAGE_FILE_NAME_RE.match(name)) and name not in (".", "..")
+
+
+def validate_job(job: dict) -> str | None:
+    """Return why the job must not be processed, or None if it is safe to run."""
+    if job_storage_prefix(job) is None:
+        return "Job has an invalid id or owner"
+    if job.get("target_format") not in ALLOWED_TARGET_FORMATS:
+        return "Unsupported target format"
+    job_type = job.get("job_type")
+    if job_type == "article":
+        url = job.get("source_url")
+        if not isinstance(url, str) or not url.startswith(("http://", "https://")):
+            return "Only http/https URLs are supported"
+        return None
+    if job_type != "convert":
+        return "Unsupported job type"
+    if not is_job_storage_path(job, job.get("source_storage_path")):
+        return "Source path does not belong to this job"
+    cover = job.get("input_cover_storage_path")
+    if cover is not None and not is_job_storage_path(job, cover):
+        return "Cover path does not belong to this job"
+    return None
+
+
+def check_download_size(data: bytes, declared, maximum: int, what: str) -> str | None:
+    """Reject a download larger than the hard cap or than the size declared to create-job."""
+    if len(data) > maximum:
+        return f"{what} exceeds the {maximum // (1024 * 1024)} MB limit"
+    if declared is not None and len(data) > int(declared):
+        return f"{what} is larger than the size declared when the job was created"
+    return None
 
 
 # ── Conversion ──────────────────────────────────────────────────────────────
@@ -244,10 +361,11 @@ async def apply_metadata(
 async def write_article_source(url: str, output_path: Path, timeout: int = JOB_TIMEOUT) -> tuple[bool, str | None, str | None]:
     """Fetch and extract a readable article into a simple HTML file."""
     try:
-        if not url.startswith(("http://", "https://")):
-            return False, None, "Only http/https URLs are supported"
-
-        downloaded = await asyncio.to_thread(trafilatura.fetch_url, url)
+        try:
+            # SSRF guard: validated per hop, pinned to the checked IP, size and time capped.
+            downloaded = await fetch_html(url, timeout=min(timeout, 60))
+        except UnsafeURL as exc:
+            return False, None, str(exc)
         if not downloaded:
             return False, None, "Failed to fetch URL"
 
@@ -318,6 +436,17 @@ async def process_job(job: dict) -> dict:
 
     log(f"Starting job {job_id} ({job.get('job_type')})")
 
+    rejection = validate_job(job)
+    if rejection:
+        log(f"Rejected: {rejection}")
+        return {
+            "status": "failed",
+            "error_message": rejection,
+            "logs": log_lines,
+            "completed_at": datetime.now(timezone.utc).isoformat(),
+        }
+
+    workdir = None
     try:
         # 1. Create temp workspace
         workdir = Path(tempfile.mkdtemp(prefix=f"pagedrop_{job_id}_"))
@@ -360,11 +489,28 @@ async def process_job(job: dict) -> dict:
                 }
             log(f"Downloading source: {source_path}")
             source_bytes = supabase_download("sources", source_path)
+            too_big = check_download_size(source_bytes, job.get("file_size_bytes"), MAX_SOURCE_BYTES, "Source file")
+            if too_big:
+                return {
+                    "status": "failed",
+                    "error_message": too_big,
+                    "logs": log_lines,
+                    "completed_at": datetime.now(timezone.utc).isoformat(),
+                }
             source_file.write_bytes(source_bytes)
 
         if input_cover_path:
             log(f"Downloading selected cover: {input_cover_path}")
-            requested_cover_file.write_bytes(supabase_download("sources", input_cover_path))
+            cover_bytes = supabase_download("sources", input_cover_path)
+            too_big = check_download_size(cover_bytes, job.get("input_cover_size_bytes"), MAX_COVER_BYTES, "Cover image")
+            if too_big:
+                return {
+                    "status": "failed",
+                    "error_message": too_big,
+                    "logs": log_lines,
+                    "completed_at": datetime.now(timezone.utc).isoformat(),
+                }
+            requested_cover_file.write_bytes(cover_bytes)
         else:
             requested_cover_file = None
 
@@ -458,10 +604,91 @@ async def process_job(job: dict) -> dict:
     finally:
         # Cleanup temp files
         import shutil
+        if workdir is not None:
+            shutil.rmtree(workdir, ignore_errors=True)
+
+
+# ── Retention ───────────────────────────────────────────────────────────────
+
+
+RECORDED_PATH_COLUMNS = {
+    "sources": ("source_storage_path", "input_cover_storage_path"),
+    "artifacts": ("result_storage_path", "cover_storage_path"),
+}
+
+
+def _list_job_objects(bucket: str, prefix: str, job_id: str) -> list[str]:
+    """Full paths of everything the listing shows for a job, asking with and without the trailing slash."""
+    found = [prefix + name for name in supabase_list(bucket, prefix)]
+    # Some storage versions treat "<user>/<job>" differently from "<user>/<job>/"; that
+    # listing may also echo the job folder itself, which is not an object.
+    bare = prefix.rstrip("/")
+    found += [f"{bare}/{name}" for name in supabase_list(bucket, bare) if name != job_id]
+    return found
+
+
+def expire_job_files(job: dict) -> bool:
+    """Remove every stored file of a job. True only if both buckets are verified empty afterwards."""
+    prefix = job_storage_prefix(job)
+    if prefix is None:
+        return True  # nothing trustworthy to look for; the row can go
+    job_id = str(job["id"])
+    clean = True
+    for bucket, columns in RECORDED_PATH_COLUMNS.items():
+        # Exact recorded paths (only if they sit inside this job's folder), plus whatever is listed.
+        targets = {job[c] for c in columns if is_job_storage_path(job, job.get(c))}
+        targets.update(_list_job_objects(bucket, prefix, job_id))
+        if targets:
+            supabase_remove(bucket, sorted(targets))
+        if _list_job_objects(bucket, prefix, job_id):
+            print(f"[cleanup] Job {job_id}: files still present in {bucket} after removal, will retry")
+            clean = False
+    return clean
+
+
+def cleanup_expired_jobs(now: datetime | None = None, batch: int = 200) -> int:
+    """Delete the storage files and rows of jobs older than RETENTION_HOURS.
+
+    A row is deleted only after its files are removed and a fresh listing shows nothing
+    left in either bucket; otherwise it stays for the next pass to retry.
+    Returns the number of job rows deleted.
+    """
+    cutoff = (now or datetime.now(timezone.utc)) - timedelta(hours=RETENTION_HOURS)
+    jobs = supabase_get("/jobs", params={
+        "select": "id,user_id,source_storage_path,input_cover_storage_path,result_storage_path,cover_storage_path",
+        "created_at": f"lt.{cutoff.isoformat()}",
+        "order": "created_at.asc",
+        "limit": str(batch),
+    })
+    deleted = 0
+    for job in jobs:
         try:
-            shutil.rmtree(workdir)
-        except Exception:
-            pass
+            if not expire_job_files(job):
+                continue
+            supabase_delete("/jobs", params={"id": f"eq.{job['id']}"})
+            deleted += 1
+        except Exception as e:
+            print(f"[cleanup] Could not expire job {job.get('id')}: {type(e).__name__}: {e}")
+    # Daily counters are only read for today; keep yesterday's for debugging.
+    old_day = (cutoff - timedelta(days=1)).date().isoformat()
+    supabase_delete("/rate_limits", params={"date": f"lt.{old_day}"})
+    for table in ("ip_rate_limits", "daily_totals"):
+        try:
+            supabase_delete(f"/{table}", params={"date": f"lt.{old_day}"})
+        except Exception as e:  # table missing until migration 004 is applied
+            print(f"[cleanup] Could not prune {table}: {type(e).__name__}")
+    return deleted
+
+
+async def cleanup_loop():
+    while True:
+        try:
+            deleted = await asyncio.to_thread(cleanup_expired_jobs)
+            if deleted:
+                print(f"[cleanup] Expired {deleted} job(s) older than {RETENTION_HOURS:g}h")
+        except Exception as e:
+            print(f"[cleanup] Error in cleanup cycle: {e}")
+        await asyncio.sleep(CLEANUP_INTERVAL)
 
 
 async def health_server(host: str = "0.0.0.0", port: int = 8080):
@@ -515,10 +742,12 @@ async def poll_loop():
             job = jobs[0]
             job_id = job["id"]
 
-            supabase_patch(f"/jobs?id=eq.{job_id}&status=eq.pending", {
-                "status": "processing",
-                "started_at": datetime.now(timezone.utc).isoformat(),
-            })
+            # The PATCH only matches while the row is still pending; an empty
+            # response means someone else claimed it first, so skip it.
+            claimed = supabase_claim(job_id)
+            if not claimed:
+                return
+            job = claimed
 
             result = await process_job(job)
             supabase_patch(f"/jobs?id=eq.{job_id}", result)
@@ -537,10 +766,12 @@ def main():
     print(f"[worker] Poll interval: {POLL_INTERVAL}s")
     print(f"[worker] Max concurrent: {MAX_CONCURRENT}")
     print(f"[worker] Job timeout: {JOB_TIMEOUT}s")
+    print(f"[worker] Retention: {RETENTION_HOURS:g}h (cleanup every {CLEANUP_INTERVAL}s)")
 
     async def run_all():
         await asyncio.gather(
             poll_loop(),
+            cleanup_loop(),
             health_server(),
         )
 

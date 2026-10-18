@@ -39,12 +39,12 @@ In Coolify:
 4. Set Docker Compose Location to:
 
 ```text
-/docker-compose.yml
+/docker-compose.yaml
 ```
 
-The root compose file exists for Coolify's create screen. The equivalent compose
-definition also lives at `server/docker/docker-compose.yml` for server-specific
-work, but Coolify is easiest when pointed at the root default.
+The root compose file (`docker-compose.yaml`) exists for Coolify's create screen.
+The equivalent compose definition also lives at `server/docker/docker-compose.yml`
+for server-specific work; keep the two in sync.
 
 5. Add environment variables:
 
@@ -54,6 +54,8 @@ SUPABASE_SERVICE_KEY=<service_role_key>
 POLL_INTERVAL=5
 MAX_CONCURRENT=1
 JOB_TIMEOUT=300
+RETENTION_HOURS=24
+CLEANUP_INTERVAL=600
 WORKER_MEMORY_LIMIT=3g
 WORKER_CPU_LIMIT=1.0
 ```
@@ -65,15 +67,53 @@ The existing Ampere A1 box is the right place for this because Calibre can use
 real RAM/CPU. Keep `MAX_CONCURRENT=1` so it coexists politely with other
 services.
 
+### Deploy order (required)
+
+Every release that touches the server must be rolled out in this order:
+
+1. **Run migrations `003` then `004`** in the Supabase SQL editor (after `001`/`002` on a
+   fresh project).
+2. **Deploy `create-job`** (`supabase functions deploy create-job --no-verify-jwt`). The new
+   function passes a `p_ip_hash` argument that only exists after `004`.
+3. **Redeploy the worker** (Coolify redeploy). Do it last so it never runs against an older
+   schema, and so the SSRF-safe fetcher and exact-path retention go live together.
+
+Always re-run `003` **and then** `004` after `001` if you ever re-run `001`, and re-run
+`004` after any re-run of `003`: `003` recreates the old 12-argument
+`create_job_with_quota()`, which `004` drops again (both would otherwise be callable).
+
 ### 1. Supabase Setup
 
 1. Go to [supabase.com](https://supabase.com) and create a project
-2. Open the SQL Editor and run `server/db/migrations/001_schema.sql` — creates all tables, indexes, RLS policies, and the auto-profile trigger
-3. Go to **Storage** and create two buckets:
-   - `sources` — private (only service_role can read)
-   - `artifacts` — public read (users download their results)
-4. Go to **Authentication → Settings** and enable Anonymous Sign-Ins (for quick start) or configure Email/password auth
-5. Go to **SQL Editor** and grant worker permissions:
+2. Open the SQL Editor and run every file in `server/db/migrations/` **in order**
+   (each is safe to re-run):
+   - `001_schema.sql` — tables, indexes, RLS policies, the auto-profile trigger and
+     the `sources` / `artifacts` buckets
+   - `002_conversion_cover.sql` — the user-selected cover column
+   - `003_launch_hardening.sql` — locks down what clients can write, adds the atomic
+     quota function `create_job_with_quota()`, makes both buckets private and caps
+     `sources` uploads at 100 MB
+   - `004_abuse_caps.sql` — global active-job cap, global daily upload-byte cap and an
+     optional per-IP daily job cap, all enforced inside `create_job_with_quota()`
+3. Check **Storage**: both `sources` and `artifacts` must be **private**. Do not make
+   `artifacts` public — the app downloads results with the user's token, and RLS
+   limits each user to their own folder.
+4. Check **Storage → Settings**: the global upload file size limit must be at least
+   100 MB, or larger books fail to upload (Supabase's free plan caps it at 50 MB).
+5. Go to **Authentication → Sign In / Providers** and enable Anonymous Sign-Ins — the
+   app signs in anonymously.
+
+   **Required before launch:** tighten the anonymous sign-in rate limit. Anyone can mint
+   unlimited anonymous accounts, and every account gets its own daily quota, so this is
+   the main brake on abuse. In the dashboard open **Authentication → Rate Limits**
+   (`https://supabase.com/dashboard/project/<ref>/auth/rate-limits`), find **Rate limit
+   for sign-ins of anonymous users** (default 30 per hour per IP) and lower it to about
+   **5-10 per hour per IP**. Also keep CAPTCHA protection for anonymous sign-ins in mind
+   if abuse appears (**Authentication → Attack Protection**).
+
+   Also set the salt for the per-IP job cap (see Privacy notes):
+   `supabase secrets set IP_HASH_SALT=$(openssl rand -hex 32)`.
+6. Go to **SQL Editor** and grant worker permissions:
 
 ```sql
 grant usage on schema public to service_role;
@@ -81,7 +121,10 @@ grant all on all tables in schema public to service_role;
 grant all on all functions in schema public to service_role;
 ```
 
-6. Deploy the Edge Function:
+Never grant table writes or function execution to `anon` or `authenticated`;
+migration 003 deliberately revokes them.
+
+7. Deploy the Edge Function (step 2 of the deploy order above):
 
 ```bash
 # Install Supabase CLI
@@ -104,7 +147,7 @@ sudo apt update && sudo apt install -y docker.io docker-compose-v2
 sudo usermod -aG docker ubuntu
 ```
 
-3. Copy the worker to the instance:
+3. Copy the server folder to the instance:
 
 ```bash
 scp -r server/ ubuntu@<oracle-ip>:~/pagedrop-server
@@ -125,12 +168,29 @@ docker compose up -d
 docker compose logs -f
 ```
 
+6. **Firewall (defence in depth).** The worker fetches user-supplied article URLs. It
+   already refuses non-public addresses, pins requests to the address it validated and
+   re-checks every redirect, but also block egress from the worker container/VPS to
+   RFC1918 ranges (`10.0.0.0/8`, `172.16.0.0/12`, `192.168.0.0/16`), `169.254.0.0/16`
+   (cloud metadata), `100.64.0.0/10`, `127.0.0.0/8` and the IPv6 equivalents (`fc00::/7`,
+   `fe80::/10`) at the host firewall, allowing only what the worker needs (Supabase,
+   public internet, DNS). Docker example:
+   `iptables -I DOCKER-USER -s <worker-subnet> -d 10.0.0.0/8 -j DROP` (repeat per range).
+
 ### 3. Android App Setup
 
-1. In the app, go to **Tools → Connection** (or the server settings flow)
-2. Enable "Server-Assisted Mode"
-3. Enter your Supabase URL and anon key (from Settings → API)
-4. The app will anonymously sign in and start checking health
+The server address is a build-time setting, not something users enter. Build the
+app against your project with your Supabase URL and anon key (Supabase
+**Project Settings → API**):
+
+```bash
+./gradlew assembleDebug \
+  -PPAGEDROP_SUPABASE_URL=https://<project>.supabase.co \
+  -PPAGEDROP_SUPABASE_ANON_KEY=<anon_key>
+```
+
+Users can turn conversion off under **Settings → Conversion server → Use PageDrop
+conversion server**. The app signs in anonymously when it first needs the server.
 
 ## API (via Supabase Edge Functions)
 
@@ -143,20 +203,43 @@ Creates a conversion job in the queue. Requires auth token.
 {
   "jobType": "convert",
   "targetFormat": "mobi",
-  "targetProfile": "kindle-stock",
-  "fileSizeBytes": 5000000
+  "fileName": "book.epub",
+  "fileSizeBytes": 5000000,
+  "coverFileName": "cover.jpg",
+  "coverSizeBytes": 120000,
+  "title": "Title",
+  "author": "Author"
 }
 ```
 
+`fileSizeBytes` is required for convert jobs (and `coverSizeBytes` with
+`coverFileName`). Article jobs send `{"jobType": "article", "url": "https://..."}`.
+
 **Response (201):**
 ```json
-{ "jobId": "uuid", "status": "pending" }
+{
+  "jobId": "uuid",
+  "status": "awaiting_upload",
+  "sourceStoragePath": "<user_id>/<job_id>/book.epub",
+  "inputCoverStoragePath": "<user_id>/<job_id>/cover_cover.jpg"
+}
 ```
 
+The app then uploads to exactly those paths in the `sources` bucket and PATCHes the
+job's `status` to `pending`. That is the only change a client can make to a job: the
+database refuses it unless the uploads exist and are no larger than declared, and
+refuses uploads to any other path or after the job is queued.
+
 **Errors:**
+- `400` — Invalid request (missing size, unsupported format, non-http URL)
 - `401` — Unauthorized
-- `429` — Daily job limit reached
-- `413` — File exceeds 100MB
+- `403` — Storage quota exceeded
+- `413` — File exceeds 100 MB (cover: 15 MB)
+- `429` — Daily job limit reached, or too many jobs from this network today
+- `503` — Server busy (global queue cap) or the daily upload capacity is used up; retry later
+
+Limits are checked and the daily counter taken in one transaction, so concurrent
+requests cannot overshoot the limit and a refused request is not counted.
 
 ### Job Status
 
@@ -164,22 +247,59 @@ Poll `GET /rest/v1/jobs?id=eq.{jobId}` via Supabase PostgREST.
 
 The app uses the Supabase Kotlin SDK to query job status directly.
 
-## Limits (Free Tier)
+## Limits
 
-| Limit | Free | Pro |
-|-------|------|-----|
-| Conversions/day | 20 | Unlimited |
-| Max file size | 100 MB | 500 MB |
-| Storage per user | 500 MB | 5 GB |
-| Artifact TTL | 24 hours | 7 days |
-| Queue priority | Normal | High |
+Enforced for every user (there is no paid tier yet):
+
+| Limit | Value | Where it is set |
+|-------|-------|-----------------|
+| Jobs per day (UTC) | 20 | `profiles.daily_job_limit` |
+| Max source file | 100 MB | `create_job_with_quota()`, `sources` bucket limit, worker |
+| Max cover image | 15 MB | `create_job_with_quota()`, worker |
+| Uploads held per user | 500 MB | `profiles.storage_quota_bytes` (sum of the user's unexpired jobs) |
+| Active jobs, all users | 200 (pending, processing, awaiting_upload younger than 1 h) | `c_max_active_jobs` in `create_job_with_quota()` (004) |
+| Declared upload bytes per UTC day, all users | 5 GB | `c_max_daily_bytes` (004), counted in `daily_totals` |
+| Jobs per client IP per UTC day | 30 | `c_max_ip_daily_jobs` (004), counted in `ip_rate_limits` |
+| Retention | 24 hours | worker `RETENTION_HOURS` |
+
+To change a cap, edit the constant in `004_abuse_caps.sql` and re-run it. Caps are checked
+and counted in the same transaction as the job insert, and a refused job is not counted
+against any of them.
+
+### Privacy notes
+
+- The per-IP cap uses `cf-connecting-ip`, else the first `x-forwarded-for` entry. create-job
+  hashes it with SHA-256 and the secret `IP_HASH_SALT` and stores only that hash in
+  `ip_rate_limits(date, ip_hash, job_count)`. Raw IPs are never stored or logged, and the
+  rows are deleted by the worker after about two days. If `IP_HASH_SALT` is unset the cap
+  is skipped.
+- Article URLs are stored with the job and deleted with it after 24 hours.
+
+## Retention
+
+The worker deletes everything belonging to a job 24 hours after it was created,
+whatever its status: the uploaded source and cover in `sources`, the converted book
+and cover in `artifacts`, and the job row itself. It runs every `CLEANUP_INTERVAL`
+seconds (default 600) and also drops daily counter rows older than two days. Files
+are deleted before the row: the worker removes the exact paths recorded on the job plus
+anything listed under `<user_id>/<job_id>/`, lists both buckets again, and deletes the
+row only if nothing is left. Otherwise it logs the job id and retries on the next pass. Local temp
+files are removed as soon as each job finishes.
+
+Retention only runs while a worker is running. To check it, run this in the SQL
+editor; it should return 0 (allowing for one cleanup interval):
+
+```sql
+select count(*) from public.jobs where created_at < now() - interval '24 hours 15 minutes';
+```
 
 ## Worker Details
 
 The worker is a Python script (`server/worker/poll.py`) that:
 
 1. Polls Supabase for `pending` jobs (oldest first)
-2. Atomically claims a job (sets status to `processing`)
+2. Atomically claims a job (a conditional PATCH with `Prefer: return=representation`;
+   an empty result means another worker won and the job is skipped)
 3. Downloads the source file from Supabase Storage
 4. Runs `ebook-convert` to the target format with PageDrop's title and author.
    PDF sources additionally get reflow options: heuristic processing (unwrap
@@ -194,6 +314,29 @@ The worker is a Python script (`server/worker/poll.py`) that:
 7. Uploads results to Supabase Storage
 8. Updates job status to `complete` or `failed`
 9. Sleeps 5 seconds, repeats
+
+Article URLs go through `server/worker/safe_fetch.py`: only http/https on ports 80/443,
+no credentials, every address the host resolves to must be public (loopback, private,
+link-local, `100.64.0.0/10`, multicast, reserved, unspecified and mapped/embedded forms
+are refused), the request is sent to the validated IP with the original `Host` and TLS
+SNI (no DNS rebinding), redirects are followed manually (max 5) and re-validated, and the
+response is capped at 10 MB and by a timeout. `create-job` applies the same rules to
+literal hosts as an early guard; the worker check is authoritative.
+
+Before it touches Storage, the worker refuses any job whose source or cover path is
+not a single file inside `<user_id>/<job_id>/` for that job's owner, whose target
+format is not on the allow-list, or whose download is larger than the size declared
+when the job was created. It runs as the service role and bypasses RLS, so these
+checks stand on their own even if the database rules are loosened.
+
+## Tests
+
+```bash
+server/db/tests/run.sh                                   # migrations + RLS/quota rules on a throwaway local Postgres
+python3 -m unittest discover -s server/worker           # SSRF validator + retention (stdlib, offline)
+python -m pytest server/worker/tests                     # worker path/size checks (pip install -r server/worker/requirements-dev.txt)
+node --test server/supabase/functions/create-job/validation_test.ts   # create-job validation (Node 22.6+)
+```
 
 Concurrent jobs are limited to 1 by default to stay within free-tier
 Oracle limits.
