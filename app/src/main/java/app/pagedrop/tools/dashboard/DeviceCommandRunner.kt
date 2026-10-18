@@ -46,11 +46,14 @@ object DeviceCommandRunner {
 
             execChannel = session.openChannel("exec") as ChannelExec
             execChannel.setCommand(command)
+            // JSch drops output that arrives before the streams are requested, so take them before connect().
+            val stdout = execChannel.inputStream
+            val stderr = execChannel.errStream
             execChannel.connect(10_000)
 
             // Read on helper threads so a Kindle that stops talking can't hold us past timeoutMs.
-            val stdoutReader = readInBackground(execChannel.inputStream)
-            val stderrReader = readInBackground(execChannel.errStream)
+            val stdoutReader = readInBackground(stdout)
+            val stderrReader = readInBackground(stderr)
             val deadline = System.currentTimeMillis() + timeoutMs
             while (!execChannel.isClosed && System.currentTimeMillis() < deadline) Thread.sleep(50)
             val timedOut = !execChannel.isClosed
