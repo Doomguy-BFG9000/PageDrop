@@ -57,14 +57,16 @@ class KindleSettings internal constructor(
         get() = prefs.getString("username", "root") ?: "root"
         set(value) = prefs.edit().putString("username", value).apply()
 
-    /** The SSH password, encrypted with a Keystore key ([KindleSecrets]). Never written in plain text. */
+    /** The SSH password, encrypted with a Keystore key ([KindleSecrets]). Never newly written in plain text. */
     var password: String
         get() {
             migrateLegacyPassword()
-            return unsavedPassword ?: secrets.get(KEY_PASSWORD) ?: ""
+            // A legacy plain-text value only survives while encryption keeps failing; it still beats "".
+            return unsavedPassword ?: secrets.get(KEY_PASSWORD) ?: legacyPassword() ?: ""
         }
         set(value) {
-            migrateLegacyPassword()
+            // Drop the legacy copy first so a later migration can never bring an old password back.
+            removeLegacyPassword()
             unsavedPassword = null
             if (value.isEmpty()) {
                 secrets.remove(KEY_PASSWORD)
@@ -78,17 +80,36 @@ class KindleSettings internal constructor(
             }
         }
 
+    /** True when a password was saved but can't be decrypted any more (e.g. the Keystore key was lost). */
+    val passwordUnreadable: Boolean
+        get() {
+            migrateLegacyPassword()
+            return unsavedPassword == null && legacyPassword() == null &&
+                secrets.hasEntry(KEY_PASSWORD) && secrets.get(KEY_PASSWORD) == null
+        }
+
+    private fun legacyPassword(): String? = prefs.getString(LEGACY_KEY_PASSWORD, null)?.takeIf { it.isNotEmpty() }
+
+    @Synchronized
+    private fun removeLegacyPassword() {
+        if (prefs.contains(LEGACY_KEY_PASSWORD)) prefs.edit().remove(LEGACY_KEY_PASSWORD).commit()
+    }
+
     /**
-     * Versions before 0.9 kept the password in plain preferences. Move it into the encrypted store;
-     * if encryption fails, leave it where it is and try again next time rather than lose it.
+     * Versions before 0.9 kept the password in plain preferences. Move it into the encrypted store.
+     * The plain copy is removed only after the encrypted one has been written (synchronously) and
+     * read back; if anything fails it stays, and [password] keeps using it, so nothing is lost.
      */
     @Synchronized
     private fun migrateLegacyPassword() {
         val legacy = prefs.getString(LEGACY_KEY_PASSWORD, null) ?: return
-        try {
-            if (legacy.isNotEmpty()) secrets.put(KEY_PASSWORD, legacy)
-        } catch (_: Exception) {
-            return
+        if (legacy.isNotEmpty()) {
+            try {
+                secrets.put(KEY_PASSWORD, legacy)
+                if (secrets.get(KEY_PASSWORD) != legacy) return
+            } catch (_: Exception) {
+                return
+            }
         }
         prefs.edit().remove(LEGACY_KEY_PASSWORD).commit()
     }

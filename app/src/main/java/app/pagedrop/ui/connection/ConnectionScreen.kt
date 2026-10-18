@@ -84,7 +84,9 @@ fun ConnectionScreen(
                 onHostChange = viewModel::updateHost,
                 onPortChange = viewModel::updatePort,
                 onUsernameChange = viewModel::updateUsername,
-                onPasswordChange = viewModel::updatePassword
+                onPasswordChange = viewModel::updatePassword,
+                passwordUnreadable = state.passwordUnreadable,
+                onPasswordFocusLost = viewModel::flushPassword
             )
 
             Button(
@@ -142,8 +144,14 @@ private fun KeyLoginSection(
         Text("Key login", style = MaterialTheme.typography.titleMedium)
         Text(
             "Sign in with a key that stays on this phone instead of KOReader's \"Login without password\". " +
-                "PageDrop adds its key to koreader/settings/SSH/authorized_keys on the Kindle, using the login above.",
+                "PageDrop adds its key to koreader/settings/SSH/authorized_keys on the Kindle, using the login above. " +
+                "Key login works with KOReader's SSH server (port 2222), not USBNetwork.",
             style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+        Text(
+            "If you lose this phone's key and turned off passwordless login, switch KOReader's \"Login without password\" back on to get in again.",
+            style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )
         fingerprint?.let {

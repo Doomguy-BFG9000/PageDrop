@@ -127,20 +127,42 @@ class KindleSshTest {
     }
 
     @Test
-    fun installScript_appendsOnceAndSkipsMissingUsbNetwork() {
+    fun installScript_appendsOnce_andNeverTouchesUsbNetwork() {
         val root = Files.createTempDirectory("kindle").toFile()
         try {
+            File(root, "usbnet/etc").mkdirs()
             val line = ClientKey(secrets).ensure()
             repeat(2) { runShell(KindleSsh.installScript(line, root.path)) }
             assertEquals(listOf(line), File(root, "koreader/settings/SSH/authorized_keys").readLines())
-            assertFalse(File(root, "usbnet").exists())
-
-            File(root, "usbnet/etc").mkdirs()
-            runShell(KindleSsh.installScript(line, root.path))
-            assertEquals(listOf(line), File(root, "usbnet/etc/authorized_keys").readLines())
+            assertFalse(File(root, "usbnet/etc/authorized_keys").exists())
         } finally {
             root.deleteRecursively()
         }
+    }
+
+    @Test
+    fun installScript_addsMissingTrailingNewlineBeforeAppending() {
+        val root = Files.createTempDirectory("kindle").toFile()
+        try {
+            val file = File(root, "koreader/settings/SSH/authorized_keys")
+            file.parentFile.mkdirs()
+            file.writeText("ssh-rsa AAAA existing@host") // no trailing newline
+            val line = ClientKey(secrets).ensure()
+            runShell(KindleSsh.installScript(line, root.path))
+            assertEquals(listOf("ssh-rsa AAAA existing@host", line), file.readLines())
+        } finally {
+            root.deleteRecursively()
+        }
+    }
+
+    @Test
+    fun installScript_text_hasNewlineGuardDedupeAndNonFatalChmod() {
+        val script = KindleSsh.installScript("ecdsa-sha2-nistp256 AAAA pagedrop")
+        assertTrue(script, script.contains("tail -c1"))
+        assertTrue(script, script.contains("grep -qxF"))
+        assertTrue(script, script.contains("chmod 600 \"\$f\" 2>/dev/null || true"))
+        assertTrue(script, script.contains("chmod 700 '/mnt/us/koreader/settings/SSH' 2>/dev/null || true"))
+        assertFalse(script, script.contains("usbnet"))
     }
 
     private fun runShell(script: String) {

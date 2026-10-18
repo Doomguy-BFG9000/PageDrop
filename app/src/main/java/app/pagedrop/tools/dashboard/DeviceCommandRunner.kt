@@ -8,6 +8,7 @@ import kotlinx.coroutines.withContext
 import java.io.BufferedReader
 import java.io.InputStreamReader
 import app.pagedrop.transfer.ssh.KindleSsh
+import app.pagedrop.transfer.ssh.readInBackground
 
 object DeviceCommandRunner {
     private const val TAG = "DeviceCommandRunner"
@@ -45,21 +46,23 @@ object DeviceCommandRunner {
 
             execChannel = session.openChannel("exec") as ChannelExec
             execChannel.setCommand(command)
-            execChannel.connect()
+            execChannel.connect(10_000)
 
-            val stdout = BufferedReader(InputStreamReader(execChannel.inputStream)).readText()
-            val stderr = BufferedReader(InputStreamReader(execChannel.errStream)).readText()
-
-            var elapsed = 0
-            while (!execChannel.isClosed && elapsed < timeoutMs) {
-                Thread.sleep(100)
-                elapsed += 100
+            // Read on helper threads so a Kindle that stops talking can't hold us past timeoutMs.
+            val stdoutReader = readInBackground(execChannel.inputStream)
+            val stderrReader = readInBackground(execChannel.errStream)
+            val deadline = System.currentTimeMillis() + timeoutMs
+            while (!execChannel.isClosed && System.currentTimeMillis() < deadline) Thread.sleep(50)
+            val timedOut = !execChannel.isClosed
+            if (!timedOut) {
+                stdoutReader.join(1000)
+                stderrReader.join(1000)
             }
 
             CommandResult(
-                exitCode = execChannel.exitStatus,
-                stdout = stdout.trim(),
-                stderr = stderr.trim()
+                exitCode = if (timedOut) -1 else execChannel.exitStatus,
+                stdout = stdoutReader.text().trim(),
+                stderr = stderrReader.text().trim().ifEmpty { if (timedOut) "The Kindle took too long to answer." else "" }
             )
         } catch (e: Exception) {
             Log.e(TAG, "Command failed: $command → ${e.message}")

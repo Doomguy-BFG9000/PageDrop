@@ -7,6 +7,11 @@ import app.pagedrop.transfer.sftp.KindleSftpClient
 import app.pagedrop.transfer.ssh.KindleSsh
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CoroutineDispatcher
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -32,6 +37,8 @@ class ConnectionViewModel @Inject constructor(
         val keyFingerprint: String? = null,
         val keyBusy: Boolean = false,
         val keyResult: KeyLoginResult? = null,
+        /** A password was saved but can't be decrypted any more; the user has to type it again. */
+        val passwordUnreadable: Boolean = false,
     )
 
     sealed interface KeyLoginResult {
@@ -47,11 +54,33 @@ class ConnectionViewModel @Inject constructor(
             host = kindleSettings.host,
             port = kindleSettings.port.toString(),
             username = kindleSettings.username,
-            password = kindleSettings.password,
-            keyFingerprint = KindleSsh.clientKeyFingerprint()
         )
     )
     val state: StateFlow<ConnectionState> = _state.asStateFlow()
+
+    /** Blocking work (Keystore) runs here; tests replace it with their test dispatcher. */
+    internal var ioDispatcher: CoroutineDispatcher = Dispatchers.IO
+
+    // Outlives the ViewModel so a password typed just before leaving the screen is still saved.
+    private val persistScope = CoroutineScope(SupervisorJob())
+    private var persistJob: Job? = null
+    @Volatile private var passwordEdited = false
+
+    init {
+        // The saved password and key fingerprint come out of the Keystore, so never on the main thread.
+        viewModelScope.launch {
+            val (password, unreadable, fingerprint) = withContext(ioDispatcher) {
+                Triple(kindleSettings.password, kindleSettings.passwordUnreadable, KindleSsh.clientKeyFingerprint())
+            }
+            _state.update {
+                it.copy(
+                    password = if (passwordEdited) it.password else password,
+                    passwordUnreadable = unreadable && !passwordEdited,
+                    keyFingerprint = fingerprint,
+                )
+            }
+        }
+    }
 
     fun updateHost(value: String) { _state.update { it.copy(host = value.trim()) }; kindleSettings.host = value.trim() }
     fun updatePort(value: String) {
@@ -59,9 +88,30 @@ class ConnectionViewModel @Inject constructor(
         kindleSettings.port = value.toIntOrNull() ?: app.pagedrop.data.DEFAULT_PORT
     }
     fun updateUsername(value: String) { _state.update { it.copy(username = value) }; kindleSettings.username = value }
-    fun updatePassword(value: String) { _state.update { it.copy(password = value) }; kindleSettings.password = value }
+    fun updatePassword(value: String) {
+        passwordEdited = true
+        _state.update { it.copy(password = value, passwordUnreadable = false) }
+        persistJob?.cancel()
+        persistJob = persistScope.launch(ioDispatcher) {
+            delay(PASSWORD_SAVE_DELAY_MS)
+            kindleSettings.password = value
+        }
+    }
+
+    /** Saves the typed password now (test, save, focus loss) instead of waiting for the typing pause. */
+    fun flushPassword() {
+        if (!passwordEdited) return
+        val value = _state.value.password
+        persistJob?.cancel()
+        persistJob = persistScope.launch(ioDispatcher) { kindleSettings.password = value }
+    }
+
+    private companion object {
+        const val PASSWORD_SAVE_DELAY_MS = 500L
+    }
 
     fun testConnection() {
+        flushPassword()
         viewModelScope.launch {
             _state.update { it.copy(isTesting = true, testResult = null) }
             val s = _state.value
@@ -85,6 +135,7 @@ class ConnectionViewModel @Inject constructor(
     }
 
     private fun runKeyAction(action: (ConnectionState, Int) -> KeyLoginResult) {
+        flushPassword()
         viewModelScope.launch {
             _state.update { it.copy(keyBusy = true, keyResult = null, testResult = null) }
             val s = _state.value

@@ -13,6 +13,8 @@ import javax.crypto.spec.GCMParameterSpec
 /** Stores secrets. Implementations must never persist plain text; [put] may throw (then nothing is saved). */
 internal interface SecretStore {
     fun get(key: String): String?
+    /** True when something is stored under [key], even if it can't be decrypted. */
+    fun hasEntry(key: String): Boolean = get(key) != null
     fun put(key: String, value: String)
     fun remove(key: String)
 }
@@ -21,6 +23,7 @@ internal interface SecretStore {
 internal class MemorySecretStore : SecretStore {
     private val map = java.util.concurrent.ConcurrentHashMap<String, String>()
     override fun get(key: String): String? = map[key]
+    override fun hasEntry(key: String): Boolean = map.containsKey(key)
     override fun put(key: String, value: String) { map[key] = value }
     override fun remove(key: String) { map.remove(key) }
 }
@@ -45,14 +48,39 @@ internal class KeystoreSecretStore(
         null
     }
 
+    override fun hasEntry(key: String): Boolean = prefs.contains(key)
+
+    /** Synchronous: returns only once the ciphertext is on disk. Throws if it couldn't be saved. */
     override fun put(key: String, value: String) {
-        val cipher = Cipher.getInstance(TRANSFORMATION).apply { init(Cipher.ENCRYPT_MODE, secretKey()) }
-        val encrypted = cipher.iv + cipher.doFinal(value.toByteArray(Charsets.UTF_8))
-        prefs.edit().putString(key, Base64.encodeToString(encrypted, Base64.NO_WRAP)).apply()
+        val encrypted = try {
+            encrypt(value)
+        } catch (e: Exception) {
+            // The Keystore key can be unusable (invalidated by a lock-screen change, restored from
+            // another device). Replace it once; anything it encrypted earlier is unreadable anyway.
+            Log.w(TAG, "Keystore key unusable (${e.javaClass.simpleName}); recreating it")
+            deleteKey()
+            encrypt(value)
+        }
+        if (!prefs.edit().putString(key, Base64.encodeToString(encrypted, Base64.NO_WRAP)).commit()) {
+            throw IllegalStateException("Could not write the encrypted value")
+        }
     }
 
     override fun remove(key: String) {
-        prefs.edit().remove(key).apply()
+        prefs.edit().remove(key).commit()
+    }
+
+    private fun encrypt(value: String): ByteArray {
+        val cipher = Cipher.getInstance(TRANSFORMATION).apply { init(Cipher.ENCRYPT_MODE, secretKey()) }
+        return cipher.iv + cipher.doFinal(value.toByteArray(Charsets.UTF_8))
+    }
+
+    private fun deleteKey() {
+        try {
+            KeyStore.getInstance("AndroidKeyStore").apply { load(null) }.deleteEntry(alias)
+        } catch (e: Exception) {
+            Log.w(TAG, "Could not delete the Keystore key: ${e.javaClass.simpleName}")
+        }
     }
 
     private fun secretKey(): SecretKey {
