@@ -31,6 +31,9 @@ echo "ok - migrations apply and re-apply cleanly"
 PGOPTIONS="" psql_run -At -f "$here/test_launch_hardening.sql" 2>&1 \
   | sed -n 's/^psql:[^:]*:[0-9]*: NOTICE:  //p; /ERROR/p'
 
+PGOPTIONS="" psql_run -At -f "$here/test_abuse_caps.sql" 2>&1 \
+  | sed -n 's/^psql:[^:]*:[0-9]*: NOTICE:  //p; /ERROR/p'
+
 # 30 simultaneous create-job calls for user C (daily_job_limit = 5): exactly 5 may win.
 seq 1 30 | xargs -P 30 -I{} psql -X -qAt -c "
   set role service_role;

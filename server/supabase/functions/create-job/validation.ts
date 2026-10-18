@@ -42,6 +42,7 @@ export interface QuotaRpcParams {
   p_author: string | null;
   p_file_size_bytes: number | null;
   p_input_cover_size_bytes: number | null;
+  p_ip_hash: string | null;
 }
 
 const isSize = (v: unknown): v is number =>
@@ -55,6 +56,7 @@ export function buildJobParams(
   userId: string,
   jobId: string,
   body: unknown,
+  ipHash: string | null = null,
 ): { params: QuotaRpcParams } | { rejection: Rejection } {
   const reject = (status: number, error: string) => ({ rejection: { status, error } });
   if (typeof body !== "object" || body === null) return reject(400, "Invalid request body");
@@ -93,6 +95,8 @@ export function buildJobParams(
     if (!url || url.length > MAX_URL || !/^https?:\/\//i.test(url)) {
       return reject(400, "url must be an http(s) URL");
     }
+    const blocked = blockedUrlReason(url);
+    if (blocked) return reject(400, blocked);
     sourceUrl = url;
   }
 
@@ -110,6 +114,7 @@ export function buildJobParams(
       p_author: optionalText(b.author),
       p_file_size_bytes: fileSize,
       p_input_cover_size_bytes: coverSize,
+      p_ip_hash: ipHash,
     },
   };
 }
@@ -120,6 +125,12 @@ export function quotaRejection(result: { ok?: boolean; error?: string } | null):
   switch (result?.error) {
     case "daily_limit":
       return { status: 429, error: "Daily job limit reached" };
+    case "ip_limit":
+      return { status: 429, error: "Too many jobs from this network today" };
+    case "server_busy":
+      return { status: 503, error: "The server is busy right now, please try again in a few minutes" };
+    case "daily_capacity":
+      return { status: 503, error: "Daily conversion capacity has been reached, please try again tomorrow" };
     case "storage_quota":
       return { status: 403, error: "Storage quota exceeded" };
     case "file_too_large":
@@ -145,4 +156,63 @@ export function sanitizeFileName(name: string): string {
 
 function asString(v: unknown): string | null {
   return typeof v === "string" && v.length > 0 ? v : null;
+}
+
+/**
+ * Early SSRF guard for article URLs. The worker re-resolves the host and re-checks every
+ * redirect hop, and is the authoritative check; this only rejects the obvious cases
+ * (localhost, IP literals in private/special ranges, ports other than 80/443) up front.
+ */
+export function blockedUrlReason(raw: string): string | null {
+  let u: URL;
+  try {
+    u = new URL(raw);
+  } catch {
+    return "url must be an http(s) URL";
+  }
+  if (u.protocol !== "http:" && u.protocol !== "https:") return "url must be an http(s) URL";
+  if (u.username || u.password) return "url must not contain credentials";
+  if (u.port !== "" && u.port !== "80" && u.port !== "443") return "url must use port 80 or 443";
+  // WHATWG URL already normalises decimal/hex/octal IPv4 forms (http://2130706433/ -> 127.0.0.1).
+  let host = u.hostname.toLowerCase().replace(/\.$/, "");
+  if (host.startsWith("[") && host.endsWith("]")) host = host.slice(1, -1);
+  if (host === "localhost" || host.endsWith(".localhost") || !host) return "url host is not allowed";
+  if (isPrivateIPv4(host) || (host.includes(":") && isPrivateIPv6(host))) return "url host is not allowed";
+  return null;
+}
+
+function isPrivateIPv4(host: string): boolean {
+  const m = /^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/.exec(host);
+  if (!m) return false;
+  const [a, b] = [Number(m[1]), Number(m[2])];
+  return a === 0 || a === 10 || a === 127 || a >= 224 ||
+    (a === 100 && b >= 64 && b <= 127) ||
+    (a === 169 && b === 254) ||
+    (a === 172 && b >= 16 && b <= 31) ||
+    (a === 192 && b === 168) ||
+    (a === 192 && b === 0 && Number(m[3]) === 0) ||
+    (a === 198 && (b === 18 || b === 19));
+}
+
+function isPrivateIPv6(host: string): boolean {
+  // Expand to eight 16-bit groups (URL has already normalised and compressed the literal).
+  let h = host;
+  const dotted = /(\d+\.\d+\.\d+\.\d+)$/.exec(h);
+  if (dotted) {
+    const o = dotted[1].split(".").map(Number);
+    h = h.slice(0, -dotted[1].length) + ((o[0] << 8) | o[1]).toString(16) + ":" + ((o[2] << 8) | o[3]).toString(16);
+  }
+  const [head, tail] = h.split("::");
+  const left = head ? head.split(":") : [];
+  const right = tail === undefined ? [] : tail ? tail.split(":") : [];
+  const fill = tail === undefined ? [] : Array(Math.max(0, 8 - left.length - right.length)).fill("0");
+  const g = [...left, ...fill, ...right].map((x) => parseInt(x || "0", 16));
+  if (g.length !== 8 || g.some(Number.isNaN)) return true; // unparseable: refuse
+  if (g.slice(0, 5).every((x) => x === 0) && (g[5] === 0 || g[5] === 0xffff)) {
+    // ::, ::1 and IPv4-mapped / compatible: judge the embedded IPv4 address.
+    if (g[5] === 0 && g[6] === 0 && g[7] <= 1) return true;
+    return isPrivateIPv4(`${g[6] >> 8}.${g[6] & 255}.${g[7] >> 8}.${g[7] & 255}`);
+  }
+  return (g[0] & 0xfe00) === 0xfc00 || (g[0] & 0xffc0) === 0xfe80 || (g[0] & 0xff00) === 0xff00 ||
+    g[0] === 0x2002 || (g[0] === 0x64 && g[1] === 0xff9b) || (g[0] === 0x2001 && g[1] === 0);
 }

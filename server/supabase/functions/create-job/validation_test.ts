@@ -2,7 +2,7 @@
 // (Node 22.6+ strips the types; `deno test` also runs node:test suites.)
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { buildJobParams, quotaRejection, sanitizeFileName } from "./validation.ts";
+import { blockedUrlReason, buildJobParams, quotaRejection, sanitizeFileName } from "./validation.ts";
 
 const USER = "aaaaaaaa-0000-0000-0000-000000000001";
 const JOB = "11111111-0000-0000-0000-000000000001";
@@ -75,4 +75,31 @@ test("quota RPC rejections become real HTTP errors", () => {
   assert.equal(quotaRejection({ ok: false, error: "storage_quota" })!.status, 403);
   assert.equal(quotaRejection({ ok: false, error: "file_too_large" })!.status, 413);
   assert.equal(quotaRejection(null)!.status, 500);
+});
+
+test("article URLs pointing at internal addresses are rejected early", () => {
+  for (const url of [
+    "http://localhost/", "http://foo.localhost/", "http://127.0.0.1/", "http://10.0.0.1/", "http://172.16.0.1/",
+    "http://192.168.1.1/", "http://169.254.169.254/latest/meta-data/", "http://0.0.0.0/", "http://100.64.0.1/",
+    "http://[::1]/", "http://[fd00::1]/", "http://[fe80::1]/", "http://[::]/", "http://[::ffff:127.0.0.1]/",
+    "http://[::ffff:10.0.0.1]/", "http://2130706433/", "http://0x7f000001/", "http://127.1/",
+    "http://example.com:8080/", "https://example.com:22/", "http://user:pw@example.com/",
+  ]) {
+    assert.equal(rejection({ jobType: "article", url }).status, 400, url);
+  }
+  for (const url of ["https://example.com/a", "http://example.com:80/", "https://example.com:443/x", "http://93.184.216.34/",
+    "http://[2606:4700:4700::1111]/", "https://172.32.0.1/"]) {
+    assert.equal(blockedUrlReason(url), null, url);
+  }
+});
+
+test("cap rejections map to 429 / 503 with plain messages", () => {
+  assert.equal(quotaRejection({ ok: false, error: "ip_limit" })?.status, 429);
+  assert.equal(quotaRejection({ ok: false, error: "server_busy" })?.status, 503);
+  assert.equal(quotaRejection({ ok: false, error: "daily_capacity" })?.status, 503);
+});
+
+test("the hashed client IP is passed through", () => {
+  const r = buildJobParams(USER, JOB, { jobType: "article", url: "https://example.com/" }, "abc");
+  assert.ok("params" in r && r.params.p_ip_hash === "abc");
 });

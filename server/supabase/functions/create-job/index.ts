@@ -2,7 +2,8 @@
 //
 // Validates the request, then calls create_job_with_quota() (migration 003), which in
 // one transaction checks upload sizes and the storage quota, takes one unit of the
-// user's daily job allowance and inserts the job. Called by the Android app.
+// user's daily job allowance, applies the global caps (queue length, daily upload
+// bytes, per-IP jobs; migration 004) and inserts the job. Called by the Android app.
 //
 // Deploy as a Supabase Edge Function:
 //   supabase functions deploy create-job --no-verify-jwt
@@ -13,6 +14,11 @@ import { buildJobParams, quotaRejection } from "./validation.ts";
 
 const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
 const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+
+// Salt for hashing client IPs (per-IP daily cap). Set it with:
+//   supabase secrets set IP_HASH_SALT=$(openssl rand -hex 32)
+// Without it the per-IP cap is skipped; the raw IP is never stored or logged.
+const ipHashSalt = Deno.env.get("IP_HASH_SALT") ?? "";
 
 const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
@@ -47,7 +53,7 @@ serve(async (req) => {
   }
 
   const jobId = crypto.randomUUID();
-  const built = buildJobParams(user.id, jobId, body);
+  const built = buildJobParams(user.id, jobId, body, await hashClientIp(req));
   if ("rejection" in built) {
     return json({ error: built.rejection.error }, built.rejection.status);
   }
@@ -72,6 +78,15 @@ serve(async (req) => {
     inputCoverStoragePath: params.p_input_cover_storage_path,
   }, 201);
 });
+
+async function hashClientIp(req: Request): Promise<string | null> {
+  if (!ipHashSalt) return null;
+  const ip = req.headers.get("cf-connecting-ip")?.trim() ||
+    req.headers.get("x-forwarded-for")?.split(",")[0]?.trim();
+  if (!ip) return null;
+  const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(`${ipHashSalt}:${ip}`));
+  return Array.from(new Uint8Array(digest), (b) => b.toString(16).padStart(2, "0")).join("");
+}
 
 function json(payload: unknown, status: number) {
   return new Response(JSON.stringify(payload), { status, headers: corsHeaders() });
