@@ -30,6 +30,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
+import androidx.compose.ui.text.font.FontFamily
+import app.pagedrop.ui.shell.OutlineButton
 import app.pagedrop.ui.shell.ResultBanner
 import app.pagedrop.ui.theme.ButtonShape
 
@@ -112,6 +114,67 @@ fun ConnectionScreen(
                     ResultBanner(false, hint.title, hint.fix)
                 }
             }
+
+            KeyLoginSection(
+                fingerprint = state.keyFingerprint,
+                busy = state.keyBusy,
+                enabled = !state.isTesting && state.host.isNotBlank(),
+                result = state.keyResult,
+                port = state.testedPort,
+                onSetUp = viewModel::setUpKeyLogin,
+                onCheck = viewModel::checkKeyLogin
+            )
+        }
+    }
+}
+
+@Composable
+private fun KeyLoginSection(
+    fingerprint: String?,
+    busy: Boolean,
+    enabled: Boolean,
+    result: ConnectionViewModel.KeyLoginResult?,
+    port: Int,
+    onSetUp: () -> Unit,
+    onCheck: () -> Unit
+) {
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Text("Key login", style = MaterialTheme.typography.titleMedium)
+        Text(
+            "Sign in with a key that stays on this phone instead of KOReader's \"Login without password\". " +
+                "PageDrop adds its key to koreader/settings/SSH/authorized_keys on the Kindle, using the login above.",
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+        fingerprint?.let {
+            Text("This phone's key: $it", style = MaterialTheme.typography.bodySmall, fontFamily = FontFamily.Monospace)
+        }
+        OutlineButton(
+            if (busy) "Working..." else if (fingerprint == null) "Set up key login" else "Add key to Kindle again",
+            onSetUp,
+            Modifier.fillMaxWidth(),
+            enabled = enabled && !busy
+        )
+        if (fingerprint != null) {
+            OutlineButton("Check key login", onCheck, Modifier.fillMaxWidth(), enabled = enabled && !busy)
+        }
+        when (result) {
+            ConnectionViewModel.KeyLoginResult.Works -> ResultBanner(
+                true,
+                "Key login works",
+                "In KOReader, open Tools → Network → SSH server and turn off \"Login without password\"."
+            )
+            ConnectionViewModel.KeyLoginResult.NeedsRestart -> ResultBanner(
+                false,
+                "The Kindle hasn't accepted the key yet",
+                "In KOReader, turn the SSH server off and on again, then tap Check key login. " +
+                    "Keep \"Login without password\" on until this works."
+            )
+            is ConnectionViewModel.KeyLoginResult.Failed -> {
+                val hint = ConnectionHints.explain(result.error, port)
+                ResultBanner(false, hint.title, hint.fix)
+            }
+            null -> {}
         }
     }
 }

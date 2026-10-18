@@ -2,7 +2,6 @@ package app.pagedrop.tools.dictionaries
 
 import android.util.Log
 import com.jcraft.jsch.ChannelSftp
-import com.jcraft.jsch.JSch
 import com.jcraft.jsch.Session
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -13,6 +12,7 @@ import org.apache.commons.compress.archivers.tar.TarArchiveInputStream
 import org.apache.commons.compress.compressors.bzip2.BZip2CompressorInputStream
 import java.io.File
 import java.util.concurrent.TimeUnit
+import app.pagedrop.transfer.ssh.KindleSsh
 
 object DictionaryInstaller {
     private const val TAG = "DictInstaller"
@@ -108,11 +108,7 @@ object DictionaryInstaller {
         var session: Session? = null
         var sftp: ChannelSftp? = null
         try {
-            val jsch = JSch()
-            session = jsch.getSession(user, host, port)
-            session.setPassword(pass)
-            session.setConfig("StrictHostKeyChecking", "no")
-            session.connect(10_000)
+            session = KindleSsh.connect(host, port, user, pass, 10_000)
 
             sftp = session.openChannel("sftp") as ChannelSftp
             sftp.connect(10_000)

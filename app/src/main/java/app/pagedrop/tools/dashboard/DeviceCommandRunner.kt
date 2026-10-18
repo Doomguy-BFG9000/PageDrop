@@ -2,12 +2,12 @@ package app.pagedrop.tools.dashboard
 
 import android.util.Log
 import com.jcraft.jsch.ChannelExec
-import com.jcraft.jsch.JSch
 import com.jcraft.jsch.Session
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.io.BufferedReader
 import java.io.InputStreamReader
+import app.pagedrop.transfer.ssh.KindleSsh
 
 object DeviceCommandRunner {
     private const val TAG = "DeviceCommandRunner"
@@ -41,11 +41,7 @@ object DeviceCommandRunner {
         var session: Session? = null
         var execChannel: ChannelExec? = null
         try {
-            val jsch = JSch()
-            session = jsch.getSession(user, host, port)
-            session.setPassword(pass)
-            session.setConfig("StrictHostKeyChecking", "no")
-            session.connect(10_000)
+            session = KindleSsh.connect(host, port, user, pass, 10_000)
 
             execChannel = session.openChannel("exec") as ChannelExec
             execChannel.setCommand(command)

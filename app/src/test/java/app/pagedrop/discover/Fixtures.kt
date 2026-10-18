@@ -1,5 +1,6 @@
 package app.pagedrop.discover
 
+import app.pagedrop.security.SecretStore
 import java.io.ByteArrayInputStream
 import java.io.File
 

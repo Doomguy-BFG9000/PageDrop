@@ -2,12 +2,12 @@ package app.pagedrop.tools.sync
 
 import android.util.Log
 import com.jcraft.jsch.ChannelSftp
-import com.jcraft.jsch.JSch
 import com.jcraft.jsch.Session
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.io.BufferedReader
 import java.io.InputStreamReader
+import app.pagedrop.transfer.ssh.KindleSsh
 
 object KoreaderSyncBroker {
     private const val TAG = "KoreaderSync"
@@ -23,11 +23,7 @@ object KoreaderSyncBroker {
         var session: Session? = null
         var sftp: ChannelSftp? = null
         try {
-            val jsch = JSch()
-            session = jsch.getSession(user, host, port)
-            session.setPassword(pass)
-            session.setConfig("StrictHostKeyChecking", "no")
-            session.connect(10_000)
+            session = KindleSsh.connect(host, port, user, pass, 10_000)
 
             sftp = session.openChannel("sftp") as ChannelSftp
             sftp.connect(10_000)

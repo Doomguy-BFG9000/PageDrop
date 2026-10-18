@@ -19,6 +19,7 @@ package app.pagedrop
 import android.app.Application
 import com.tom_roush.pdfbox.android.PDFBoxResourceLoader
 import app.pagedrop.transfer.service.NotificationHelper
+import app.pagedrop.transfer.ssh.KindleSsh
 import dagger.hilt.android.HiltAndroidApp
 
 @HiltAndroidApp
@@ -27,5 +28,6 @@ class PageDrop : Application() {
         super.onCreate()
         PDFBoxResourceLoader.init(applicationContext)
         NotificationHelper.createChannel(this)
+        KindleSsh.init(this)
     }
 }

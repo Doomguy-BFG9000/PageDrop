@@ -2,7 +2,6 @@ package app.pagedrop.tools.fonts
 
 import android.util.Log
 import com.jcraft.jsch.ChannelSftp
-import com.jcraft.jsch.JSch
 import com.jcraft.jsch.Session
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -11,6 +10,7 @@ import okhttp3.Request
 import java.io.File
 import java.util.concurrent.TimeUnit
 import java.util.zip.ZipInputStream
+import app.pagedrop.transfer.ssh.KindleSsh
 
 object FontInstaller {
     private const val TAG = "FontInstaller"
@@ -108,11 +108,7 @@ object FontInstaller {
         var session: Session? = null
         var sftp: ChannelSftp? = null
         try {
-            val jsch = JSch()
-            session = jsch.getSession(user, host, port)
-            session.setPassword(pass)
-            session.setConfig("StrictHostKeyChecking", "no")
-            session.connect(10_000)
+            session = KindleSsh.connect(host, port, user, pass, 10_000)
 
             sftp = session.openChannel("sftp") as ChannelSftp
             sftp.connect(10_000)

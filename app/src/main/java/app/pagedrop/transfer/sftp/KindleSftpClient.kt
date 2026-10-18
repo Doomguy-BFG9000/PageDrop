@@ -5,12 +5,12 @@ import app.pagedrop.data.local.database.Book
 import app.pagedrop.tools.dashboard.DeviceCommandRunner
 import com.jcraft.jsch.ChannelExec
 import com.jcraft.jsch.ChannelSftp
-import com.jcraft.jsch.JSch
 import com.jcraft.jsch.Session
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.io.ByteArrayInputStream
 import java.io.File
+import app.pagedrop.transfer.ssh.KindleSsh
 
 object KindleSftpClient {
     private const val TAG = "KindleSftpClient"
@@ -54,11 +54,7 @@ object KindleSftpClient {
                 return@withContext Result.failure(IllegalArgumentException("IP address cannot be empty"))
             }
             Log.d(TAG, "Testing SSH connection to $user@$host:$port")
-            val jsch = JSch()
-            session = jsch.getSession(user, host, port)
-            session.setPassword(pass)
-            session.setConfig("StrictHostKeyChecking", "no")
-            session.connect(5000)
+            session = KindleSsh.connect(host, port, user, pass, 5000)
             Log.d(TAG, "SSH Connection test successful")
             Result.success(Unit)
         } catch (e: Exception) {
@@ -93,11 +89,7 @@ object KindleSftpClient {
             }
 
             onProgress(0, books.size, "Connecting to Kindle...")
-            val jsch = JSch()
-            session = jsch.getSession(user, host, port)
-            session.setPassword(pass)
-            session.setConfig("StrictHostKeyChecking", "no")
-            session.connect(10000)
+            session = KindleSsh.connect(host, port, user, pass, 10000)
 
             onProgress(0, books.size, "Opening SFTP channel...")
             sftpChannel = session.openChannel("sftp") as ChannelSftp
@@ -202,11 +194,7 @@ object KindleSftpClient {
         var session: Session? = null
         var sftpChannel: ChannelSftp? = null
         try {
-            val jsch = JSch()
-            session = jsch.getSession(user, host, port)
-            session.setPassword(pass)
-            session.setConfig("StrictHostKeyChecking", "no")
-            session.connect(10000)
+            session = KindleSsh.connect(host, port, user, pass, 10000)
             sftpChannel = session.openChannel("sftp") as ChannelSftp
             sftpChannel.connect(10000)
             target.parentFile?.mkdirs()

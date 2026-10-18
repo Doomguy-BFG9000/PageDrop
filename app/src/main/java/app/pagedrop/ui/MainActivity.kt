@@ -28,6 +28,7 @@ import app.pagedrop.data.BookRepository
 import app.pagedrop.server.PageDropApiClient
 import app.pagedrop.share.PendingSharedFile
 import app.pagedrop.share.ShareHandler
+import app.pagedrop.ui.connection.HostKeyChangedDialog
 import app.pagedrop.ui.theme.MyApplicationTheme
 import androidx.activity.ComponentActivity
 import androidx.activity.SystemBarStyle
@@ -72,6 +73,7 @@ class MainActivity : ComponentActivity() {
                     color = MaterialTheme.colorScheme.background
                 ) {
                     MainNavigation()
+                    HostKeyChangedDialog()
                 }
             }
         }
