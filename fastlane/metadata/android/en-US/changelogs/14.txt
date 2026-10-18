@@ -1,0 +1,5 @@
+- PageDrop asks once before sending books, covers or article links to the conversion server; decline and everything converts on your phone
+- Shadow-library search shortcuts are now opt-in (Settings > Book sources)
+- Kindle SSH host keys are pinned, saved passwords are encrypted, and you can log in with a key
+- Kindle tab shows firmware, free space and your library reliably again
+- Conversion server: uploads deleted after 24 hours, fairer limits, safer article fetching

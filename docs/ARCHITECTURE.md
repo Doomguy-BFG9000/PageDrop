@@ -142,9 +142,3 @@ app/src/test/java/app/pagedrop/
 ├── transfer/thumbnails/      KindleThumbnailGeneratorTest
 └── ui/book/                  BookViewModelTest
 ```
-
-## Release note (pending next version bump)
-
-Add to the next `fastlane/metadata/android/en-US/changelogs/<versionCode>.txt`:
-- Anna’s Archive and OceanofPDF search shortcuts are now opt-in (Settings -> Book sources)
-- PageDrop asks once before sending books, covers or article links to the conversion server

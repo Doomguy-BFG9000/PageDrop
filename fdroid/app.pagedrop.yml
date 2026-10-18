@@ -23,7 +23,18 @@ Builds:
       - PAGEDROP_SUPABASE_URL=
       - PAGEDROP_SUPABASE_ANON_KEY=
 
+  - versionName: 0.9.0
+    versionCode: 14
+    commit: v0.9.0
+    subdir: app
+    gradle:
+      - yes
+    # Empty values build without the hosted conversion server (so no NonFreeNet anti-feature; see fdroid/README.md).
+    gradleprops:
+      - PAGEDROP_SUPABASE_URL=
+      - PAGEDROP_SUPABASE_ANON_KEY=
+
 AutoUpdateMode: Version
 UpdateCheckMode: Tags
-CurrentVersion: 0.8.0
-CurrentVersionCode: 13
+CurrentVersion: 0.9.0
+CurrentVersionCode: 14
