@@ -1,29 +1,21 @@
-<?xml version="1.0" encoding="utf-8"?><!--
-  ~ Copyright (C) 2022 The Android Open Source Project
-  ~
-  ~ Licensed under the Apache License, Version 2.0 (the "License");
-  ~ you may not use this file except in compliance with the License.
-  ~ You may obtain a copy of the License at
-  ~
-  ~      http://www.apache.org/licenses/LICENSE-2.0
-  ~
-  ~ Unless required by applicable law or agreed to in writing, software
-  ~ distributed under the License is distributed on an "AS IS" BASIS,
-  ~ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-  ~ See the License for the specific language governing permissions and
-  ~ limitations under the License.
-  -->
-
+<?xml version="1.0" encoding="utf-8"?>
 <!--
-   Sample backup rules file; uncomment and customize as necessary.
-   See https://developer.android.com/guide/topics/data/autobackup
-   for details.
-   Note: This file is ignored for devices older that API 31
-   See https://developer.android.com/about/versions/12/backup-restore
+   Auto Backup rules for Android 11 and lower. Android 12+ reads data_extraction_rules.xml;
+   keep the two lists identical.
+
+   Nothing that logs in to anything leaves the phone:
+   - kindle_secrets: SSH password and this phone's SSH key (Keystore-encrypted; the key can't be restored anyway)
+   - kindle_settings: held the plain-text SSH password before 0.9, until the app migrates it
+   - kindle_host_keys: pinned Kindle host keys; a restored phone should pin afresh
+   - pagedrop_server: conversion server access and refresh tokens
+   - pagedrop_discover_secrets: OPDS catalog passwords (Keystore-encrypted)
+   - app_webview: browser cookies, storage and cache from the source browser
 -->
 <full-backup-content>
-    <!--
-   <include domain="sharedpref" path="."/>
-   <exclude domain="sharedpref" path="device.xml"/>
--->
+    <exclude domain="sharedpref" path="kindle_secrets.xml" />
+    <exclude domain="sharedpref" path="kindle_settings.xml" />
+    <exclude domain="sharedpref" path="kindle_host_keys.xml" />
+    <exclude domain="sharedpref" path="pagedrop_server.xml" />
+    <exclude domain="sharedpref" path="pagedrop_discover_secrets.xml" />
+    <exclude domain="root" path="app_webview" />
 </full-backup-content>

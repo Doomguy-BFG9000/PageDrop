@@ -152,8 +152,9 @@ fun KindleReadyScreen(
             StepCard(5, "Turn on KOReader's SSH server", state.done, expanded, positions, viewModel, { expanded = if (expanded == 5) null else 5 }) {
                 Body("In KOReader, open the Tools menu (cog icon) → Network → SSH server, then tick \"SSH server\". On older versions it may be under Tools → More tools.")
                 Body("The port is 2222 and the username is root. SSH only runs while KOReader is open.")
-                Body("\"Login without password (DANGEROUS)\" lets anyone on your network in with any password. It's fine on a trusted home network.")
-                Body("Otherwise, put an authorized_keys file (one public key per line) in koreader/settings/SSH/ on the Kindle.")
+                Body("For the first connection, tick \"Login without password (DANGEROUS)\". While it's on, anyone on your Wi-Fi can get into the Kindle, so only use it on a network you trust.")
+                Body("Once PageDrop is connected, open Settings → Kindle connection → Set up key login. PageDrop adds its own key to the Kindle; then turn \"Login without password\" off again.")
+                Body("If you lose this phone's key and turned off passwordless login, switch KOReader's \"Login without password\" back on to get in again.")
             }
             StepCard(6, "Connect PageDrop", state.done, expanded, positions, viewModel, { expanded = if (expanded == 6) null else 6 }) {
                 Body("Turn Wi-Fi on, join the same network as this phone, keep KOReader open, and let PageDrop find your Kindle.")

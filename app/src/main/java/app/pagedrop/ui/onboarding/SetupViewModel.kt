@@ -46,17 +46,29 @@ class SetupViewModel @Inject constructor(
             host = kindleSettings.host,
             port = kindleSettings.port.toString(),
             username = kindleSettings.username,
-            password = kindleSettings.password
         )
     )
     val state: StateFlow<SetupState> = _state.asStateFlow()
+
+    @Volatile private var passwordEdited = false
+
+    init {
+        // Decrypting the saved password uses the Keystore, so it stays off the main thread.
+        viewModelScope.launch {
+            val saved = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { kindleSettings.password }
+            if (!passwordEdited) _state.update { it.copy(password = saved) }
+        }
+    }
 
     private var scanJob: Job? = null
 
     fun updateHost(value: String) = _state.update { it.copy(host = value.trim(), testSuccess = null, testHint = null) }
     fun updatePort(value: String) = _state.update { it.copy(port = value, testSuccess = null, testHint = null) }
     fun updateUsername(value: String) = _state.update { it.copy(username = value, testSuccess = null, testHint = null) }
-    fun updatePassword(value: String) = _state.update { it.copy(password = value, testSuccess = null, testHint = null) }
+    fun updatePassword(value: String) {
+        passwordEdited = true
+        _state.update { it.copy(password = value, testSuccess = null, testHint = null) }
+    }
 
     fun findMyKindle() {
         if (scanJob?.isActive == true) return

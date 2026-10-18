@@ -18,6 +18,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
@@ -34,7 +35,9 @@ fun ConnectionFields(
     onPortChange: (String) -> Unit,
     onUsernameChange: (String) -> Unit,
     onPasswordChange: (String) -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    passwordUnreadable: Boolean = false,
+    onPasswordFocusLost: () -> Unit = {}
 ) {
     var customPort by remember { mutableStateOf(port != "2222" && port != "22") }
     val selected = when {
@@ -95,7 +98,11 @@ fun ConnectionFields(
                 label = { Text("Password (optional)") },
                 visualTransformation = PasswordVisualTransformation(),
                 singleLine = true,
-                modifier = Modifier.weight(1f)
+                isError = passwordUnreadable,
+                supportingText = if (passwordUnreadable) {
+                    { Text("Saved password couldn't be read — re-enter it") }
+                } else null,
+                modifier = Modifier.weight(1f).onFocusChanged { if (!it.isFocused) onPasswordFocusLost() }
             )
         }
         Text(

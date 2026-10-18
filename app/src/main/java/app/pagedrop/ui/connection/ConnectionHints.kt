@@ -1,5 +1,7 @@
 package app.pagedrop.ui.connection
 
+import app.pagedrop.transfer.ssh.HostKeyChangedException
+
 /** Turns raw SSH/network exceptions into a short plain-English explanation and fix. */
 object ConnectionHints {
 
@@ -11,14 +13,21 @@ object ConnectionHints {
         val timedOut = error is java.net.SocketTimeoutException
         val unknownHost = error is java.net.UnknownHostException
         return when {
+            error is HostKeyChangedException ->
+                Hint(
+                    "Your Kindle's identity changed",
+                    "PageDrop stopped because the Kindle at ${error.change.host} presented a different key than before. " +
+                        "If you reinstalled KOReader or reset the Kindle, trust the new key when asked and try again."
+                )
             refused -> refusedHint(port)
             "address cannot be empty" in msg ->
                 Hint("No address entered", "Type your Kindle's IP address, or tap Find my Kindle.")
             "auth fail" in msg || "authentication" in msg || "permission denied" in msg ->
                 Hint(
                     "The Kindle rejected the login",
-                    "Leave the password blank if KOReader's \"login without password\" is on. " +
-                        "Otherwise enter the SSH password you set (USBNetwork's is usually blank for root)."
+                    "If you set up key login, KOReader may have been reinstalled: turn on its \"Login without password\" " +
+                        "for a moment and set up key login again. If \"Login without password\" is on, leave the password blank. " +
+                        "With USBNetwork, enter the root password you set."
                 )
             "refused" in msg -> refusedHint(port)
             timedOut || "timeout" in msg || "timed out" in msg || "no route" in msg || "unreachable" in msg ->

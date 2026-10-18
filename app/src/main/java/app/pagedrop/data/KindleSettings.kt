@@ -3,18 +3,25 @@ package app.pagedrop.data
 import android.content.Context
 import android.content.ContextWrapper
 import android.content.SharedPreferences
+import app.pagedrop.security.KindleSecrets
+import app.pagedrop.security.MemorySecretStore
+import app.pagedrop.security.SecretStore
 import dagger.hilt.android.qualifiers.ApplicationContext
 import javax.inject.Inject
 import javax.inject.Singleton
 
 @Singleton
-class KindleSettings @Inject constructor(
-    @ApplicationContext private val context: Context
+class KindleSettings internal constructor(
+    private val context: Context,
+    secretsFactory: () -> SecretStore,
 ) {
+    @Inject
+    constructor(@ApplicationContext context: Context) : this(context, { KindleSecrets.store(context) })
+
     // Test-only constructor — bypasses SharedPreferences
     internal constructor() : this(object : ContextWrapper(null) {
         override fun getSharedPreferences(name: String?, mode: Int): SharedPreferences = NullSharedPreferences()
-    })
+    }, { MemorySecretStore() })
 
     private val prefs: SharedPreferences by lazy {
         try {
@@ -23,6 +30,11 @@ class KindleSettings @Inject constructor(
             NullSharedPreferences()
         }
     }
+
+    private val secrets: SecretStore by lazy(secretsFactory)
+
+    /** Set when the Keystore refused to encrypt: the password then lasts only until the app closes. */
+    @Volatile private var unsavedPassword: String? = null
 
     /** True once the user has entered a Kindle address. */
     val isConfigured: Boolean
@@ -45,9 +57,62 @@ class KindleSettings @Inject constructor(
         get() = prefs.getString("username", "root") ?: "root"
         set(value) = prefs.edit().putString("username", value).apply()
 
+    /** The SSH password, encrypted with a Keystore key ([KindleSecrets]). Never newly written in plain text. */
     var password: String
-        get() = prefs.getString("password", "") ?: ""
-        set(value) = prefs.edit().putString("password", value).apply()
+        get() {
+            migrateLegacyPassword()
+            // A legacy plain-text value only survives while encryption keeps failing; it still beats "".
+            return unsavedPassword ?: secrets.get(KEY_PASSWORD) ?: legacyPassword() ?: ""
+        }
+        set(value) {
+            // Drop the legacy copy first so a later migration can never bring an old password back.
+            removeLegacyPassword()
+            unsavedPassword = null
+            if (value.isEmpty()) {
+                secrets.remove(KEY_PASSWORD)
+                return
+            }
+            try {
+                secrets.put(KEY_PASSWORD, value)
+            } catch (e: Exception) {
+                secrets.remove(KEY_PASSWORD)
+                unsavedPassword = value
+            }
+        }
+
+    /** True when a password was saved but can't be decrypted any more (e.g. the Keystore key was lost). */
+    val passwordUnreadable: Boolean
+        get() {
+            migrateLegacyPassword()
+            return unsavedPassword == null && legacyPassword() == null &&
+                secrets.hasEntry(KEY_PASSWORD) && secrets.get(KEY_PASSWORD) == null
+        }
+
+    private fun legacyPassword(): String? = prefs.getString(LEGACY_KEY_PASSWORD, null)?.takeIf { it.isNotEmpty() }
+
+    @Synchronized
+    private fun removeLegacyPassword() {
+        if (prefs.contains(LEGACY_KEY_PASSWORD)) prefs.edit().remove(LEGACY_KEY_PASSWORD).commit()
+    }
+
+    /**
+     * Versions before 0.9 kept the password in plain preferences. Move it into the encrypted store.
+     * The plain copy is removed only after the encrypted one has been written (synchronously) and
+     * read back; if anything fails it stays, and [password] keeps using it, so nothing is lost.
+     */
+    @Synchronized
+    private fun migrateLegacyPassword() {
+        val legacy = prefs.getString(LEGACY_KEY_PASSWORD, null) ?: return
+        if (legacy.isNotEmpty()) {
+            try {
+                secrets.put(KEY_PASSWORD, legacy)
+                if (secrets.get(KEY_PASSWORD) != legacy) return
+            } catch (_: Exception) {
+                return
+            }
+        }
+        prefs.edit().remove(LEGACY_KEY_PASSWORD).commit()
+    }
 
     /** The first (primary) folder. Setting it replaces the first entry of [targetDirectories]. */
     var targetDirectory: String
@@ -87,6 +152,8 @@ class KindleSettings @Inject constructor(
 }
 
 private const val KEY_DIRECTORIES = "target_directories_v2"
+private const val KEY_PASSWORD = "ssh_password"
+private const val LEGACY_KEY_PASSWORD = "password"
 private const val DEFAULT_DIRECTORY = "/mnt/us/documents"
 
 const val DEFAULT_PORT = 2222 // KOReader's built-in SSH server

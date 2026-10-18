@@ -181,7 +181,7 @@ class BookViewModel @Inject constructor(
         _kindleIp.value = kindleSettings.host
         _kindlePort.value = kindleSettings.port.toString()
         _kindleUsername.value = kindleSettings.username
-        _kindlePassword.value = kindleSettings.password
+        loadPassword()
         _kindleDirectories.value = kindleSettings.targetDirectories
         _kindleDirectory.value = kindleSettings.targetDirectory
         _triggerRescan.value = kindleSettings.triggerRescan
@@ -206,8 +206,21 @@ class BookViewModel @Inject constructor(
     private val _kindleUsername = MutableStateFlow(kindleSettings.username)
     val kindleUsername: StateFlow<String> = _kindleUsername.asStateFlow()
 
-    private val _kindlePassword = MutableStateFlow(kindleSettings.password)
+    // Starts empty: decrypting the password needs the Keystore, which must not run on the main thread.
+    private val _kindlePassword = MutableStateFlow("")
     val kindlePassword: StateFlow<String> = _kindlePassword.asStateFlow()
+
+    private var passwordLoad: kotlinx.coroutines.Job? = null
+    @Volatile private var passwordEdited = false
+
+    private fun loadPassword() {
+        passwordLoad = viewModelScope.launch {
+            val saved = withContext(ioDispatcher) { kindleSettings.password }
+            if (!passwordEdited) _kindlePassword.value = saved
+        }
+    }
+
+    init { loadPassword() }
 
     private val _kindleDirectory = MutableStateFlow(kindleSettings.targetDirectory)
     val kindleDirectory: StateFlow<String> = _kindleDirectory.asStateFlow()
@@ -667,8 +680,9 @@ class BookViewModel @Inject constructor(
     }
 
     fun updateKindlePassword(value: String) {
+        passwordEdited = true
         _kindlePassword.value = value
-        kindleSettings.password = value
+        viewModelScope.launch(ioDispatcher) { kindleSettings.password = value }
     }
 
     fun updateKindleDirectory(value: String) {
@@ -702,6 +716,7 @@ class BookViewModel @Inject constructor(
             val hostVal = _kindleIp.value
             val portVal = _kindlePort.value.toIntOrNull() ?: 22
             val userVal = _kindleUsername.value
+            passwordLoad?.join()
             val passVal = _kindlePassword.value
 
             val result = sftpTestConnection(hostVal, portVal, userVal, passVal)
@@ -780,6 +795,7 @@ class BookViewModel @Inject constructor(
             val hostVal = _kindleIp.value
             val portVal = _kindlePort.value.toIntOrNull() ?: 22
             val userVal = _kindleUsername.value
+            passwordLoad?.join()
             val passVal = _kindlePassword.value
             val directoriesVal = _kindleDirectories.value
             val rescanVal = _triggerRescan.value

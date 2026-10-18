@@ -120,3 +120,4 @@ class KindleSettingsTest {
         assertEquals("2.15 GB", DefaultBookRepository.formatFileSize(2306867200L))
     }
 }
+

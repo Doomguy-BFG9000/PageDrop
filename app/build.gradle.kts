@@ -99,6 +99,11 @@ android {
     }
 }
 
+// slf4j-android calls android.util.Log, which isn't available in local unit tests.
+configurations.matching { it.name.endsWith("UnitTestRuntimeClasspath") }.configureEach {
+    exclude(group = "org.slf4j", module = "slf4j-android")
+}
+
 ksp {
     arg("room.schemaLocation", "$projectDir/schemas")
 }
@@ -148,6 +153,8 @@ dependencies {
     testImplementation(libs.kotlinx.coroutines.test)
     testImplementation("com.squareup.okhttp3:mockwebserver:4.12.0")
     testImplementation("com.squareup.okhttp3:okhttp-tls:4.12.0")
+    // In-process SSH server for host key pinning and key login tests
+    testImplementation("org.apache.sshd:sshd-core:2.14.0")
 
     // Instrumented tests: jUnit rules and runners
 

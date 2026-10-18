@@ -5,12 +5,12 @@ import android.graphics.BitmapFactory
 import android.graphics.Canvas
 import android.util.Log
 import com.jcraft.jsch.ChannelSftp
-import com.jcraft.jsch.JSch
 import com.jcraft.jsch.Session
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.io.ByteArrayOutputStream
 import java.io.File
+import app.pagedrop.transfer.ssh.KindleSsh
 
 object KindleThumbnailGenerator {
     private const val TAG = "KindleThumbnailGen"
@@ -53,11 +53,7 @@ object KindleThumbnailGenerator {
             var session: Session? = null
             var sftp: ChannelSftp? = null
             try {
-                val jsch = JSch()
-                session = jsch.getSession(user, host, port)
-                session.setPassword(pass)
-                session.setConfig("StrictHostKeyChecking", "no")
-                session.connect(10_000)
+                session = KindleSsh.connect(host, port, user, pass, 10_000)
 
                 sftp = session.openChannel("sftp") as ChannelSftp
                 sftp.connect(10_000)

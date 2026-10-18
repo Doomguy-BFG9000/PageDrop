@@ -29,6 +29,7 @@ import app.pagedrop.server.PageDropApiClient
 import app.pagedrop.server.ServerUploadConsent
 import app.pagedrop.share.PendingSharedFile
 import app.pagedrop.share.ShareHandler
+import app.pagedrop.ui.connection.HostKeyChangedDialog
 import app.pagedrop.ui.settings.ServerUploadNotice
 import app.pagedrop.ui.theme.MyApplicationTheme
 import androidx.activity.ComponentActivity
@@ -75,6 +76,7 @@ class MainActivity : ComponentActivity() {
                     color = MaterialTheme.colorScheme.background
                 ) {
                     MainNavigation()
+                    HostKeyChangedDialog()
                     ServerUploadNotice(serverUploadConsent)
                 }
             }
