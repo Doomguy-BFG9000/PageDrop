@@ -50,7 +50,7 @@ class BookSearchEngine internal constructor(
         }
         val merged = mergeAndRank(q, outcomes.flatMap { it.results })
         return SearchResults(query, merged, outcomes.mapNotNull { it.error },
-            BookWebSearch.links(q, outcomes.filter { it.error != null }.map { it.source.kind }.toSet()))
+            BookWebSearch.links(q, outcomes.filter { it.error != null }.map { it.source.kind }.toSet(), settings.showShadowLibraries.value))
     }
 
     /** Fills [BookResult.options] when [BookResult.needsResolve] (Internet Archive). Throws [IOException] on network failure. */

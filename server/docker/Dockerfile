@@ -10,6 +10,6 @@ WORKDIR /worker
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-COPY poll.py .
+COPY poll.py safe_fetch.py .
 
 CMD ["python", "poll.py"]

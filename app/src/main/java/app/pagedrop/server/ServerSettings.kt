@@ -1,22 +1,27 @@
 package app.pagedrop.server
 
 import android.content.Context
+import android.content.SharedPreferences
 import app.pagedrop.BuildConfig
 import dagger.hilt.android.qualifiers.ApplicationContext
 import javax.inject.Inject
 import javax.inject.Singleton
 
 @Singleton
-class ServerSettings @Inject constructor(
-    @ApplicationContext private val context: Context
+class ServerSettings internal constructor(
+    private val prefs: SharedPreferences,
+    private val builtInUrl: String = BuildConfig.PAGEDROP_SUPABASE_URL,
+    private val builtInAnonKey: String = BuildConfig.PAGEDROP_SUPABASE_ANON_KEY,
 ) {
-    private val prefs = context.getSharedPreferences("pagedrop_server", Context.MODE_PRIVATE)
+    @Inject
+    constructor(@ApplicationContext context: Context) :
+        this(context.getSharedPreferences("pagedrop_server", Context.MODE_PRIVATE))
 
     val supabaseUrl: String
-        get() = BuildConfig.PAGEDROP_SUPABASE_URL.trim().removeSuffix("/")
+        get() = builtInUrl.trim().removeSuffix("/")
 
     val supabaseAnonKey: String
-        get() = BuildConfig.PAGEDROP_SUPABASE_ANON_KEY.trim()
+        get() = builtInAnonKey.trim()
 
     var accessToken: String
         get() = prefs.getString("access_token", "") ?: ""
@@ -34,6 +39,11 @@ class ServerSettings @Inject constructor(
     var useServer: Boolean
         get() = prefs.getBoolean("use_server", true)
         set(value) = prefs.edit().putBoolean("use_server", value).apply()
+
+    /** True once the user answered the one-time "books are uploaded for conversion" notice (either way). */
+    var uploadNoticeAnswered: Boolean
+        get() = prefs.getBoolean("upload_notice_answered", false)
+        set(value) = prefs.edit().putBoolean("upload_notice_answered", value).apply()
 
     val isConfigured: Boolean
         get() = useServer && hasBuiltInServer

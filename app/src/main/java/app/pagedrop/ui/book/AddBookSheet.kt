@@ -83,6 +83,7 @@ private val serverOutputFormats = listOf(
 internal fun AddBookSheet(
     pending: PendingAdd,
     serverConversionAvailable: Boolean,
+    serverNoticeAnswered: Boolean = true,
     lookupState: BookViewModel.MetadataLookupState,
     selectedCoverUri: Uri?,
     onSearch: (String, String) -> Unit,
@@ -155,6 +156,7 @@ internal fun AddBookSheet(
             FormatDecision(
                 plan = plan,
                 serverConversionAvailable = serverConversionAvailable,
+                serverNoticeAnswered = serverNoticeAnswered,
                 convertPdf = convertPdf,
                 onConvertPdfChange = { convertPdf = it },
             )
@@ -200,6 +202,7 @@ internal fun AddBookSheet(
 private fun FormatDecision(
     plan: AddPlan,
     serverConversionAvailable: Boolean,
+    serverNoticeAnswered: Boolean,
     convertPdf: Boolean,
     onConvertPdfChange: (Boolean) -> Unit,
 ) {
@@ -209,7 +212,13 @@ private fun FormatDecision(
             AddPlan.KindleReady -> DecisionText("Kindle-ready — sent as is.")
             AddPlan.Convert -> {
                 DecisionText("Will be converted to a Kindle book.")
-                DecisionNote(if (serverConversionAvailable) "Converted by your PageDrop server." else "Converted on this phone.")
+                DecisionNote(
+                    when {
+                        !serverConversionAvailable -> "Converted on this phone."
+                        !serverNoticeAnswered -> "Converted on this phone or by the PageDrop server — you’ll be asked first."
+                        else -> "Converted by your PageDrop server."
+                    }
+                )
             }
             AddPlan.Other -> DecisionText("This format may not open on your Kindle. It will be sent as is.")
             AddPlan.PdfChoice -> Column(Modifier.selectableGroup()) {

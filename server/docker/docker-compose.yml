@@ -9,6 +9,8 @@ services:
       POLL_INTERVAL: "${POLL_INTERVAL:-5}"
       MAX_CONCURRENT: "${MAX_CONCURRENT:-1}"
       JOB_TIMEOUT: "${JOB_TIMEOUT:-300}"
+      RETENTION_HOURS: "${RETENTION_HOURS:-24}"
+      CLEANUP_INTERVAL: "${CLEANUP_INTERVAL:-600}"
     restart: unless-stopped
     mem_limit: "${WORKER_MEMORY_LIMIT:-3g}"
     cpus: "${WORKER_CPU_LIMIT:-1.0}"

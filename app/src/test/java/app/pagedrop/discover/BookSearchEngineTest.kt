@@ -26,6 +26,15 @@ class BookSearchEngineTest {
     }
 
     @Test
+    fun shadowLibraryShortcutsFollowTheSetting() = runBlocking {
+        val settings = newSettings()
+        val engine = BookSearchEngine(settings, frankensteinHttp(), 5_000)
+        assertTrue(engine.search("frankenstein").websiteSearches.none { it.sourceName == "OceanofPDF" })
+        settings.setShowShadowLibraries(true)
+        assertTrue(engine.search("frankenstein").websiteSearches.any { it.sourceName == "OceanofPDF" })
+    }
+
+    @Test
     fun mergesSourcesAndPutsStandardEbooksFirstWithAzw3Best() = runBlocking {
         val engine = BookSearchEngine(newSettings(), frankensteinHttp(), 5_000)
         val res = engine.search("frankenstein")
@@ -146,7 +155,7 @@ class BookSearchEngineTest {
         assertTrue(res.results.any { it.source == SourceKind.OPEN_LIBRARY })
         assertEquals(1, res.results.count { it.archiveIdentifier == "hindi-edition" })
         assertTrue(http.requests.any { it.first.contains("collection%3Adigitallibraryindia") })
-        assertEquals(listOf("ePustakalay", "Anna’s Archive", "Global Grey", "OceanofPDF"), res.websiteSearches.map { it.sourceName })
+        assertEquals(listOf("ePustakalay", "Global Grey"), res.websiteSearches.map { it.sourceName })
     }
 
     @Test

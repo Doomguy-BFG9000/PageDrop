@@ -261,6 +261,7 @@ fun BookScreen(
         AddBookSheet(
             pending = pending,
             serverConversionAvailable = viewModel.isServerConversionAvailable,
+            serverNoticeAnswered = viewModel.isUploadNoticeAnswered,
             lookupState = metadataLookupState,
             selectedCoverUri = coverUri,
             onSearch = viewModel::searchBookMetadata,

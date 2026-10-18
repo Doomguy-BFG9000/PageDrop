@@ -2,7 +2,19 @@ package app.pagedrop.discover
 
 /** Catalogs whose interactive search/download flow needs a browser. These are shortcuts, not book results. */
 object BookWebSearch {
-    fun links(query: String, failedSources: Set<SourceKind> = emptySet()): List<BookSearchLink> {
+    /** Website shortcuts that exist only while the opt-in toggle is on. */
+    internal val SHADOW_LIBRARY_NAMES = setOf("Anna’s Archive", "OceanofPDF")
+
+    /** [links] with the opt-in shortcuts dropped unless [showShadowLibraries]; used at render time so a toggle takes effect on cached results. */
+    fun visibleLinks(links: List<BookSearchLink>, showShadowLibraries: Boolean): List<BookSearchLink> =
+        if (showShadowLibraries) links else links.filterNot { it.sourceName in SHADOW_LIBRARY_NAMES }
+
+    /** Anna's Archive and OceanofPDF are listed only when [includeShadowLibraries] (Settings -> Book sources, off by default). */
+    fun links(
+        query: String,
+        failedSources: Set<SourceKind> = emptySet(),
+        includeShadowLibraries: Boolean = false,
+    ): List<BookSearchLink> {
         val q = TextUtil.enc(TextUtil.cleanQuery(query))
         if (q.isEmpty()) return emptyList()
         val fallbacks = failedSources.mapNotNull { kind ->
@@ -21,11 +33,12 @@ object BookWebSearch {
                 SourceKind.OPDS, SourceKind.WEBSITE -> null
             }
         }
-        return fallbacks + listOf(
+        val shadow = includeShadowLibraries
+        return fallbacks + listOfNotNull(
             BookSearchLink("ePustakalay", "https://epustakalay.com/search_gcse/?q=$q", "Hindi and Indian-language books; search on the website"),
-            BookSearchLink("Anna’s Archive", "https://annas-archive.gl/search?q=$q", "Shadow-library search; availability and download access vary"),
+            if (shadow) BookSearchLink("Anna’s Archive", "https://annas-archive.gl/search?q=$q", "Shadow-library search; availability and download access vary") else null,
             BookSearchLink("Global Grey", "https://www.google.com/search?q=${TextUtil.enc("site:globalgreyebooks.com ${TextUtil.cleanQuery(query)}")}", "Search Global Grey’s English classics through its Google site search"),
-            BookSearchLink("OceanofPDF", "https://oceanofpdf.com/", "Search for “${TextUtil.cleanQuery(query)}” on the website; automated access is blocked"),
+            if (shadow) BookSearchLink("OceanofPDF", "https://oceanofpdf.com/", "Search for “${TextUtil.cleanQuery(query)}” on the website; automated access is blocked") else null,
         )
     }
 }
