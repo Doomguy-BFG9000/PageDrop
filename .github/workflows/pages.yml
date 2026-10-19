@@ -2,10 +2,10 @@ name: Website
 
 # Publishes website/ to GitHub Pages. Manual only for now: run it from the
 # Actions tab once Pages is enabled (Settings → Pages → Source: GitHub Actions).
-# The site uses relative paths and works from any host. When a real domain is
-# chosen, add website/CNAME and the canonical/og:url tags (see the TODO in
-# website/index.html). The step below refuses to publish if the old placeholder
-# domain pagedrop.example ever reappears.
+# The site lives at https://spandan-kumar.github.io/PageDrop/ (project site, no
+# CNAME). Pages link to each other with relative paths; canonical, og:url,
+# og:image and sitemap.xml use that absolute URL. The step below refuses to
+# publish if the old placeholder domain pagedrop.example ever reappears.
 
 on:
   workflow_dispatch:

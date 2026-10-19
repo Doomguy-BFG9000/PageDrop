@@ -1,5 +1,3 @@
-<!-- website link -->
-
 <p align="center">
   <img src="fastlane/metadata/android/en-US/images/icon.png" alt="PageDrop icon" width="88" height="88">
 </p>
@@ -18,7 +16,7 @@
 
 <p align="center">
   <a href="https://github.com/spandan-kumar/PageDrop/releases/latest">Download</a> ·
-  <!-- website link -->Website (soon) ·
+  <a href="https://spandan-kumar.github.io/PageDrop/">Website</a> ·
   <a href="https://discord.gg/cfsqhuHVfb">Discord</a> ·
   <a href="https://github.com/spandan-kumar/PageDrop/issues/new/choose">Report a bug</a>
 </p>

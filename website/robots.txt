@@ -2,6 +2,4 @@
 User-agent: *
 Allow: /
 
-# Sitemaps need an absolute URL. Replace pagedrop.example with the real domain
-# (pages.yml refuses to publish while the placeholder is anywhere in website/).
-Sitemap: https://pagedrop.example/sitemap.xml
+Sitemap: https://spandan-kumar.github.io/PageDrop/sitemap.xml
