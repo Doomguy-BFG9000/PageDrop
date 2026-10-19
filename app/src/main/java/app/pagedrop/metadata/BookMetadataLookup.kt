@@ -89,9 +89,13 @@ internal class OkHttpMetadataHttp(
 
 /**
  * Catalog lookup against Open Library (primary, no key, generous limits) and Google Books (extra, optional).
+ * Google Books is only contacted while [useGoogleBooks] returns true.
  * All network work happens on [Dispatchers.IO]; every failure mode is returned, never thrown.
  */
-class BookMetadataSearcher(private val http: MetadataHttp) {
+class BookMetadataSearcher(
+    private val http: MetadataHttp,
+    private val useGoogleBooks: () -> Boolean = { true },
+) {
     private val json = Json { ignoreUnknownKeys = true }
 
     private sealed interface SourceOutcome {
@@ -107,12 +111,13 @@ class BookMetadataSearcher(private val http: MetadataHttp) {
 
         val (open, google) = coroutineScope {
             val o = async { openLibrary(query) }
-            val g = async { googleBooks(query) }
+            val g = async { if (useGoogleBooks()) googleBooks(query) else null }
             o.await() to g.await()
         }
 
-        val okItems = listOf(open, google).filterIsInstance<SourceOutcome.Ok>().flatMap { it.items }
-        val failures = listOf(open, google).filterIsInstance<SourceOutcome.Failed>()
+        val outcomes = listOfNotNull(open, google)
+        val okItems = outcomes.filterIsInstance<SourceOutcome.Ok>().flatMap { it.items }
+        val failures = outcomes.filterIsInstance<SourceOutcome.Failed>()
         val merged = merge(okItems)
         val ranked = BookMetadataRanker.rank(query, merged)
 
@@ -289,7 +294,17 @@ class BookMetadataSearcher(private val http: MetadataHttp) {
  */
 object BookMetadataLookup {
     private val okHttp = OkHttpMetadataHttp()
-    private val searcher = BookMetadataSearcher(okHttp)
+
+    /** Set once at startup from [MetadataSettings]; until then the build's default applies. */
+    @Volatile
+    private var settings: MetadataSettings? = null
+    private val searcher = BookMetadataSearcher(okHttp) {
+        settings?.useGoogleBooks?.value ?: MetadataSettings.defaultUseGoogleBooks()
+    }
+
+    fun init(settings: MetadataSettings) {
+        this.settings = settings
+    }
 
     /** Ranked lookup; see [MetadataLookupResult]. Cleans file-name style titles itself. */
     suspend fun lookup(title: String, author: String = ""): MetadataLookupResult = searcher.lookup(title, author)

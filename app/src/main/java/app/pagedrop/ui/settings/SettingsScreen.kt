@@ -50,6 +50,7 @@ fun SettingsScreen(
     viewModel: SettingsViewModel = hiltViewModel()
 ) {
     val state by viewModel.state.collectAsState()
+    val useGoogleBooks by viewModel.useGoogleBooks.collectAsState()
     LaunchedEffect(Unit) { viewModel.refresh() }
 
     Scaffold(
@@ -97,6 +98,22 @@ fun SettingsScreen(
                 icon = Icons.Default.Search,
                 onClick = onOpenBookSources
             )
+
+            SectionLabel("Book details")
+            HairlineCard(Modifier.fillMaxWidth()) {
+                Row(Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Column(Modifier.weight(1f)) {
+                        Text("Use Google Books for book details", style = MaterialTheme.typography.bodyMedium)
+                        Text(
+                            "Titles, authors and covers come from Open Library. Google Books adds more matches; " +
+                                "when on, a book's title and author (or ISBN) are also sent to Google.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                    Switch(checked = useGoogleBooks, onCheckedChange = viewModel::updateUseGoogleBooks)
+                }
+            }
 
             SectionLabel("Extra folders (optional)")
             HairlineCard(Modifier.fillMaxWidth()) {

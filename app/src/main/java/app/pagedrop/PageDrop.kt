@@ -18,14 +18,20 @@ package app.pagedrop
 
 import android.app.Application
 import com.tom_roush.pdfbox.android.PDFBoxResourceLoader
+import app.pagedrop.metadata.BookMetadataLookup
+import app.pagedrop.metadata.MetadataSettings
 import app.pagedrop.transfer.service.NotificationHelper
 import app.pagedrop.transfer.ssh.KindleSsh
 import dagger.hilt.android.HiltAndroidApp
+import javax.inject.Inject
 
 @HiltAndroidApp
 class PageDrop : Application() {
+    @Inject lateinit var metadataSettings: MetadataSettings
+
     override fun onCreate() {
         super.onCreate()
+        BookMetadataLookup.init(metadataSettings)
         PDFBoxResourceLoader.init(applicationContext)
         NotificationHelper.createChannel(this)
         KindleSsh.init(this)

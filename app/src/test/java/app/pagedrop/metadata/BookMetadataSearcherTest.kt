@@ -108,4 +108,39 @@ class BookMetadataSearcherTest {
         assertEquals("https://books.google.com/books/content?id=X&printsec=frontcover&img=1&zoom=0&source=gbs_api", c.coverUrl)
         assertEquals(2004, c.year)
     }
+
+    @Test fun googleBooksSwitchedOffIsNeverContacted() = runTest {
+        val urls = mutableListOf<String>()
+        val r = BookMetadataSearcher(http({ ok(olJson) }, { ok(googleJson) }, urls), useGoogleBooks = { false })
+            .lookup("The Great Gatsby", "F. Scott Fitzgerald")
+        r as MetadataLookupResult.Matches
+        assertTrue(urls.isNotEmpty())
+        assertTrue(urls.none { "googleapis.com" in it })
+        assertEquals(BookMetadataCandidate.Source.OPEN_LIBRARY, r.candidates.first().source)
+        assertEquals(false, r.degraded)
+    }
+
+    @Test fun googleBooksOffAndOpenLibraryEmptyIsNoMatches() = runTest {
+        val r = BookMetadataSearcher(http({ ok("""{"docs":[]}""") }, { ok(googleJson) }), useGoogleBooks = { false })
+            .lookup("zzqx nothing", "")
+        assertEquals(MetadataLookupResult.NoMatches, r)
+    }
+
+    @Test fun googleBooksOffAndOpenLibraryOfflineIsUnavailable() = runTest {
+        val r = BookMetadataSearcher(http({ throw UnknownHostException("x") }, { ok(googleJson) }), useGoogleBooks = { false })
+            .lookup("The Great Gatsby", "")
+        r as MetadataLookupResult.Unavailable
+        assertTrue(r.offline)
+    }
+
+    @Test fun googleBooksSwitchIsReadOnEveryLookup() = runTest {
+        var on = false
+        val urls = mutableListOf<String>()
+        val searcher = BookMetadataSearcher(http({ ok(olJson) }, { ok(googleJson) }, urls)) { on }
+        searcher.lookup("The Great Gatsby", "")
+        assertTrue(urls.none { "googleapis.com" in it })
+        on = true
+        searcher.lookup("The Great Gatsby", "")
+        assertTrue(urls.any { "googleapis.com" in it })
+    }
 }
