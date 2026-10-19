@@ -17,9 +17,9 @@ RepoType: git
 Repo: https://github.com/spandan-kumar/PageDrop.git
 
 Builds:
-  - versionName: 0.9.1
-    versionCode: 15
-    commit: b49fed866af3d17640c9f929cbc1ee5597d19d1f
+  - versionName: 0.9.2
+    versionCode: 16
+    commit: 28e251db2d4f12ca048db6f1c0feac8ff0d08bf6
     subdir: app
     gradle:
       - yes
@@ -29,5 +29,5 @@ Builds:
 
 AutoUpdateMode: Version
 UpdateCheckMode: Tags
-CurrentVersion: 0.9.1
-CurrentVersionCode: 15
+CurrentVersion: 0.9.2
+CurrentVersionCode: 16
