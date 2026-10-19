@@ -6,6 +6,7 @@ Categories:
   - File Transfer
   - Reading
 License: GPL-3.0-only
+AuthorName: Spandan Kumar
 SourceCode: https://github.com/spandan-kumar/PageDrop
 IssueTracker: https://github.com/spandan-kumar/PageDrop/issues
 Changelog: https://github.com/spandan-kumar/PageDrop/releases
@@ -18,7 +19,7 @@ Repo: https://github.com/spandan-kumar/PageDrop.git
 Builds:
   - versionName: 0.9.1
     versionCode: 15
-    commit: v0.9.1
+    commit: b49fed866af3d17640c9f929cbc1ee5597d19d1f
     subdir: app
     gradle:
       - yes

@@ -16,9 +16,11 @@ Before submitting either one:
 
 ## 1. IzzyOnDroid inclusion request
 
-Where: open a new issue at https://gitlab.com/IzzyOnDroid/repo/-/issues and pick the
-inclusion request template if it offers one. Paste the following into its fields or the
-issue body.
+Where: https://codeberg.org/IzzyOnDroid/repodata/issues/new and choose the "App Inclusion
+Request" form. IzzyOnDroid moved its tracker from GitLab to Codeberg in 2026. The form has
+fields rather than a free body; use the text below for Summary, Description, Build
+instructions and Further Notices. It also asks how much "AI" tools were used. Answer that
+honestly: this repo's history shows Claude as co-author on many commits.
 
 **Title:** `Inclusion request: PageDrop (app.pagedrop)`
 
