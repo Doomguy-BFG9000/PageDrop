@@ -1,0 +1,1 @@
+- Smaller download: release builds are now shrunk with R8 (about 26 MB down to about 11 MB)
