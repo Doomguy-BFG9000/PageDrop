@@ -138,7 +138,7 @@ The full package layout, sources and test notes are in [docs/ARCHITECTURE.md](do
 - [Calibre](https://calibre-ebook.com/) powers the optional conversion server.
 - [Project Gutenberg](https://www.gutenberg.org/), [Standard Ebooks](https://standardebooks.org/) and the [Internet Archive](https://archive.org/) for keeping books free to read.
 - [Literata](https://fonts.google.com/specimen/Literata), used under the SIL Open Font License (see [`licenses/`](licenses/)).
-- Poster art from [bezos.click](https://bezos.click).
+- Poster art from [bezos.click](https://bezos.click), used with permission (not covered by the GPL; see [`licenses/POSTER-ART.md`](licenses/POSTER-ART.md)).
 
 ## License
 
