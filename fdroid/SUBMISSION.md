@@ -31,7 +31,7 @@ honestly: this repo's history shows Claude as co-author on many commits.
 **License:** GPL-3.0-only
 **Releases / APK:** https://github.com/spandan-kumar/PageDrop/releases
 (each release has one universal, signed APK, `PageDrop-vX.Y.Z.apk`, plus a `.sha256`.
-v0.9.1 is about 26 MB.)
+v0.9.2 is about 11 MB; release builds are shrunk with R8.)
 **Category:** Reading
 **Fastlane metadata:** `fastlane/metadata/android/en-US/` (title, descriptions,
 changelogs by versionCode, icon, phone screenshots)
