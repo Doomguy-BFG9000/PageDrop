@@ -26,8 +26,6 @@ dependencyResolutionManagement {
     repositories {
         google()
         mavenCentral()
-        maven { url = uri("https://raw.githubusercontent.com/nicjohnson145/epublib-repo/main/releases") }
-        maven { url = uri("https://jitpack.io") }
     }
 }
 rootProject.name = "PageDrop"
