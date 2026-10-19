@@ -5,13 +5,12 @@ recipe are in [`README.md`](README.md).
 
 Before submitting either one:
 
-- [ ] Replace or relicense `app/src/main/res/drawable/bezos_bg.png` (see README,
-      "Anti-features"). If it is replaced, delete the NonFreeAssets paragraphs below and
-      the `NonFreeAssets` entry in `app.pagedrop.yml`.
-- [ ] Decide whether Google Books stays on with no way to turn it off. If you add a
-      switch that is off in builds without the server, delete the NonFreeNet paragraphs
-      below and the `NonFreeNet` entry in `app.pagedrop.yml`.
-- [ ] If either of those changes, tag a new release first and point the recipe at it.
+- [x] Poster art: used with the artist's permission (`licenses/POSTER-ART.md`). Not a free
+      license, so NonFreeAssets stays declared.
+- [x] Google Books: switchable since 0.9.1 and off by default without the server, so the
+      F-Droid recipe no longer declares NonFreeNet.
+- [ ] If the art is relicensed or replaced, tag a new release, delete the NonFreeAssets
+      paragraphs below and the recipe entry.
 
 ---
 
@@ -30,7 +29,7 @@ issue body.
 **License:** GPL-3.0-only
 **Releases / APK:** https://github.com/spandan-kumar/PageDrop/releases
 (each release has one universal, signed APK, `PageDrop-vX.Y.Z.apk`, plus a `.sha256`.
-v0.9.0 is about 26 MB.)
+v0.9.1 is about 26 MB.)
 **Category:** Reading
 **Fastlane metadata:** `fastlane/metadata/android/en-US/` (title, descriptions,
 changelogs by versionCode, icon, phone screenshots)
@@ -54,16 +53,17 @@ and send it to the Kindle over SSH/SFTP.
 - No account needed.
 
 **Network services, to be upfront (likely anti-features):**
-- *NonFreeNet:* importing a book looks up its title and author on Open Library and
-  Google Books to suggest metadata and a cover. Google Books is non-free.
+- *NonFreeNet:* importing a book looks up its title and author on Open Library and, in
+  this APK by default, Google Books (non-free). Settings → Book details turns Google Books
+  off.
 - *Hosted conversion server:* this APK uses the developer's conversion server (Supabase)
   by default. Before the first upload the app asks for consent and explains it. One
   switch in Settings keeps all conversion on the phone, and the phone also converts
   whenever the server fails. Uploaded files are deleted about 24 hours later. The server
   code is in the same repo under `server/`, so it can be self-hosted. Hosts the app
   contacts: https://github.com/spandan-kumar/PageDrop/blob/main/docs/PRIVACY.md
-- *NonFreeAssets:* the library background is poster art from bezos.click, which states
-  no license. (Delete this line if the image has been replaced.)
+- *NonFreeAssets:* the library background is poster art from bezos.click, used with the
+  artist's permission but not under a free license.
 
 **Other notes:**
 - Needs a jailbroken Kindle with KOReader and its SSH server. The app walks you through
@@ -105,22 +105,16 @@ Metadata: fastlane, in-repo (`fastlane/metadata/android/en-US/`)
   default. These empty values build the app with no server, so the F-Droid build always
   converts on the phone and never contacts that service. (`app/build.gradle.kts` treats an
   empty property as "no server".)
-- `prebuild` removes two stale Maven repos from `settings.gradle.kts` in the v0.9.0 tag:
-  a dead raw.githubusercontent.com repo and an unused jitpack entry. `epublib-core:3.1`
-  has always resolved from Maven Central. Both lines are gone upstream, so the sed is a
-  no-op for future tags.
 - No `AllowedAPKSigningKeys`: the F-Droid build differs from the upstream APK on purpose
   (no hosted server), so it can't be reproducible against it. Please sign it with the
   F-Droid key. Upstream documents that the F-Droid and GitHub builds can't update over
   each other.
 
 ### Anti-features
-- **NonFreeNet**: importing a book looks up title and author on Open Library (free) and
-  Google Books (non-free) to suggest metadata and a cover. This happens automatically and
-  there is no switch yet.
-- **NonFreeAssets**: the library/setup background is poster art credited to bezos.click
-  with no stated license. *(Delete this item and the recipe entry if upstream has replaced
-  the image.)*
+- No **NonFreeNet**: with no hosted server in this build, Google Books lookups are off by
+  default (Settings → Book details); only Open Library is contacted for metadata.
+- **NonFreeAssets**: the library/setup background is poster art from bezos.click, used
+  with the artist's permission but not under a free license.
 
 Not applicable: Ads, Tracking (no analytics/crash reporting), NonFreeDep, NonFreeAdd.
 

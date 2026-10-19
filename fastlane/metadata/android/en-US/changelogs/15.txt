@@ -1,0 +1,2 @@
+- New setting: Settings > Book details > Use Google Books. Off by default in builds without the conversion server; Open Library still fills in titles, authors and covers
+- Builds no longer depend on unofficial Maven repositories

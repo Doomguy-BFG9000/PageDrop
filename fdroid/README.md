@@ -2,8 +2,8 @@
 
 `app.pagedrop.yml` is the fdroiddata recipe for PageDrop. It passes `fdroid lint` and
 `fdroid rewritemeta` (fdroidserver 2.4.5, with fdroiddata's `config/categories.yml` and
-`config/antiFeatures.yml`). The F-Droid source scanner finds no problems in the `v0.9.0`
-checkout once the recipe's `prebuild` has run.
+`config/antiFeatures.yml`). The recipe builds `v0.9.1`, whose `settings.gradle.kts` uses only
+Google Maven and Maven Central, so no `prebuild` is needed.
 
 Ready-to-paste text for the fdroiddata merge request and the IzzyOnDroid request is in
 [`SUBMISSION.md`](SUBMISSION.md).
@@ -43,18 +43,11 @@ identical. Then reproducible-build mode would be possible: add
 `AllowedAPKSigningKeys: c42b4f0044ebfd1785cb8e30e182a7861a6ab51554353c81459f87de395a0533`
 and a `Binaries:` URL pointing at the release APK.
 
-## The `prebuild` line
+## Maven repositories
 
-The `v0.9.0` tag's `settings.gradle.kts` lists two extra Maven repos:
-
-- `https://raw.githubusercontent.com/nicjohnson145/epublib-repo/main/releases`. F-Droid's
-  scanner rejects it as an unknown Maven repo. It is also dead (404). `epublib-core:3.1`
-  has always come from Maven Central, which is listed first.
-- `https://jitpack.io`. Nothing uses it.
-
-Both lines are removed from `main`, so the `sed` is a no-op from the next tag on. It is
-harmless to keep, and `AutoUpdateMode: Version` copies it into new builds. Remove it once
-the oldest build in the recipe is newer than `v0.9.0`.
+Up to `v0.9.0`, `settings.gradle.kts` also listed a dead raw.githubusercontent.com Maven
+repo and an unused jitpack entry, which F-Droid's scanner rejects. Both are gone from
+`v0.9.1` on, so the recipe starts at `v0.9.1` and needs no `prebuild`.
 
 ## Hosted conversion server
 
@@ -66,18 +59,14 @@ describe that in the `NonFreeNet` anti-feature.
 
 These are declared in the recipe. Each one can be dropped once its cause is gone.
 
-- **NonFreeNet**: importing a book automatically looks up its title and author on Google
-  Books (and on Open Library, which is free) to suggest metadata and a cover. Google Books
-  is a non-free service, and the lookup can't be turned off
-  (`app/src/main/java/app/pagedrop/metadata/BookMetadataLookup.kt`). The app works without
-  it, so NonFreeNet is arguable. Reviewers usually still flag it because it runs without the
-  user asking. To drop it, add a setting that turns Google Books off, and make it off by
-  default in builds without the hosted server.
-- **NonFreeAssets**: `app/src/main/res/drawable/bezos_bg.png` is poster art credited to
-  bezos.click (the website footer says so). bezos.click states no license, so PageDrop may
-  not have the right to redistribute it. Replace it with art you made or art under a free
-  license, or get written permission under a free license. Without that, F-Droid reviewers
-  may reject the app rather than just tag it.
+- **NonFreeNet**: not declared from 0.9.1. Google Books lookups are behind Settings → Book
+  details, which is off by default in builds without the hosted server
+  (`app/src/main/java/app/pagedrop/metadata/MetadataSettings.kt`), so the F-Droid build only
+  contacts Open Library unless the user switches Google Books on.
+- **NonFreeAssets**: `app/src/main/res/drawable/bezos_bg.png` is poster art from bezos.click,
+  used with the artist's permission (see `licenses/POSTER-ART.md`). Permission is not a free
+  license, so the tag stays until the art is released under one (for example CC BY 4.0) or
+  replaced.
 
 Not needed: Ads, Tracking (no analytics, crash reporting or Google/Firebase libraries),
 NonFreeDep (every dependency is free software from Maven Central or Google Maven),

@@ -1,11 +1,7 @@
 AntiFeatures:
   NonFreeAssets:
-    en-US: The library and setup screens use a poster image from bezos.click that
-      has no stated free license.
-  NonFreeNet:
-    en-US: When you import a book, its title and author are looked up on Open Library
-      and Google Books to suggest metadata and a cover. Google Books is a non-free
-      service.
+    en-US: The library and setup screens use poster art from bezos.click, used with
+      the artist's permission but not under a free license.
 Categories:
   - File Transfer
   - Reading
@@ -20,18 +16,17 @@ RepoType: git
 Repo: https://github.com/spandan-kumar/PageDrop.git
 
 Builds:
-  - versionName: 0.9.0
-    versionCode: 14
-    commit: v0.9.0
+  - versionName: 0.9.1
+    versionCode: 15
+    commit: v0.9.1
     subdir: app
     gradle:
       - yes
-    prebuild: sed -i -e '/epublib-repo/d' -e '/jitpack.io/d' ../settings.gradle.kts
     gradleprops:
       - PAGEDROP_SUPABASE_URL=
       - PAGEDROP_SUPABASE_ANON_KEY=
 
 AutoUpdateMode: Version
 UpdateCheckMode: Tags
-CurrentVersion: 0.9.0
-CurrentVersionCode: 14
+CurrentVersion: 0.9.1
+CurrentVersionCode: 15
