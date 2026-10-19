@@ -1,0 +1,85 @@
+/* Help pages: one long column of prose on the same sheet as the front page. Loads after site.css. */
+.doc { padding: 64px 0 40px; }
+.doc .stamp {
+  display: inline-block;
+  font-family: var(--mono); font-size: 12px; letter-spacing: .22em; text-transform: uppercase;
+  color: var(--red); border: 2px solid var(--red); padding: 5px 12px 4px;
+  transform: rotate(-3deg); margin-bottom: 26px;
+}
+.doc .stamp.ok { color: var(--ink); border-color: var(--ink); }
+.doc h1 {
+  font-weight: 800; font-size: clamp(38px, 5.6vw, 62px); line-height: 1.02; letter-spacing: -.022em;
+  max-width: 16ch;
+}
+.doc h1 em { font-style: italic; font-weight: 400; }
+.doc .lede { margin-top: 24px; font-size: clamp(19px, 1.9vw, 22px); line-height: 1.55; color: var(--ink-soft); }
+.doc section { padding: 56px 0 0; border-top: 0; }
+.doc section + section { margin-top: 8px; }
+.doc h2 { font-size: clamp(28px, 3.4vw, 38px); margin-bottom: 20px; max-width: 20ch; }
+.doc h3 { font-size: 22px; font-weight: 600; line-height: 1.3; margin: 28px 0 6px; }
+.doc p, .doc li { color: var(--ink-soft); }
+.doc p + p, .doc p + ul, .doc ul + p, .doc p + ol, .doc ol + p { margin-top: 1em; }
+.doc ul, .doc ol:not(.ledger) { padding-left: 1.3em; }
+.doc li + li { margin-top: .35em; }
+.doc a { text-underline-offset: 3px; }
+.doc code {
+  font-family: var(--mono); font-size: .82em; background: var(--paper-deep);
+  padding: 1px 5px; overflow-wrap: anywhere;
+}
+.doc .kicker { margin-bottom: 14px; }
+.doc .actions { margin-top: 28px; }
+
+/* a boxed aside, for warnings */
+.warn {
+  margin-top: 22px; padding: 18px 20px; border: 2px solid var(--red);
+  font-size: 17px; color: var(--ink);
+}
+.warn strong { font-family: var(--mono); font-size: 12px; letter-spacing: .18em; text-transform: uppercase; color: var(--red); display: block; margin-bottom: 4px; font-weight: 500; }
+
+/* options, numbered, reusing the front page's ledger */
+.ledger { list-style: none; border-top: 2px solid var(--ink); }
+.ledger li {
+  display: grid; grid-template-columns: 54px 1fr; gap: 6px 18px;
+  padding: 26px 0; border-bottom: 1px solid var(--rule); margin: 0;
+}
+.ledger .n { font-family: var(--mono); font-size: 13px; color: var(--red); padding-top: 6px; }
+.ledger h3 { grid-column: 2; margin: 0; }
+.ledger p, .ledger ul { grid-column: 2; font-size: 18px; }
+.ledger p + p { margin-top: .6em; }
+
+/* tables: models and what works */
+.table-wrap { overflow-x: auto; border-top: 2px solid var(--ink); }
+table { width: 100%; border-collapse: collapse; font-size: 17px; }
+th, td { text-align: left; vertical-align: top; padding: 12px 12px 12px 0; border-bottom: 1px solid var(--rule); }
+th { font-family: var(--mono); font-size: 11px; letter-spacing: .14em; text-transform: uppercase; font-weight: 500; color: var(--ink-soft); }
+td { color: var(--ink-soft); }
+td:first-child { color: var(--ink); font-weight: 600; }
+
+/* FAQ */
+.faq { border-top: 2px solid var(--ink); }
+.faq details { border-bottom: 1px solid var(--rule); padding: 16px 0; }
+.faq summary { cursor: pointer; font-weight: 600; font-size: 20px; line-height: 1.35; list-style: none; padding-right: 28px; position: relative; }
+.faq summary::-webkit-details-marker { display: none; }
+.faq summary::after { content: "+"; position: absolute; right: 0; top: 0; font-family: var(--mono); color: var(--red); }
+.faq details[open] summary::after { content: "−"; }
+.faq details p { margin-top: 8px; font-size: 18px; }
+
+/* "see also" cards */
+.cards { list-style: none; display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 14px; padding: 0 !important; }
+.cards li { margin: 0 !important; }
+.cards a {
+  display: block; height: 100%; padding: 16px 18px; border: 1.5px solid var(--ink); text-decoration: none;
+  transition: transform .15s ease, box-shadow .15s ease;
+}
+.cards a:hover { transform: translate(-2px, -2px); box-shadow: 4px 4px 0 var(--ink); }
+.cards b { display: block; font-size: 19px; color: var(--ink); line-height: 1.3; }
+.cards span { display: block; margin-top: 4px; font-size: 15px; color: var(--muted); line-height: 1.45; }
+
+.crumbs { font-family: var(--mono); font-size: 11px; letter-spacing: .12em; text-transform: uppercase; color: var(--muted); margin-bottom: 22px; }
+.crumbs a { color: var(--ink-soft); }
+footer nav { display: flex; flex-wrap: wrap; gap: 6px 16px; }
+
+@media (max-width: 900px) {
+  .doc { padding-top: 40px; }
+  .ledger li { grid-template-columns: 34px 1fr; gap: 6px 10px; }
+}

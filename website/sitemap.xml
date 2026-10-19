@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Template. Search engines need absolute URLs here, and the domain isn't chosen yet.
+  When it is: replace every pagedrop.example below (and in robots.txt) with the real domain,
+  e.g.  sed -i '' 's/pagedrop\.example/REAL.DOMAIN/g' website/sitemap.xml website/robots.txt
+  .github/workflows/pages.yml refuses to publish while pagedrop.example is anywhere in website/,
+  so this file blocks deploys until it's filled in.
+  Adding a page? Add a <url> for it. Paths end in / because each page is a folder's index.html.
+-->
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+  <url><loc>https://pagedrop.example/</loc></url>
+  <url><loc>https://pagedrop.example/old-kindle/</loc></url>
+  <url><loc>https://pagedrop.example/send-books-without-computer/</loc></url>
+  <url><loc>https://pagedrop.example/models/</loc></url>
+  <url><loc>https://pagedrop.example/models/paperwhite-1/</loc></url>
+  <url><loc>https://pagedrop.example/models/kindle-touch/</loc></url>
+  <url><loc>https://pagedrop.example/models/kindle-4-5/</loc></url>
+  <url><loc>https://pagedrop.example/models/kindle-keyboard/</loc></url>
+</urlset>

@@ -1,0 +1,122 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Send books to a jailbroken Kindle from your phone, no computer — PageDrop</title>
+<meta name="description" content="How to put books on a jailbroken Kindle running KOReader using only a phone: with PageDrop over Wi-Fi, or by hand with any SFTP app.">
+<meta property="og:title" content="Send books to a jailbroken Kindle from your phone, no computer — PageDrop">
+<meta property="og:description" content="How to put books on a jailbroken Kindle running KOReader using only a phone: with PageDrop over Wi-Fi, or by hand with any SFTP app.">
+<!-- TODO: once the real domain is chosen, add rel=canonical, og:url and absolute og:image/twitter:image URLs here, and list this page in sitemap.xml. -->
+<meta property="og:type" content="article">
+<meta property="og:image" content="../assets/social-preview.png">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:image" content="../assets/social-preview.png">
+<meta name="theme-color" content="#efebe1">
+<link rel="icon" href="../assets/icon.svg" type="image/svg+xml">
+<link rel="preload" href="../assets/fonts/literata.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="stylesheet" href="../assets/fonts/fonts.css">
+<link rel="stylesheet" href="../assets/site.css">
+<link rel="stylesheet" href="../assets/help.css">
+</head>
+<body>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <symbol id="i-github" viewBox="0 0 24 24"><path d="M12 .297c-6.63 0-12 5.373-12 12 0 5.303 3.438 9.8 8.205 11.385.6.113.82-.258.82-.577 0-.285-.01-1.04-.015-2.04-3.338.724-4.042-1.61-4.042-1.61C4.422 18.07 3.633 17.7 3.633 17.7c-1.087-.744.084-.729.084-.729 1.205.084 1.838 1.236 1.838 1.236 1.07 1.835 2.809 1.305 3.495.998.108-.776.417-1.305.76-1.605-2.665-.3-5.466-1.332-5.466-5.93 0-1.31.465-2.38 1.235-3.22-.135-.303-.54-1.523.105-3.176 0 0 1.005-.322 3.3 1.23.96-.267 1.98-.399 3-.405 1.02.006 2.04.138 3 .405 2.28-1.552 3.285-1.23 3.285-1.23.645 1.653.24 2.873.12 3.176.765.84 1.23 1.91 1.23 3.22 0 4.61-2.805 5.625-5.475 5.92.42.36.81 1.096.81 2.22 0 1.606-.015 2.896-.015 3.286 0 .315.21.69.825.57C20.565 22.092 24 17.592 24 12.297c0-6.627-5.373-12-12-12"/></symbol>
+</svg>
+<div class="sheet">
+  <header class="masthead col">
+    <a class="brand" href="../"><img src="../assets/icon.svg" alt="">PageDrop</a>
+    <div class="right">
+      <nav>
+        <a href="../old-kindle/">Old Kindles</a>
+        <a href="../send-books-without-computer/">No computer</a>
+        <a href="../models/">Models</a>
+      </nav>
+      <div class="social">
+        <a href="https://github.com/spandan-kumar/PageDrop" aria-label="PageDrop on GitHub" title="GitHub"><svg><use href="#i-github"/></svg></a>
+      </div>
+    </div>
+  </header>
+  <div class="dateline col">
+    <span>Help · Free &amp; open source</span>
+    <span>Filed after May 20, 2026</span>
+  </div>
+
+  <main class="doc col">
+    <div class="crumbs"><a href="../">PageDrop</a> / <a href="../old-kindle/">Help</a> / No computer</div>
+    <span class="stamp">Phone only</span>
+    <h1>Send books to a jailbroken Kindle <em>from just your phone</em></h1>
+    <p class="lede">If your Kindle runs KOReader, it already has an SSH server. Your phone can use it to put books on the Kindle over Wi-Fi. Here are two ways: PageDrop, and doing it by hand.</p>
+
+    <section id="before">
+      <div class="kicker"><b>01</b> Before you start</div>
+      <h2>What you need</h2>
+      <ul>
+        <li>A Kindle that is jailbroken and has <a href="https://koreader.rocks/">KOReader</a> installed. Not there yet? The <a href="https://kindlemodding.org/">Kindle Modding Wiki</a> walks you through it. Some jailbreak methods need a computer once; after that, you don't.</li>
+        <li>An Android phone, Android 8 or newer, for PageDrop. Any phone works for the manual way.</li>
+        <li>The phone and the Kindle on the same Wi-Fi.</li>
+      </ul>
+      <p>Still on a stock Kindle and don't want to jailbreak? Use USB and Calibre instead. See <a href="../old-kindle/#options">your options</a>.</p>
+    </section>
+
+    <section id="pagedrop">
+      <div class="kicker"><b>02</b> With PageDrop</div>
+      <h2>Five steps. <em>The first two, once.</em></h2>
+      <div class="steps">
+        <div><h3>Turn on KOReader's SSH server</h3><p>On the Kindle, open KOReader, then Tools (the cog) → Network → SSH server. On older KOReader versions it's under Tools → More tools. It only runs while KOReader is open.</p></div>
+        <div><h3>Install PageDrop</h3><p>Download the APK from <a href="https://github.com/spandan-kumar/PageDrop/releases/latest">GitHub Releases</a>, or add <code>https://github.com/spandan-kumar/PageDrop</code> to Obtainium for automatic updates.</p></div>
+        <div><h3>Find your Kindle</h3><p>In PageDrop, tap Find my Kindle. It looks for KOReader on your network. You can also type the Kindle's IP address.</p></div>
+        <div><h3>Find a book</h3><p>Search Project Gutenberg, Standard Ebooks, the Internet Archive or your own OPDS catalogs. Or share a file to PageDrop from any app on your phone.</p></div>
+        <div><h3>Send it</h3><p>PageDrop converts it if the Kindle can't read it as is, writes the title, author and cover into the file, and copies it over Wi-Fi. It shows up on the Kindle home screen and in KOReader's library.</p></div>
+      </div>
+      <h3>About conversion</h3>
+      <p>By default, a book that needs converting goes to PageDrop's conversion server, after PageDrop asks, and is deleted about 24 hours later. One switch in Settings keeps everything on the phone. <a href="https://github.com/spandan-kumar/PageDrop/blob/main/docs/PRIVACY.md">Every host PageDrop contacts, listed</a>.</p>
+      <h3>About PDFs</h3>
+      <p>PDF reflow unwraps broken lines and strips running headers and page numbers. It works on PDFs that contain text. Scanned PDFs aren't OCRed; send those as PDF.</p>
+    </section>
+
+    <section id="manual">
+      <div class="kicker"><b>03</b> By hand</div>
+      <h2>The manual way works too</h2>
+      <p>You don't need PageDrop for this. Any SFTP app, on Android or iPhone, can copy files to the Kindle:</p>
+      <ul>
+        <li>Turn on KOReader's SSH server, as above.</li>
+        <li>Connect to the Kindle's IP address on port <code>2222</code>, user <code>root</code>. In KOReader's SSH menu, either turn on "Login without password" or set up key login (the menu says where the key goes).</li>
+        <li>Copy books into <code>/mnt/us/documents</code>.</li>
+      </ul>
+      <p>That's all PageDrop does underneath. What you give up: finding books, converting EPUB for the Kindle's own reader, and fixing titles and covers are on you.</p>
+      <div class="warn"><strong>Heads up</strong>With "Login without password" on, anyone on your Wi-Fi can log in to the Kindle while the SSH server is running. Turn it off when you're done, or use a key.</div>
+      <h3>No phone at all</h3>
+      <p>KOReader can also browse OPDS catalogs and download books right on the Kindle. It works. Typing searches on an e-ink keyboard is the price.</p>
+    </section>
+
+    <section>
+      <div class="kicker"><b>04</b> See also</div>
+      <ul class="cards">
+        <li><a href="../old-kindle/"><b>My Kindle lost the store</b><span>Every option, simplest first.</span></a></li>
+        <li><a href="../models/"><b>Model by model</b><span>What works, and what's been tested.</span></a></li>
+      </ul>
+    </section>
+
+    <section>
+      <div class="actions">
+        <a class="btn solid" href="https://github.com/spandan-kumar/PageDrop/releases/latest">Download PageDrop for Android</a>
+        <a class="btn" href="../">PageDrop home</a>
+      </div>
+      <p class="fine">Free · GPL-3.0 · no account · questions on <a href="https://discord.gg/cfsqhuHVfb">Discord</a></p>
+    </section>
+  </main>
+
+  <footer>
+    <nav>
+      <a href="../">Home</a>
+      <a href="../old-kindle/">Old Kindles</a>
+      <a href="../send-books-without-computer/">Send without a computer</a>
+      <a href="../models/">Models</a>
+      <a href="https://github.com/spandan-kumar/PageDrop/releases/latest">Download</a>
+    </nav>
+    <span>Not affiliated with or endorsed by Amazon. Kindle is a trademark of Amazon.com, Inc.</span>
+  </footer>
+</div>
+</body>
+</html>

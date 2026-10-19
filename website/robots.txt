@@ -1,0 +1,7 @@
+# Everything on this site is public.
+User-agent: *
+Allow: /
+
+# Sitemaps need an absolute URL. Replace pagedrop.example with the real domain
+# (pages.yml refuses to publish while the placeholder is anywhere in website/).
+Sitemap: https://pagedrop.example/sitemap.xml
