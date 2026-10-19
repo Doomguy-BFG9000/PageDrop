@@ -1,35 +1,32 @@
+AntiFeatures:
+  NonFreeAssets:
+    en-US: The library and setup screens use a poster image from bezos.click that
+      has no stated free license.
+  NonFreeNet:
+    en-US: When you import a book, its title and author are looked up on Open Library
+      and Google Books to suggest metadata and a cover. Google Books is a non-free
+      service.
 Categories:
+  - File Transfer
   - Reading
 License: GPL-3.0-only
 SourceCode: https://github.com/spandan-kumar/PageDrop
 IssueTracker: https://github.com/spandan-kumar/PageDrop/issues
+Changelog: https://github.com/spandan-kumar/PageDrop/releases
 
 AutoName: PageDrop
 
 RepoType: git
 Repo: https://github.com/spandan-kumar/PageDrop.git
 
-AllowedAPKSigningKeys: c42b4f0044ebfd1785cb8e30e182a7861a6ab51554353c81459f87de395a0533
-
 Builds:
-  - versionName: 0.8.0
-    versionCode: 13
-    commit: v0.8.0
-    subdir: app
-    gradle:
-      - yes
-    # Empty values build without the hosted conversion server (so no NonFreeNet anti-feature; see fdroid/README.md).
-    gradleprops:
-      - PAGEDROP_SUPABASE_URL=
-      - PAGEDROP_SUPABASE_ANON_KEY=
-
   - versionName: 0.9.0
     versionCode: 14
     commit: v0.9.0
     subdir: app
     gradle:
       - yes
-    # Empty values build without the hosted conversion server (so no NonFreeNet anti-feature; see fdroid/README.md).
+    prebuild: sed -i -e '/epublib-repo/d' -e '/jitpack.io/d' ../settings.gradle.kts
     gradleprops:
       - PAGEDROP_SUPABASE_URL=
       - PAGEDROP_SUPABASE_ANON_KEY=
