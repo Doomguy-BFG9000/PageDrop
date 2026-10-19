@@ -1,0 +1,5 @@
+# Everything on this site is public.
+User-agent: *
+Allow: /
+
+Sitemap: https://spandan-kumar.github.io/PageDrop/sitemap.xml

@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Adding a page? Add a <url> for it here. Paths end in / because each page is a folder's index.html. -->
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+  <url><loc>https://spandan-kumar.github.io/PageDrop/</loc></url>
+  <url><loc>https://spandan-kumar.github.io/PageDrop/old-kindle/</loc></url>
+  <url><loc>https://spandan-kumar.github.io/PageDrop/send-books-without-computer/</loc></url>
+  <url><loc>https://spandan-kumar.github.io/PageDrop/models/</loc></url>
+  <url><loc>https://spandan-kumar.github.io/PageDrop/models/paperwhite-1/</loc></url>
+  <url><loc>https://spandan-kumar.github.io/PageDrop/models/kindle-touch/</loc></url>
+  <url><loc>https://spandan-kumar.github.io/PageDrop/models/kindle-4-5/</loc></url>
+  <url><loc>https://spandan-kumar.github.io/PageDrop/models/kindle-keyboard/</loc></url>
+</urlset>
