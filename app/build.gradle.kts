@@ -80,7 +80,8 @@ android {
     buildTypes {
         getByName("release") {
             signingConfigs.findByName("release")?.let { signingConfig = it }
-            isMinifyEnabled = false
+            isMinifyEnabled = true
+            isShrinkResources = true
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
         }
     }
@@ -176,6 +177,8 @@ dependencies {
     implementation("com.positiondev.epublib:epublib-core:3.1") {
         exclude(group = "org.slf4j")
         exclude(group = "xmlpull")
+        // Bundles org.xmlpull classes that Android already ships; epublib-core never uses it.
+        exclude(group = "net.sf.kxml")
     }
     implementation("org.slf4j:slf4j-android:1.7.36")
 
