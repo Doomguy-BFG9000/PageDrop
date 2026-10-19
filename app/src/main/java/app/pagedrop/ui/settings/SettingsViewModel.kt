@@ -3,6 +3,7 @@ package app.pagedrop.ui.settings
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import app.pagedrop.data.KindleSettings
+import app.pagedrop.metadata.MetadataSettings
 import app.pagedrop.server.PageDropApiClient
 import app.pagedrop.server.ServerSettings
 import app.pagedrop.server.ServerUploadConsent
@@ -20,7 +21,13 @@ class SettingsViewModel @Inject constructor(
     private val serverSettings: ServerSettings,
     private val pageDropApiClient: PageDropApiClient,
     private val uploadConsent: ServerUploadConsent,
+    private val metadataSettings: MetadataSettings,
 ) : ViewModel() {
+
+    /** Whether Google Books is asked for titles, authors and covers (Open Library always is). */
+    val useGoogleBooks: StateFlow<Boolean> = metadataSettings.useGoogleBooks
+
+    fun updateUseGoogleBooks(value: Boolean) = metadataSettings.setUseGoogleBooks(value)
 
     data class SettingsState(
         val kindleSummary: String = "",

@@ -51,7 +51,9 @@ Your search words go to each built-in source you have switched on in Settings �
 
 ### Book details (titles, authors, covers)
 
-To fill in title, author and cover, PageDrop sends the book's title and author, or its ISBN when the file has one, to Open Library (`openlibrary.org`, `covers.openlibrary.org`) and Google Books (`googleapis.com`), and downloads covers from the results. No file content is sent.
+To fill in title, author and cover, PageDrop sends the book's title and author, or its ISBN when the file has one, to Open Library (`openlibrary.org`, `covers.openlibrary.org`), and downloads covers from the results. No file content is sent.
+
+**Google Books** (`googleapis.com`, with covers from `books.google.com`) gets the same title, author or ISBN only while Settings → Book details → Use Google Books for book details is on. It is on by default in builds that include the conversion server (GitHub and IzzyOnDroid releases) and off by default in builds without one (F-Droid). With it off, PageDrop never contacts Google Books and Open Library still fills in details.
 
 ### Saved articles on the phone
 
