@@ -6,17 +6,16 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class MetadataSettingsTest {
-    @Test fun defaultFollowsWhetherTheBuildHasAServer() {
-        assertTrue(MetadataSettings.defaultUseGoogleBooks("https://example.supabase.co"))
-        assertFalse(MetadataSettings.defaultUseGoogleBooks(""))
-        assertFalse(MetadataSettings.defaultUseGoogleBooks("  "))
+    @Test fun defaultFollowsTheBuildFlag() {
+        assertTrue(MetadataSettings.defaultUseGoogleBooks(true))
+        assertFalse(MetadataSettings.defaultUseGoogleBooks(false))
     }
 
-    @Test fun googleBooksOnByDefaultWithServer() {
+    @Test fun googleBooksOnWhenTheBuildDefaultIsOn() {
         assertTrue(MetadataSettings(NullSharedPreferences(), defaultUseGoogleBooks = true).useGoogleBooks.value)
     }
 
-    @Test fun googleBooksOffByDefaultWithoutServer() {
+    @Test fun googleBooksOffWhenTheBuildDefaultIsOff() {
         assertFalse(MetadataSettings(NullSharedPreferences(), defaultUseGoogleBooks = false).useGoogleBooks.value)
     }
 

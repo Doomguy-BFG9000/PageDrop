@@ -48,6 +48,11 @@ android {
             ?: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImJ6dnZwd3lrbHVrbHZ2anl6eXRuIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODI5MDU1MDcsImV4cCI6MjA5ODQ4MTUwN30.NZB8HgGm_W6b3A6-QTbIlEOuCiIT1uCrAUYgG_CcGZI"
         buildConfigField("String", "PAGEDROP_SUPABASE_URL", "\"$pageDropSupabaseUrl\"")
         buildConfigField("String", "PAGEDROP_SUPABASE_ANON_KEY", "\"$pageDropSupabaseAnonKey\"")
+        // Whether Google Books lookups start switched on (Settings → Book details). The F-Droid build
+        // passes -PPAGEDROP_GOOGLE_BOOKS_DEFAULT=false so it makes no non-free network calls by default.
+        val googleBooksDefault = providers.gradleProperty("PAGEDROP_GOOGLE_BOOKS_DEFAULT").orNull
+            ?.trim()?.lowercase() != "false"
+        buildConfigField("boolean", "PAGEDROP_GOOGLE_BOOKS_DEFAULT", googleBooksDefault.toString())
     }
 
     signingConfigs {

@@ -26,22 +26,21 @@ signs it with F-Droid's key. It does not publish the developer-signed APK.
 Reproducible-build mode (publishing the developer-signed APK) needs F-Droid's build to
 match the GitHub release byte for byte. It can't:
 
-- The GitHub release is built without `gradleprops`, so it includes PageDrop's hosted
-  conversion server (URL and anon key in `BuildConfig`).
-- The F-Droid build passes `PAGEDROP_SUPABASE_URL=` and `PAGEDROP_SUPABASE_ANON_KEY=`.
-  `app/build.gradle.kts` treats an empty value as "no server", so the F-Droid APK has no
-  built-in server and converts everything on the phone.
+- Both builds include PageDrop's hosted conversion server (from 0.9.4; before that the
+  F-Droid build passed empty `PAGEDROP_SUPABASE_*` props and had no server).
+- The F-Droid build passes `PAGEDROP_GOOGLE_BOOKS_DEFAULT=false`, so Google Books lookups
+  start switched off there and on in the GitHub release.
 
-Different `BuildConfig` means different `classes.dex`, so the binaries can never match.
-That is on purpose: the F-Droid build should not talk to the developer's server by default.
+Different `BuildConfig` means different `classes.dex`, so the binaries can't match. If the
+Google Books default were made the same in both builds, they would become identical and
+reproducible-build mode would be possible (see below).
 
 **Consequence for users:** the F-Droid APK and the GitHub/Obtainium/IzzyOnDroid APK have
 different signing keys. Android refuses to install one over the other. Switching between
 them means exporting anything you need (library, settings), uninstalling, and installing
 the other build. Say this in the release notes and the README install section.
 
-If the hosted server is ever dropped from the GitHub build too, the two builds could become
-identical. Then reproducible-build mode would be possible: add
+If both builds ever use the same `gradleprops`, they could become identical. Then reproducible-build mode would be possible: add
 `AllowedAPKSigningKeys: c42b4f0044ebfd1785cb8e30e182a7861a6ab51554353c81459f87de395a0533`
 and a `Binaries:` URL pointing at the release APK.
 
@@ -53,18 +52,21 @@ repo and an unused jitpack entry, which F-Droid's scanner rejects. Both are gone
 
 ## Hosted conversion server
 
-The recipe's empty `gradleprops` build without the hosted server. If you ever drop them,
-the F-Droid build would use the developer's server by default. You would then also have to
-describe that in the `NonFreeNet` anti-feature.
+From 0.9.4 the F-Droid build includes the hosted conversion server, same as the GitHub
+release: on by default, the app asks before the first upload, files are deleted about 24
+hours later, and one switch keeps everything on the phone. The server is free software
+(Supabase and Calibre, code in `server/`) and can be self-hosted, so it is not declared as
+`NonFreeNet`; the reviewers may decide otherwise. To build without it, pass
+`PAGEDROP_SUPABASE_URL=` and `PAGEDROP_SUPABASE_ANON_KEY=`.
 
 ## Anti-features
 
 These are declared in the recipe. Each one can be dropped once its cause is gone.
 
 - **NonFreeNet**: not declared from 0.9.1. Google Books lookups are behind Settings → Book
-  details, which is off by default in builds without the hosted server
+  details, which the recipe switches off by default with `PAGEDROP_GOOGLE_BOOKS_DEFAULT=false`
   (`app/src/main/java/app/pagedrop/metadata/MetadataSettings.kt`), so the F-Droid build only
-  contacts Open Library unless the user switches Google Books on.
+  contacts Open Library for metadata unless the user switches Google Books on.
 - **NonFreeAssets**: `app/src/main/res/drawable/bezos_bg.png` is poster art from bezos.click,
   used with the artist's permission (see `licenses/POSTER-ART.md`). Permission is not a free
   license, so the tag stays until the art is released under one (for example CC BY 4.0) or
