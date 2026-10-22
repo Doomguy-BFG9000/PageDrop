@@ -32,8 +32,8 @@ android {
         applicationId = "app.pagedrop"
         minSdk = 26
         targetSdk = 36
-        versionCode = 16
-        versionName = "0.9.2"
+        versionCode = 17
+        versionName = "0.9.3"
 
         testInstrumentationRunner = "app.pagedrop.HiltTestRunner"
         vectorDrawables {
@@ -97,6 +97,13 @@ android {
         resources {
             excludes += "/META-INF/{AL2.0,LGPL2.1}"
         }
+    }
+
+    // Leave out the dependency-info block. It is encrypted with a Google key, so nobody else can
+    // check what it contains, and app stores like IzzyOnDroid flag it.
+    dependenciesInfo {
+        includeInApk = false
+        includeInBundle = false
     }
 }
 
