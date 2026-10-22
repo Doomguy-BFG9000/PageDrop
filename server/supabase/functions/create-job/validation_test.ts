@@ -30,7 +30,7 @@ test("the app's convert request builds paths inside the user's job folder", () =
 });
 
 test("file names cannot escape the job folder", () => {
-  for (const name of ["../../other/book.epub", "..", ".", "a/b/../c.epub", "x\\..\\y"]) {
+  for (const name of ["../../other/book.epub", "..", ".", "a/b/../c.epub", "x\\..\\y.epub"]) {
     const path = params({ jobType: "convert", fileName: name, fileSizeBytes: 1 }).p_source_storage_path!;
     assert.ok(path.startsWith(`${USER}/${JOB}/`), path);
     assert.ok(!path.slice(`${USER}/${JOB}/`.length).includes("/"), path);
@@ -102,4 +102,22 @@ test("cap rejections map to 429 / 503 with plain messages", () => {
 test("the hashed client IP is passed through", () => {
   const r = buildJobParams(USER, JOB, { jobType: "article", url: "https://example.com/" }, "abc");
   assert.ok("params" in r && r.params.p_ip_hash === "abc");
+});
+
+test("only allowlisted book formats reach Calibre", () => {
+  for (const name of ["x.recipe", "x.downloaded_recipe", "x.html", "x.htm", "x.htmlz", "x.zip", "x.chm", "x.py", "noextension", "x.epub.recipe", "x.RECIPE"]) {
+    const r = rejection({ jobType: "convert", fileName: name, fileSizeBytes: 1 });
+    assert.equal(r.status, 415, name);
+  }
+  for (const name of ["a.epub", "a.PDF", "a.mobi", "a.azw3", "a.docx", "a.txt", "a.fb2", "a.cbz"]) {
+    params({ jobType: "convert", fileName: name, fileSizeBytes: 1 });
+  }
+});
+
+test("only image covers are accepted", () => {
+  for (const name of ["c.recipe", "c.html", "c.svg", "c"]) {
+    const r = rejection({ jobType: "convert", fileName: "a.epub", fileSizeBytes: 1, coverFileName: name, coverSizeBytes: 1 });
+    assert.equal(r.status, 415, name);
+  }
+  params({ jobType: "convert", fileName: "a.epub", fileSizeBytes: 1, coverFileName: "c.PNG", coverSizeBytes: 1 });
 });

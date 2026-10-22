@@ -100,3 +100,19 @@ def test_process_job_rejects_oversized_upload(monkeypatch):
 
 
 # Retention tests live in ../test_cleanup.py (stdlib unittest, fake Supabase client).
+
+
+def test_validate_job_rejects_inputs_calibre_could_execute_or_inline():
+    for name in ["x.recipe", "x.downloaded_recipe", "x.html", "x.htmlz", "x.zip", "x.chm", "noext", "x.epub.recipe"]:
+        assert poll.validate_job(convert_job(source_storage_path=f"{USER}/{JOB}/{name}")), name
+    for name in ["c.recipe", "c.html", "c.svg"]:
+        assert poll.validate_job(convert_job(input_cover_storage_path=f"{USER}/{JOB}/cover_{name}")), name
+    assert poll.validate_job(convert_job(source_storage_path=f"{USER}/{JOB}/a.PDF")) is None
+
+
+def test_recipe_job_is_failed_before_download(monkeypatch):
+    calls = []
+    monkeypatch.setattr(poll, "supabase_download", lambda *a, **k: calls.append(a) or b"")
+    result = asyncio.run(poll.process_job(convert_job(source_storage_path=f"{USER}/{JOB}/x.recipe")))
+    assert result["status"] == "failed"
+    assert calls == []

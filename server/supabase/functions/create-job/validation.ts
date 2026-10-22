@@ -8,6 +8,19 @@ export const ALLOWED_TARGET_FORMATS = new Set([
   "azw3", "epub", "mobi", "docx", "fb2", "htmlz", "kepub", "lit", "lrf", "pdb",
   "pdf", "pmlz", "rb", "rtf", "snb", "tcr", "txt", "txtz", "zip",
 ]);
+// Input formats the worker will hand to Calibre. Anything else is refused: Calibre runs
+// .recipe files as Python, and HTML-based inputs (html, htmlz, zip, chm, ...) can pull in
+// local files. Keep in sync with ALLOWED_SOURCE_EXTENSIONS in worker/poll.py.
+export const ALLOWED_SOURCE_EXTENSIONS = new Set([
+  "epub", "kepub", "pdf", "mobi", "azw", "azw3", "prc", "pdb", "docx", "odt", "rtf",
+  "txt", "md", "fb2", "fbz", "lit", "cbz",
+]);
+export const ALLOWED_COVER_EXTENSIONS = new Set(["jpg", "jpeg", "png", "webp", "gif"]);
+
+export function fileExtension(name: string): string {
+  const dot = name.lastIndexOf(".");
+  return dot > 0 ? name.slice(dot + 1).toLowerCase() : "";
+}
 const MAX_TEXT = 1000;
 const MAX_URL = 2048;
 
@@ -81,14 +94,22 @@ export function buildJobParams(
     if (!isSize(b.fileSizeBytes)) return reject(400, "fileSizeBytes is required");
     if (b.fileSizeBytes > MAX_FILE_SIZE) return reject(413, "File exceeds maximum size of 100MB");
     fileSize = b.fileSizeBytes;
-    sourceStoragePath = `${userId}/${jobId}/${sanitizeFileName(asString(b.fileName) ?? "source.epub")}`;
+    const sourceName = sanitizeFileName(asString(b.fileName) ?? "source.epub");
+    if (!ALLOWED_SOURCE_EXTENSIONS.has(fileExtension(sourceName))) {
+      return reject(415, "Unsupported file type");
+    }
+    sourceStoragePath = `${userId}/${jobId}/${sourceName}`;
 
     const coverName = asString(b.coverFileName);
     if (coverName) {
       if (!isSize(b.coverSizeBytes)) return reject(400, "coverSizeBytes is required with coverFileName");
       if (b.coverSizeBytes > MAX_COVER_SIZE) return reject(413, "Cover image exceeds maximum size of 15MB");
       coverSize = b.coverSizeBytes;
-      inputCoverStoragePath = `${userId}/${jobId}/cover_${sanitizeFileName(coverName)}`;
+      const safeCover = sanitizeFileName(coverName);
+      if (!ALLOWED_COVER_EXTENSIONS.has(fileExtension(safeCover))) {
+        return reject(415, "Unsupported cover image type");
+      }
+      inputCoverStoragePath = `${userId}/${jobId}/cover_${safeCover}`;
     }
   } else {
     const url = asString(b.url);
