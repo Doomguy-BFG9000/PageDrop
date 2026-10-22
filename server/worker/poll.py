@@ -148,6 +148,21 @@ UUID_RE = re.compile(r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]
 # The characters create-job's sanitizeFileName() leaves in a file name.
 STORAGE_FILE_NAME_RE = re.compile(r"^[A-Za-z0-9._ -]{1,255}$")
 
+# Input formats handed to Calibre; keep in sync with create-job's validation.ts. Calibre runs
+# .recipe files as Python and HTML-based inputs can pull in local files, so nothing outside
+# this list is ever converted, whatever create-job let through.
+ALLOWED_SOURCE_EXTENSIONS = frozenset({
+    "epub", "kepub", "pdf", "mobi", "azw", "azw3", "prc", "pdb", "docx", "odt", "rtf",
+    "txt", "md", "fb2", "fbz", "lit", "cbz",
+})
+ALLOWED_COVER_EXTENSIONS = frozenset({"jpg", "jpeg", "png", "webp", "gif"})
+
+
+def file_extension(path) -> str:
+    """Lower-case extension without the dot, or "" if there is none."""
+    name = str(path).rsplit("/", 1)[-1]
+    return name.rsplit(".", 1)[-1].lower() if "." in name.lstrip(".") else ""
+
 
 def job_storage_prefix(job: dict) -> str | None:
     """The job owner's folder for this job, "<user_id>/<job_id>/", or None if either id is malformed."""
@@ -186,9 +201,13 @@ def validate_job(job: dict) -> str | None:
         return "Unsupported job type"
     if not is_job_storage_path(job, job.get("source_storage_path")):
         return "Source path does not belong to this job"
+    if file_extension(job["source_storage_path"]) not in ALLOWED_SOURCE_EXTENSIONS:
+        return "Unsupported file type"
     cover = job.get("input_cover_storage_path")
     if cover is not None and not is_job_storage_path(job, cover):
         return "Cover path does not belong to this job"
+    if cover is not None and file_extension(cover) not in ALLOWED_COVER_EXTENSIONS:
+        return "Unsupported cover image type"
     return None
 
 
@@ -450,8 +469,10 @@ async def process_job(job: dict) -> dict:
     try:
         # 1. Create temp workspace
         workdir = Path(tempfile.mkdtemp(prefix=f"pagedrop_{job_id}_"))
-        source_suffix = Path(source_path or "source.html").suffix or ".epub"
-        source_file = workdir / f"source{source_suffix}"
+        # Never trust the uploaded name for the suffix Calibre sees: only allowlisted
+        # extensions get through validate_job, and the file name is ours.
+        source_ext = file_extension(source_path) if source_path else ""
+        source_file = workdir / f"source.{source_ext if source_ext in ALLOWED_SOURCE_EXTENSIONS else 'epub'}"
         output_file = workdir / f"output.{target_fmt}"
         cover_file = workdir / "cover.jpg"
         requested_cover_file = workdir / "requested_cover"
