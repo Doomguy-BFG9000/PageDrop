@@ -1,8 +1,10 @@
 # F-Droid submission
 
+PageDrop is in F-Droid since fdroid/fdroiddata!53274 (merged 2026-10-22). The live recipe is `metadata/app.pagedrop.yml` in fdroiddata; F-Droid's bot adds new versions from git tags (`AutoUpdateMode: Version`, `UpdateCheckMode: Tags`). This copy mirrors it for reference.
+
 `app.pagedrop.yml` is the fdroiddata recipe for PageDrop. It passes `fdroid lint` and
 `fdroid rewritemeta` (fdroidserver 2.4.5, with fdroiddata's `config/categories.yml` and
-`config/antiFeatures.yml`). The recipe builds `v0.9.2` (R8 enabled), whose `settings.gradle.kts` uses only
+`config/antiFeatures.yml`). The recipe builds `v0.9.3` (R8 enabled, no dependency-info block), whose `settings.gradle.kts` uses only
 Google Maven and Maven Central, so no `prebuild` is needed.
 
 Ready-to-paste text for the fdroiddata merge request and the IzzyOnDroid request is in
