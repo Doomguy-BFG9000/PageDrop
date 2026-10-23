@@ -4,7 +4,7 @@
 set client_min_messages = notice;
 
 insert into auth.users values ('aaaaaaaa-0000-0000-0000-000000000004');  -- D
-update public.profiles set daily_job_limit = 1000, storage_quota_bytes = 100000000000
+update public.profiles set daily_job_limit = 1000, storage_quota_bytes = 100000000000, max_active_jobs = 100000
   where id = 'aaaaaaaa-0000-0000-0000-000000000004';
 
 create function test.article(u uuid, ip text default null) returns jsonb language sql as $$

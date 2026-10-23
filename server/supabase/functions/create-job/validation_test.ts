@@ -97,6 +97,9 @@ test("cap rejections map to 429 / 503 with plain messages", () => {
   assert.equal(quotaRejection({ ok: false, error: "ip_limit" })?.status, 429);
   assert.equal(quotaRejection({ ok: false, error: "server_busy" })?.status, 503);
   assert.equal(quotaRejection({ ok: false, error: "daily_capacity" })?.status, 503);
+  const busy = quotaRejection({ ok: false, error: "too_many_active_jobs" });
+  assert.equal(busy?.status, 429);
+  assert.notEqual(busy?.error, "too_many_active_jobs"); // a sentence for the app, not the raw code
 });
 
 test("the hashed client IP is passed through", () => {

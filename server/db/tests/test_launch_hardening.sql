@@ -46,6 +46,9 @@ insert into auth.users values
 update public.profiles set daily_job_limit = 3 where id = 'aaaaaaaa-0000-0000-0000-000000000001';
 update public.profiles set storage_quota_bytes = 5000 where id = 'aaaaaaaa-0000-0000-0000-000000000002';
 update public.profiles set daily_job_limit = 5 where id = 'aaaaaaaa-0000-0000-0000-000000000003';
+-- These users exercise the daily/storage limits, not 005's per-user active-job cap (2).
+update public.profiles set max_active_jobs = 1000 where id in (
+  'aaaaaaaa-0000-0000-0000-000000000001', 'aaaaaaaa-0000-0000-0000-000000000003');
 
 -- ── Quotas (as the service role, like create-job) ──────────────────────────
 begin;

@@ -148,6 +148,8 @@ export function quotaRejection(result: { ok?: boolean; error?: string } | null):
       return { status: 429, error: "Daily job limit reached" };
     case "ip_limit":
       return { status: 429, error: "Too many jobs from this network today" };
+    case "too_many_active_jobs":
+      return { status: 429, error: "You already have conversions in progress, please wait for one to finish" };
     case "server_busy":
       return { status: 503, error: "The server is busy right now, please try again in a few minutes" };
     case "daily_capacity":
