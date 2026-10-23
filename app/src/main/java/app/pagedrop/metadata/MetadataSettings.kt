@@ -13,8 +13,8 @@ import javax.inject.Singleton
 /**
  * Which catalogs fill in book details. Open Library is always asked; Google Books is optional.
  *
- * Google Books defaults to on in builds that ship a conversion server and off in builds without one (the F-Droid
- * build), so those make no calls to non-free network services unless the user switches it on.
+ * Google Books defaults to on, except in builds made with -PPAGEDROP_GOOGLE_BOOKS_DEFAULT=false (the F-Droid build),
+ * which make no calls to non-free network services unless the user switches it on.
  */
 @Singleton
 class MetadataSettings internal constructor(
@@ -36,7 +36,7 @@ class MetadataSettings internal constructor(
     internal companion object {
         private const val KEY_GOOGLE_BOOKS = "use_google_books"
 
-        /** On only when this build has a conversion server URL. */
-        fun defaultUseGoogleBooks(serverUrl: String = BuildConfig.PAGEDROP_SUPABASE_URL): Boolean = serverUrl.isNotBlank()
+        /** The build's default; see PAGEDROP_GOOGLE_BOOKS_DEFAULT in app/build.gradle.kts. */
+        fun defaultUseGoogleBooks(buildDefault: Boolean = BuildConfig.PAGEDROP_GOOGLE_BOOKS_DEFAULT): Boolean = buildDefault
     }
 }
