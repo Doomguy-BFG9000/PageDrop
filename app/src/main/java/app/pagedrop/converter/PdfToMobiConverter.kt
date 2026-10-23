@@ -87,7 +87,7 @@ object PdfToMobiConverter {
                 )
             }
         } catch (e: Exception) {
-            Log.e(TAG, "Conversion failed: ${e.message}", e)
+            Log.e(TAG, "Conversion failed: ${e.javaClass.simpleName}")
             if (mobiFile.exists()) mobiFile.delete()
             ConversionResult(success = false)
         }

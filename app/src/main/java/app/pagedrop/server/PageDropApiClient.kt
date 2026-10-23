@@ -15,10 +15,14 @@ import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.put
 import okhttp3.MediaType.Companion.toMediaType
+import okhttp3.Call
 import okhttp3.OkHttpClient
 import okhttp3.Request
+import okhttp3.Response
 import okhttp3.RequestBody.Companion.toRequestBody
+import app.pagedrop.security.SafeFiles
 import java.io.File
+import java.util.concurrent.ConcurrentHashMap
 import java.util.UUID
 import java.util.concurrent.TimeUnit
 import javax.inject.Inject
@@ -47,6 +51,44 @@ class PageDropApiClient @Inject constructor(
     private val JSON_MEDIA = "application/json; charset=utf-8".toMediaType()
     private val BINARY_MEDIA = "application/octet-stream".toMediaType()
 
+    /** Requests to the conversion server that are still running; cancelled when the user switches the server off. */
+    private val inFlight: MutableSet<Call> = ConcurrentHashMap.newKeySet()
+
+    init {
+        uploadConsent.addTurnedOffListener(::cancelInFlight)
+    }
+
+    /** Runs [request], keeping it cancellable through [cancelInFlight] until [block] has read the response. */
+    private inline fun <T> call(request: Request, block: (Response) -> T): T {
+        val call = client.newCall(request)
+        inFlight += call
+        try {
+            return call.execute().use(block)
+        } finally {
+            inFlight -= call
+        }
+    }
+
+    /**
+     * Cancels every running request to the conversion server. The cancelled calls fail with an IOException, so their
+     * callers return null and fall back to on-phone conversion. Called when the server switch is turned off.
+     */
+    fun cancelInFlight() {
+        val calls = inFlight.toList()
+        if (calls.isNotEmpty()) Log.i(TAG, "Server switched off; cancelling ${calls.size} request(s)")
+        calls.forEach { it.cancel() }
+    }
+
+    /**
+     * Rechecked immediately before every upload or submission (and between polls): the server is still on and the
+     * upload notice was answered "use server". False means stop; the caller falls back to on-phone conversion.
+     */
+    private fun stillAllowed(step: String): Boolean {
+        if (serverSettings.uploadAllowed) return true
+        Log.i(TAG, "Server use was switched off or not agreed to; not sending ($step)")
+        return false
+    }
+
     val isAvailable: Boolean get() = serverSettings.isConfigured
 
     private val baseUrl: String? get() = serverSettings.supabaseUrl.takeIf { it.isNotBlank() }
@@ -68,7 +110,7 @@ class PageDropApiClient @Inject constructor(
                     .header("Authorization", "Bearer $token")
                     .get()
                     .build()
-                return client.newCall(req).execute().use { it.code }
+                return call(req) { it.code }
             }
             var code = checkUser(signInAnonymously().getOrElse { return@withContext Result.failure(it) })
             if (code == 401 || code == 403) {
@@ -112,7 +154,7 @@ class PageDropApiClient @Inject constructor(
                 .post(body.toRequestBody(JSON_MEDIA))
                 .build()
 
-            client.newCall(req).execute().use { response ->
+            call(req) { response ->
                 if (!response.isSuccessful) {
                     val responseBody = response.body?.string().orEmpty()
                     return@withContext Result.failure(
@@ -134,7 +176,7 @@ class PageDropApiClient @Inject constructor(
                 Result.success(access)
             }
         } catch (e: Exception) {
-            Log.e(TAG, "Auth failed: ${e.message}", e)
+            Log.e(TAG, "Auth failed: ${e.javaClass.simpleName}")
             Result.failure(e)
         }
     }
@@ -150,7 +192,7 @@ class PageDropApiClient @Inject constructor(
             .post(body.toRequestBody(JSON_MEDIA))
             .build()
         return runCatching {
-            client.newCall(req).execute().use { response ->
+            call(req) { response ->
                 if (!response.isSuccessful) return null
                 val parsed = json.parseToJsonElement(response.body?.string() ?: return null).jsonObject
                 val access = parsed["access_token"]?.jsonPrimitive?.contentOrNull ?: return null
@@ -158,7 +200,7 @@ class PageDropApiClient @Inject constructor(
                 parsed["refresh_token"]?.jsonPrimitive?.contentOrNull?.let { serverSettings.refreshToken = it }
                 access
             }
-        }.onFailure { Log.w(TAG, "Session refresh failed: ${it.message}") }.getOrNull()
+        }.onFailure { Log.w(TAG, "Session refresh failed: ${it.javaClass.simpleName}") }.getOrNull()
     }
 
     suspend fun createConvertJob(
@@ -170,6 +212,11 @@ class PageDropApiClient @Inject constructor(
         coverUrl: String? = null,
     ): JobResponse? = withContext(Dispatchers.IO) {
         try {
+            if (ServerFormats.normalize(targetFormat) == null) {
+                Log.w(TAG, "Refusing a server conversion to a format the app does not offer")
+                return@withContext null
+            }
+            if (!stillAllowed("sign-in")) return@withContext null
             val base = baseUrl ?: return@withContext null
             val key = anonKey ?: return@withContext null
             val token = signInAnonymously().getOrNull() ?: return@withContext null
@@ -201,18 +248,24 @@ class PageDropApiClient @Inject constructor(
                 put("fileSizeBytes", sourceBytes.size.toLong())
             }.toString()
 
+            // The switch can be turned off while the file is read or the session is fetched: check again before
+            // each request that sends something. A job left unmarked is never picked up by the server.
+            if (!stillAllowed("create job")) return@withContext null
             val job = createJob(base, key, token, body) ?: return@withContext null
             val sourcePath = job.sourceStoragePath ?: return@withContext null
 
+            if (!stillAllowed("book upload")) return@withContext null
             if (!uploadSource(base, key, token, sourcePath, sourceBytes)) return@withContext null
-            if (coverBytes != null && job.inputCoverStoragePath != null &&
-                !uploadSource(base, key, token, job.inputCoverStoragePath, coverBytes)
-            ) return@withContext null
+            if (coverBytes != null && job.inputCoverStoragePath != null) {
+                if (!stillAllowed("cover upload")) return@withContext null
+                if (!uploadSource(base, key, token, job.inputCoverStoragePath, coverBytes)) return@withContext null
+            }
+            if (!stillAllowed("start job")) return@withContext null
             if (!markJobPending(base, key, token, job.jobId)) return@withContext null
 
             job.copy(status = "pending")
         } catch (e: Exception) {
-            Log.e(TAG, "Create job failed: ${e.message}", e)
+            Log.e(TAG, "Create job failed: ${e.javaClass.simpleName}")
             null
         }
     }
@@ -232,9 +285,10 @@ class PageDropApiClient @Inject constructor(
             throw IllegalStateException(status.error_message ?: "PageDrop server conversion failed")
         }
         if (status.status != "complete" || status.result_storage_path.isNullOrBlank()) return@withContext null
+        if (!stillAllowed("download result")) return@withContext null
 
         outputDir.mkdirs()
-        val format = status.target_format ?: targetFormat
+        val format = acceptedResultFormat(status.target_format, targetFormat) ?: return@withContext null
         val artifactName = safeFileName(status.title ?: title ?: "converted_${System.currentTimeMillis()}") + ".$format"
         val artifactFile = uniqueFile(outputDir, artifactName)
         if (!downloadArtifact(status.result_storage_path, artifactFile)) return@withContext null
@@ -261,7 +315,7 @@ class PageDropApiClient @Inject constructor(
             .post(body.toRequestBody(JSON_MEDIA))
             .build()
 
-        client.newCall(req).execute().use { response ->
+        call(req) { response ->
             if (!response.isSuccessful) return null
             val responseBody = response.body?.string() ?: return null
             return json.decodeFromString<JobResponse>(responseBody)
@@ -276,7 +330,7 @@ class PageDropApiClient @Inject constructor(
             .header("x-upsert", "true")
             .post(sourceBytes.toRequestBody(BINARY_MEDIA))
             .build()
-        client.newCall(req).execute().use { return it.isSuccessful }
+        return call(req) { it.isSuccessful }
     }
 
     private fun downloadBytes(url: String): ByteArray? = runCatching {
@@ -298,7 +352,7 @@ class PageDropApiClient @Inject constructor(
             .header("Prefer", "return=minimal")
             .patch(body.toRequestBody(JSON_MEDIA))
             .build()
-        client.newCall(req).execute().use { return it.isSuccessful }
+        return call(req) { it.isSuccessful }
     }
 
     private fun safeFileName(name: String): String {
@@ -315,17 +369,17 @@ class PageDropApiClient @Inject constructor(
         }
     }
 
-    private fun uniqueFile(dir: File, name: String): File {
-        var file = File(dir, name)
-        if (!file.exists()) return file
-        val baseName = name.substringBeforeLast(".")
-        val ext = name.substringAfterLast(".", "")
-        var counter = 1
-        while (file.exists()) {
-            file = File(dir, if (ext.isBlank()) "${baseName}_$counter" else "${baseName}_$counter.$ext")
-            counter++
-        }
-        return file
+    /** A new file in [dir]; throws if [name] would resolve (canonically) anywhere outside it. */
+    private fun uniqueFile(dir: File, name: String): File = SafeFiles.uniqueChild(dir, name)
+
+    /**
+     * The format to save a finished job as: what the server reports, or what was asked for, but only when it is one
+     * of the formats the app offers ([ServerFormats]). Anything else is refused (null) and the caller falls back.
+     */
+    private fun acceptedResultFormat(reported: String?, requested: String): String? {
+        val format = ServerFormats.normalize(reported ?: requested)
+        if (format == null) Log.w(TAG, "Server returned an unexpected output format; ignoring the result")
+        return format
     }
 
     data class PreparedArtifact(
@@ -338,6 +392,7 @@ class PageDropApiClient @Inject constructor(
 
     suspend fun createArticleJob(url: String): JobResponse? = withContext(Dispatchers.IO) {
         try {
+            if (!stillAllowed("sign-in")) return@withContext null
             val base = baseUrl ?: return@withContext null
             val key = anonKey ?: return@withContext null
             val token = signInAnonymously().getOrNull() ?: return@withContext null
@@ -348,9 +403,10 @@ class PageDropApiClient @Inject constructor(
                 put("targetFormat", "mobi")
             }.toString()
 
+            if (!stillAllowed("article submission")) return@withContext null
             createJob(base, key, token, body)
         } catch (e: Exception) {
-            Log.e(TAG, "Create article job failed: ${e.message}", e)
+            Log.e(TAG, "Create article job failed: ${e.javaClass.simpleName}")
             null
         }
     }
@@ -363,9 +419,10 @@ class PageDropApiClient @Inject constructor(
         val job = createArticleJob(url) ?: return@withContext null
         val status = pollJob(job.jobId) ?: return@withContext null
         if (status.status != "complete" || status.result_storage_path.isNullOrBlank()) return@withContext null
+        if (!stillAllowed("download article")) return@withContext null
 
         outputDir.mkdirs()
-        val format = status.target_format ?: targetFormat
+        val format = acceptedResultFormat(status.target_format, targetFormat) ?: return@withContext null
         val artifactName = safeFileName(status.title ?: "article_${System.currentTimeMillis()}") + ".$format"
         val artifactFile = uniqueFile(outputDir, artifactName)
         if (!downloadArtifact(status.result_storage_path, artifactFile)) return@withContext null
@@ -393,6 +450,7 @@ class PageDropApiClient @Inject constructor(
 
             while (retries < MAX_POLL_RETRIES) {
                 delay(POLL_INTERVAL_MS)
+                if (!stillAllowed("poll")) return@withContext null
                 val url = "$base/rest/v1/jobs?id=eq.$jobId&select=*"
                 val req = Request.Builder()
                     .url(url)
@@ -401,18 +459,18 @@ class PageDropApiClient @Inject constructor(
                     .get()
                     .build()
 
-                val response = client.newCall(req).execute()
-                if (response.isSuccessful) {
-                    val body = response.body?.string() ?: continue
-                    val results = json.decodeFromString<List<JobStatus>>(body)
-                    val status = results.firstOrNull() ?: continue
-                    if (status.status in listOf("complete", "failed")) return@withContext status
+                val done = call(req) { response ->
+                    if (!response.isSuccessful) return@call null
+                    val body = response.body?.string() ?: return@call null
+                    json.decodeFromString<List<JobStatus>>(body).firstOrNull()
+                        ?.takeIf { it.status in listOf("complete", "failed") }
                 }
+                if (done != null) return@withContext done
                 retries++
             }
             null
         } catch (e: Exception) {
-            Log.e(TAG, "Poll failed: ${e.message}", e)
+            Log.e(TAG, "Poll failed: ${e.javaClass.simpleName}")
             null
         }
     }
@@ -431,14 +489,17 @@ class PageDropApiClient @Inject constructor(
                 .get()
                 .build()
 
-            val response = client.newCall(req).execute()
-            if (!response.isSuccessful) return@withContext false
-            response.body?.byteStream()?.use { input ->
-                outputFile.outputStream().use { output -> input.copyTo(output) }
+            call(req) { response ->
+                if (!response.isSuccessful) return@call false
+                val body = response.body ?: return@call false
+                body.byteStream().use { input ->
+                    outputFile.outputStream().use { output -> input.copyTo(output) }
+                }
+                true
             }
-            true
         } catch (e: Exception) {
-            Log.e(TAG, "Download failed: ${e.message}", e)
+            Log.e(TAG, "Download failed: ${e.javaClass.simpleName}")
+            outputFile.delete()
             false
         }
     }

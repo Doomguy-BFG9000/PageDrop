@@ -19,6 +19,8 @@ class ServerUploadConsent @Inject constructor(
     private val lock = Any()
     private var waiting: CompletableDeferred<Boolean>? = null
 
+    private val turnedOffListeners = java.util.concurrent.CopyOnWriteArrayList<() -> Unit>()
+
     private val _pending = MutableStateFlow(false)
     /** True while the notice should be on screen. */
     val pending: StateFlow<Boolean> = _pending.asStateFlow()
@@ -41,5 +43,11 @@ class ServerUploadConsent @Inject constructor(
             waiting.also { waiting = null }
         }
         decision?.complete(useServer)
+        if (!useServer) turnedOffListeners.forEach { runCatching { it() } }
+    }
+
+    /** [listener] runs whenever the server is switched off (notice or Settings), e.g. to cancel in-flight requests. */
+    fun addTurnedOffListener(listener: () -> Unit) {
+        turnedOffListeners += listener
     }
 }

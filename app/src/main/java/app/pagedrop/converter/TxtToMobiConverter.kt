@@ -43,7 +43,7 @@ object TxtToMobiConverter {
             val rawText = txtFile.readText(Charsets.UTF_8)
 
             if (rawText.isBlank()) {
-                Log.w(TAG, "Text file is empty: ${txtFile.name}")
+                Log.w(TAG, "Text file is empty")
                 return@withContext ConversionResult(success = false)
             }
 
@@ -66,7 +66,7 @@ object TxtToMobiConverter {
                 kindleUuid = writer.kindleUuid
             )
         } catch (e: Exception) {
-            Log.e(TAG, "Conversion failed: ${e.message}", e)
+            Log.e(TAG, "Conversion failed: ${e.javaClass.simpleName}")
             if (mobiFile.exists()) mobiFile.delete()
             ConversionResult(success = false)
         }

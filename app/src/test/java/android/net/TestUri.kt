@@ -3,7 +3,7 @@ package android.net
 import android.os.Parcel
 
 /** android.net.Uri is a stub in unit tests (Uri.EMPTY is null); this stands in for a picked file. */
-class TestUri(private val text: String = "content://test/book.epub") : Uri() {
+class TestUri(private val text: String = "content://test/book.epub", private val scheme: String? = "content") : Uri() {
     override fun buildUpon(): Builder = throw UnsupportedOperationException()
     override fun getAuthority(): String? = null
     override fun getEncodedAuthority(): String? = null
@@ -19,7 +19,7 @@ class TestUri(private val text: String = "content://test/book.epub") : Uri() {
     override fun getPathSegments(): List<String> = emptyList()
     override fun getPort(): Int = -1
     override fun getQuery(): String? = null
-    override fun getScheme(): String? = "content"
+    override fun getScheme(): String? = scheme
     override fun getSchemeSpecificPart(): String? = null
     override fun getUserInfo(): String? = null
     override fun isHierarchical(): Boolean = true

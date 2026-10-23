@@ -513,7 +513,7 @@ class BookViewModel @Inject constructor(
         } catch (e: kotlinx.coroutines.CancellationException) {
             throw e
         } catch (e: Exception) {
-            Log.w("BookViewModel", "Suggestion failed for $displayName", e)
+            Log.w("BookViewModel", "Suggestion failed: ${e.javaClass.simpleName}")
             Suggestion(title = null, author = null, source = Suggestion.Source.FILENAME, unavailable = true, message = e.message)
         }
 

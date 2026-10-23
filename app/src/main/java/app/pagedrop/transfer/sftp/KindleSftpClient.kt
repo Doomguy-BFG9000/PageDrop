@@ -135,7 +135,7 @@ object KindleSftpClient {
                         }
                         Log.d(TAG, "Thumbnail uploaded: $thumbName")
                     } catch (e: Exception) {
-                        Log.w(TAG, "Thumbnail upload failed for ${book.title}: ${e.message}")
+                        Log.w(TAG, "Thumbnail upload failed for book id=${book.uid}: ${e.javaClass.simpleName}")
                     }
                 }
             }
