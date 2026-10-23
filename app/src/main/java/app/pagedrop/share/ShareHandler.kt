@@ -52,7 +52,7 @@ object ShareHandler {
                         val ok = handleSharedFile(uri, application, bookRepository)
                         if (ok) successCount++ else errors.add("Failed: ${uri.lastPathSegment}")
                     } catch (e: Exception) {
-                        Log.e(TAG, "Failed: ${uri.lastPathSegment}: ${e.message}", e)
+                        Log.e(TAG, "Shared file failed: ${e.javaClass.simpleName}")
                         errors.add("${uri.lastPathSegment}: ${e.localizedMessage ?: "Unknown error"}")
                     }
                 }
@@ -67,24 +67,35 @@ object ShareHandler {
 
     /**
      * The one file a SEND/VIEW intent carries, or null for several files, text/URL shares
-     * and anything that is not a content/file URI. Those keep the silent add flow.
+     * and anything that is not a content URI. Those keep the silent add flow.
      */
     fun singleSharedFile(intent: Intent): Uri? {
         if (intent.action == Intent.ACTION_SEND_MULTIPLE) return null
-        val uri = extractUris(intent).singleOrNull() ?: return null
-        return uri.takeIf { it.scheme == "content" || it.scheme == "file" }
+        return extractUris(intent).singleOrNull()
     }
+
+    /**
+     * Only content:// URIs are taken from share intents. MainActivity is exported, so any app can send it a
+     * file:// URI pointing into this app's private storage (or elsewhere); those, and every other scheme, are
+     * dropped before anything is read.
+     */
+    internal fun isAcceptedShareUri(uri: Uri?): Boolean = uri?.scheme.equals("content", ignoreCase = true)
 
     private fun extractUris(intent: Intent): List<Uri> {
         val uris = mutableListOf<Uri>()
         intent.getParcelableExtra<Uri>(Intent.EXTRA_STREAM)?.let { uris.add(it) }
+        if (intent.action == Intent.ACTION_SEND_MULTIPLE) {
+            intent.getParcelableArrayListExtra<Uri>(Intent.EXTRA_STREAM)?.let { uris.addAll(it) }
+        }
         if (intent.clipData != null) {
             for (i in 0 until intent.clipData!!.itemCount) {
                 intent.clipData!!.getItemAt(i).uri?.let { uris.add(it) }
             }
         }
         intent.data?.let { uris.add(it) }
-        return uris.distinct()
+        val accepted = uris.distinct().filter(::isAcceptedShareUri)
+        if (accepted.size != uris.distinct().size) Log.w(TAG, "Ignored shared URIs that are not content://")
+        return accepted
     }
 
     private suspend fun handleSharedFile(

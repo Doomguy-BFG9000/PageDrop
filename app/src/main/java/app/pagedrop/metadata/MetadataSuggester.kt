@@ -155,7 +155,7 @@ class MetadataSuggester(
                 } ?: run { out.delete(); return@withContext null }
                 out
             } catch (e: Exception) {
-                android.util.Log.w("MetadataSuggester", "Could not copy $uri for metadata detection", e)
+                android.util.Log.w("MetadataSuggester", "Could not copy the file for metadata detection: ${e.javaClass.simpleName}")
                 null
             }
         }

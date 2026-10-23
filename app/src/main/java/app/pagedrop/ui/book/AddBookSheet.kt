@@ -73,10 +73,7 @@ internal fun addPlanFor(format: String): AddPlan {
     }
 }
 
-private val serverOutputFormats = listOf(
-    "AZW3", "EPUB", "MOBI", "DOCX", "FB2", "HTMLZ", "KEPUB", "LIT", "LRF", "PDB",
-    "PDF", "PMLZ", "RB", "RTF", "SNB", "TCR", "TXT", "TXTZ", "ZIP",
-)
+private val serverOutputFormats = app.pagedrop.server.ServerFormats.OFFERED.map { it.uppercase() }
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable

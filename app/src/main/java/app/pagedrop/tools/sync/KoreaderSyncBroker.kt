@@ -43,7 +43,7 @@ object KoreaderSyncBroker {
                         )
                     )
                 } catch (e: Exception) {
-                    Log.w(TAG, "Failed to read SDR: $sdrPath → ${e.message}")
+                    Log.w(TAG, "Failed to read an SDR file: ${e.javaClass.simpleName}")
                     results.add(
                         KoreaderSyncResult(
                             bookPath = sdrPath.removeSuffix(".sdr"),

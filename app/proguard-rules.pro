@@ -45,3 +45,12 @@
     kotlinx.serialization.KSerializer serializer(...);
 }
 -keep,includedescriptorclasses class app.pagedrop.**$$serializer { *; }
+
+# Release builds drop verbose/debug/info logging. Those calls name books, files and paths (the user's reading
+# history), which other apps with READ_LOGS or a bug-report capture could see. Warnings and errors stay, and are
+# written without titles or paths. Only the app's own code and libraries' direct android.util.Log calls are affected.
+-assumenosideeffects class android.util.Log {
+    public static int v(...);
+    public static int d(...);
+    public static int i(...);
+}

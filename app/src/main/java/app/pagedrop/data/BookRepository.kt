@@ -34,6 +34,7 @@ import app.pagedrop.server.PageDropApiClient
 import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.withTimeout
 import dagger.hilt.android.qualifiers.ApplicationContext
+import app.pagedrop.security.SafeFiles
 import java.io.File
 import javax.inject.Inject
 
@@ -121,6 +122,17 @@ class DefaultBookRepository @Inject constructor(
             "kfx" to "KFX"
         )
 
+        /** Extensions a stored library file may keep; any other extension from a provider's name is dropped. */
+        internal val LIBRARY_EXTENSIONS: Set<String> =
+            FORMAT_MAP.keys + setOf("prc", "pdb") + app.pagedrop.server.ServerFormats.OFFERED
+
+        /**
+         * The internal file name for an untrusted display name (from a share/document provider): a sanitized base name
+         * plus a known extension, never a path separator or dot segment. See [SafeFiles.safeFileName].
+         */
+        internal fun safeStoredFileName(displayName: String?): String =
+            SafeFiles.safeFileName(displayName, LIBRARY_EXTENSIONS, fallbackBase = "book_${System.currentTimeMillis()}")
+
         /**
          * Detects the ebook format from the file extension.
          */
@@ -154,11 +166,11 @@ class DefaultBookRepository @Inject constructor(
             booksDir.mkdirs()
         }
 
-        // Extract filename from content resolver
-        val displayName = getDisplayName(context, uri) ?: "unknown_${System.currentTimeMillis()}"
+        // The provider controls the display name: keep only a sanitized base name and a known extension.
+        val displayName = safeStoredFileName(getDisplayName(context, uri))
         val format = detectFormat(displayName)
 
-        // Generate unique filename to avoid collisions
+        // Generate unique filename to avoid collisions (always inside booksDir)
         val targetFile = generateUniqueFile(booksDir, displayName)
 
         // Copy file content from URI to internal storage
@@ -166,10 +178,10 @@ class DefaultBookRepository @Inject constructor(
             targetFile.outputStream().use { output ->
                 input.copyTo(output)
             }
-        } ?: throw IllegalStateException("Could not open input stream for URI: $uri")
+        } ?: throw IllegalStateException("Could not open the shared file")
 
         val fileSize = targetFile.length()
-        Log.d(TAG, "Copied book: $displayName (${formatFileSize(fileSize)}) → ${targetFile.absolutePath}")
+        Log.d(TAG, "Copied book (${formatFileSize(fileSize)})")
 
         // Extract author from filename if possible (pattern: "Title - Author.ext")
         val nameWithoutExt = displayName.substringBeforeLast(".")
@@ -185,7 +197,7 @@ class DefaultBookRepository @Inject constructor(
         )
 
         val id = bookDao.insertBook(book)
-        Log.d(TAG, "Inserted book with id=$id: $title by $author")
+        Log.d(TAG, "Inserted book with id=$id")
 
         book.copy(uid = id.toInt())
     }
@@ -198,7 +210,7 @@ class DefaultBookRepository @Inject constructor(
         val file = File(book.filePath)
         if (file.exists()) {
             val deleted = file.delete()
-            Log.d(TAG, "Deleted file ${book.filePath}: $deleted")
+            Log.d(TAG, "Deleted book file: $deleted")
         }
 
         // Delete cover if it exists
@@ -209,7 +221,7 @@ class DefaultBookRepository @Inject constructor(
 
         // Remove from database
         bookDao.deleteBook(book)
-        Log.d(TAG, "Deleted book from DB: ${book.title}")
+        Log.d(TAG, "Deleted book id=${book.uid} from DB")
         Unit
     }
 
@@ -246,7 +258,7 @@ class DefaultBookRepository @Inject constructor(
         val booksDir = File(context.filesDir, BOOKS_DIR)
         if (!booksDir.exists()) booksDir.mkdirs()
 
-        val sourceDisplayName = getDisplayName(context, uri) ?: "unknown_${System.currentTimeMillis()}"
+        val sourceDisplayName = safeStoredFileName(getDisplayName(context, uri))
         val displayName = outputTitle
             ?.trim()
             ?.takeIf { it.isNotBlank() }
@@ -257,7 +269,7 @@ class DefaultBookRepository @Inject constructor(
             }
             ?: sourceDisplayName
         val format = detectFormat(displayName)
-        Log.d(TAG, "Converting $format: $displayName")
+        Log.d(TAG, "Converting $format")
 
         if (!BookConverter.canConvert(format)) {
             throw IllegalStateException(
@@ -276,7 +288,7 @@ class DefaultBookRepository @Inject constructor(
                     chosenCoverPath ?: served.coverPath,
                 )
             }
-            Log.w(TAG, "Server conversion failed or timed out; falling back to local conversion for $displayName")
+            Log.w(TAG, "Server conversion failed or timed out; falling back to local conversion")
         }
 
         val ext = displayName.substringAfterLast(".", "tmp").lowercase()
@@ -284,9 +296,9 @@ class DefaultBookRepository @Inject constructor(
         try {
             context.contentResolver.openInputStream(uri)?.use { input ->
                 tempFile.outputStream().use { output -> input.copyTo(output) }
-            } ?: throw IllegalStateException("Could not open input stream for URI: $uri")
+            } ?: throw IllegalStateException("Could not open the file to convert")
 
-            val baseName = displayName.substringBeforeLast(".")
+            val baseName = SafeFiles.safeBaseName(displayName.substringBeforeLast("."))
             val mobiFileName = "$baseName.mobi"
             val mobiFile = generateUniqueFile(booksDir, mobiFileName)
 
@@ -300,7 +312,7 @@ class DefaultBookRepository @Inject constructor(
                     )
                 }
             } catch (e: TimeoutCancellationException) {
-                Log.e(TAG, "Conversion timed out after 120s for: $displayName")
+                Log.e(TAG, "Conversion timed out after 120s")
                 if (mobiFile.exists()) mobiFile.delete()
                 throw IllegalStateException("Conversion timed out. The file may be too large or complex.")
             }
@@ -315,7 +327,7 @@ class DefaultBookRepository @Inject constructor(
             }
 
             val fileSize = mobiFile.length()
-            Log.d(TAG, "Converted: $displayName → ${mobiFile.name} (${formatFileSize(fileSize)})")
+            Log.d(TAG, "Converted to MOBI (${formatFileSize(fileSize)})")
 
             val (parsedTitle, parsedAuthor) = parseBookNameAndAuthor(baseName)
             val title = outputTitle?.trim()?.takeIf { it.isNotEmpty() } ?: parsedTitle
@@ -333,7 +345,7 @@ class DefaultBookRepository @Inject constructor(
             )
 
             val id = bookDao.insertBook(book)
-            Log.d(TAG, "Inserted converted book with id=$id: $title by $author")
+            Log.d(TAG, "Inserted converted book with id=$id")
             book.copy(uid = id.toInt())
         } finally {
             if (tempFile.exists()) tempFile.delete()
@@ -371,7 +383,7 @@ class DefaultBookRepository @Inject constructor(
         )
 
         val id = bookDao.insertBook(book)
-        Log.d(TAG, "Inserted server-converted book with id=$id: ${book.title}")
+        Log.d(TAG, "Inserted server-converted book with id=$id")
         return book.copy(uid = id.toInt())
     }
 
@@ -383,12 +395,12 @@ class DefaultBookRepository @Inject constructor(
         return try {
             val coversDir = File(context.filesDir, COVERS_DIR)
             if (!coversDir.exists()) coversDir.mkdirs()
-            val coverFile = File(coversDir, "${baseName}_cover.jpg")
+            val coverFile = SafeFiles.childOf(coversDir, "${SafeFiles.safeBaseName(baseName, "cover")}_cover.jpg")
             coverFile.outputStream().use { it.write(bytes) }
-            Log.d(TAG, "Saved cover: ${coverFile.absolutePath}")
+            Log.d(TAG, "Saved cover")
             coverFile.absolutePath
         } catch (e: Exception) {
-            Log.e(TAG, "Failed to save cover bytes: ${e.message}", e)
+            Log.e(TAG, "Failed to save cover bytes: ${e.javaClass.simpleName}")
             null
         }
     }
@@ -423,7 +435,7 @@ class DefaultBookRepository @Inject constructor(
             val coverBytes = coverPath?.let { File(it) }?.takeIf { it.isFile }?.readBytes()?.takeIf { CoverImages.isImage(it) }
             val outcome = BookFileMetadataEmbedder.embed(file, book.format, normalizedTitle, normalizedAuthor, coverBytes)
             if (outcome.status == BookFileMetadataEmbedder.Status.FAILED) {
-                Log.w(TAG, "Could not embed metadata into ${file.name}: ${outcome.detail}")
+                Log.w(TAG, "Could not embed metadata into a ${book.format} file")
             }
 
             // 2. Rename to "Title - Author.ext" (only after a successful embed, so a failed embed keeps the old name).
@@ -490,13 +502,13 @@ class DefaultBookRepository @Inject constructor(
                 coverPath = coverPath,
             )
             val inserted = book.copy(uid = bookDao.insertBook(book).toInt())
-            Log.d(TAG, "Imported download ${target.name} as id=${inserted.uid}")
+            Log.d(TAG, "Imported download as id=${inserted.uid}")
 
             if (format in setOf("AZW3", "MOBI", "PDF")) {
                 try {
                     applyMetadata(inserted, cleanTitle, cleanAuthor, coverPath)
                 } catch (e: Exception) {
-                    Log.w(TAG, "Metadata embedding failed for ${target.name}: ${e.message}")
+                    Log.w(TAG, "Metadata embedding failed for an imported $format: ${e.javaClass.simpleName}")
                     inserted
                 }
             } else {
@@ -546,22 +558,10 @@ class DefaultBookRepository @Inject constructor(
     }
 
     /**
-     * Generates a unique file in the target directory, appending a counter if needed.
+     * Generates a unique file in the target directory, appending a counter if needed. The result is always
+     * canonically inside [dir]; a name that would leave it throws.
      */
-    private fun generateUniqueFile(dir: File, name: String): File {
-        var file = File(dir, name)
-        if (!file.exists()) return file
-
-        val baseName = name.substringBeforeLast(".")
-        val extension = name.substringAfterLast(".", "")
-        var counter = 1
-        while (file.exists()) {
-            val newName = if (extension.isNotEmpty()) "${baseName}_$counter.$extension" else "${baseName}_$counter"
-            file = File(dir, newName)
-            counter++
-        }
-        return file
-    }
+    private fun generateUniqueFile(dir: File, name: String): File = SafeFiles.uniqueChild(dir, name)
 
     /**
      * Tries to parse "Title - Author" from the filename.

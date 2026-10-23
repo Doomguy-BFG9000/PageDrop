@@ -9,6 +9,7 @@
         <exclude domain="sharedpref" path="kindle_settings.xml" />
         <exclude domain="sharedpref" path="kindle_host_keys.xml" />
         <exclude domain="sharedpref" path="pagedrop_server.xml" />
+        <exclude domain="sharedpref" path="pagedrop_server_secrets.xml" />
         <exclude domain="sharedpref" path="pagedrop_discover_secrets.xml" />
         <exclude domain="root" path="app_webview" />
     </cloud-backup>
@@ -17,6 +18,7 @@
         <exclude domain="sharedpref" path="kindle_settings.xml" />
         <exclude domain="sharedpref" path="kindle_host_keys.xml" />
         <exclude domain="sharedpref" path="pagedrop_server.xml" />
+        <exclude domain="sharedpref" path="pagedrop_server_secrets.xml" />
         <exclude domain="sharedpref" path="pagedrop_discover_secrets.xml" />
         <exclude domain="root" path="app_webview" />
     </device-transfer>

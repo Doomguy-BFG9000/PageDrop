@@ -7,7 +7,8 @@
    - kindle_secrets: SSH password and this phone's SSH key (Keystore-encrypted; the key can't be restored anyway)
    - kindle_settings: held the plain-text SSH password before 0.9, until the app migrates it
    - kindle_host_keys: pinned Kindle host keys; a restored phone should pin afresh
-   - pagedrop_server: conversion server access and refresh tokens
+   - pagedrop_server: held the plain-text conversion server tokens up to 0.9.3, until the app migrates them
+   - pagedrop_server_secrets: conversion server access and refresh tokens (Keystore-encrypted)
    - pagedrop_discover_secrets: OPDS catalog passwords (Keystore-encrypted)
    - app_webview: browser cookies, storage and cache from the source browser
 -->
@@ -16,6 +17,7 @@
     <exclude domain="sharedpref" path="kindle_settings.xml" />
     <exclude domain="sharedpref" path="kindle_host_keys.xml" />
     <exclude domain="sharedpref" path="pagedrop_server.xml" />
+    <exclude domain="sharedpref" path="pagedrop_server_secrets.xml" />
     <exclude domain="sharedpref" path="pagedrop_discover_secrets.xml" />
     <exclude domain="root" path="app_webview" />
 </full-backup-content>

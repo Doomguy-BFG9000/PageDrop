@@ -12,7 +12,8 @@ class BackupRulesTest {
         "sharedpref:${app.pagedrop.security.KindleSecrets.PREFS}.xml",
         "sharedpref:kindle_settings.xml",
         "sharedpref:${app.pagedrop.transfer.ssh.HostKeyStore.PREFS}.xml",
-        "sharedpref:pagedrop_server.xml",
+        "sharedpref:${app.pagedrop.server.ServerSettings.PREFS}.xml",
+        "sharedpref:${app.pagedrop.server.ServerSecrets.PREFS}.xml",
         "sharedpref:pagedrop_discover_secrets.xml",
         "root:app_webview",
     )

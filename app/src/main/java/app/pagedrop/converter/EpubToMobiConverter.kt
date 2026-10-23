@@ -85,7 +85,7 @@ object EpubToMobiConverter {
                 kindleUuid = writer.kindleUuid
             )
         } catch (e: Exception) {
-            Log.e(TAG, "Conversion failed: ${e.message}", e)
+            Log.e(TAG, "Conversion failed: ${e.javaClass.simpleName}")
             if (mobiFile.exists()) mobiFile.delete()
             ConversionResult(success = false)
         }
@@ -110,7 +110,7 @@ object EpubToMobiConverter {
                 sb.append(bodyContent)
                 sb.append("\n<mbp:pagebreak/>\n")
             } catch (e: Exception) {
-                Log.w(TAG, "Skipping spine item ${resource.href}: ${e.message}")
+                Log.w(TAG, "Skipping a spine item: ${e.javaClass.simpleName}")
             }
         }
 
@@ -173,7 +173,7 @@ object EpubToMobiConverter {
 
             // Method 1 covers the main case; no reliable guide API fallback
         } catch (e: Exception) {
-            Log.w(TAG, "Could not extract cover image: ${e.message}")
+            Log.w(TAG, "Could not extract cover image: ${e.javaClass.simpleName}")
         }
         return null
     }
