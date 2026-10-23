@@ -96,7 +96,7 @@ def test_process_job_rejects_oversized_upload(monkeypatch):
     monkeypatch.setattr(poll, "supabase_download", lambda bucket, path: b"x" * 11)
     result = asyncio.run(poll.process_job(convert_job(file_size_bytes=10)))
     assert result["status"] == "failed"
-    assert "larger than the size declared" in result["error_message"]
+    assert result["error_message"] == "File too large"
 
 
 # Retention tests live in ../test_cleanup.py (stdlib unittest, fake Supabase client).

@@ -141,5 +141,81 @@ class CleanupTests(unittest.TestCase):
         self.assertEqual(fake.removed, [])
 
 
+
+class AbandonedUploadTests(unittest.TestCase):
+    def run_abandoned(self, fake):
+        calls = []
+
+        def get(path, params=None):
+            calls.append(params)
+            return list(fake.jobs)
+
+        with mock.patch.object(poll, "supabase_get", get), mock.patch.object(poll, "supabase_list", fake.list), \
+                mock.patch.object(poll, "supabase_remove", fake.remove), \
+                mock.patch.object(poll, "supabase_delete", self.recording_delete(fake)), \
+                mock.patch.object(poll, "ABANDONED_UPLOAD_HOURS", 1):
+            return poll.cleanup_abandoned_uploads(now=NOW), calls
+
+    def recording_delete(self, fake):
+        self.delete_params = []
+
+        def delete(path, params=None):
+            self.delete_params.append(params)
+            fake.delete(path, params)
+        return delete
+
+    def test_only_old_awaiting_upload_jobs_are_selected(self):
+        fake = FakeSupabase([], {"sources": set(), "artifacts": set()})
+        _, calls = self.run_abandoned(fake)
+        self.assertEqual(calls[0]["status"], "eq.awaiting_upload")
+        self.assertEqual(calls[0]["created_at"], "lt.2026-11-10T11:00:00+00:00")
+
+    def test_partial_uploads_and_row_are_deleted(self):
+        storage = {"sources": {f"{USER}/{JOB}/book.epub"}, "artifacts": set()}
+        row = job_row(input_cover_storage_path=None, result_storage_path=None, cover_storage_path=None)
+        fake = FakeSupabase([row], storage)
+        deleted, _ = self.run_abandoned(fake)
+        self.assertEqual(deleted, 1)
+        self.assertEqual(storage["sources"], set())
+        # The delete only matches while the job is still awaiting upload.
+        self.assertEqual(self.delete_params, [{"id": f"eq.{JOB}", "status": "eq.awaiting_upload"}])
+
+    def test_row_is_kept_if_files_cannot_be_removed(self):
+        fake = FakeSupabase([job_row()], full_storage(), ignore_remove=True)
+        deleted, _ = self.run_abandoned(fake)
+        self.assertEqual(deleted, 0)
+        self.assertEqual(fake.deleted_rows, [])
+
+
+class StuckJobTests(unittest.TestCase):
+    def test_processing_jobs_past_the_timeout_are_failed_generically(self):
+        captured = {}
+
+        def patch(path, params, data):
+            captured.update(path=path, params=params, data=data)
+            return [{"id": JOB}]
+
+        with mock.patch.object(poll, "supabase_patch_returning", patch), \
+                mock.patch.object(poll, "STUCK_JOB_SECONDS", 1200), mock.patch("builtins.print"):
+            self.assertEqual(poll.reset_stuck_jobs(now=NOW), 1)
+        self.assertEqual(captured["path"], "/jobs")
+        self.assertEqual(captured["params"]["status"], "eq.processing")
+        self.assertEqual(captured["params"]["or"], "(started_at.lt.2026-11-10T11:40:00Z,started_at.is.null)")
+        self.assertEqual(captured["data"]["status"], "failed")
+        self.assertEqual(captured["data"]["error_message"], "Conversion timed out")
+
+    def test_stuck_threshold_exceeds_the_job_deadline(self):
+        self.assertGreater(poll.STUCK_JOB_SECONDS, poll.JOB_DEADLINE)
+
+    def test_cleanup_cycle_runs_every_task_even_if_one_fails(self):
+        ran = []
+        with mock.patch.object(poll, "reset_stuck_jobs", mock.Mock(side_effect=RuntimeError("down"))), \
+                mock.patch.object(poll, "cleanup_abandoned_uploads", lambda: ran.append("abandoned") or 0), \
+                mock.patch.object(poll, "cleanup_expired_jobs", lambda: ran.append("retention") or 0), \
+                mock.patch("builtins.print"):
+            poll.run_cleanup_cycle()
+        self.assertEqual(ran, ["abandoned", "retention"])
+
+
 if __name__ == "__main__":
     unittest.main()

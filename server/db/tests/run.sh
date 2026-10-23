@@ -34,6 +34,9 @@ PGOPTIONS="" psql_run -At -f "$here/test_launch_hardening.sql" 2>&1 \
 PGOPTIONS="" psql_run -At -f "$here/test_abuse_caps.sql" 2>&1 \
   | sed -n 's/^psql:[^:]*:[0-9]*: NOTICE:  //p; /ERROR/p'
 
+PGOPTIONS="" psql_run -At -f "$here/test_upload_limits.sql" 2>&1 \
+  | sed -n 's/^psql:[^:]*:[0-9]*: NOTICE:  //p; /ERROR/p'
+
 # 30 simultaneous create-job calls for user C (daily_job_limit = 5): exactly 5 may win.
 seq 1 30 | xargs -P 30 -I{} psql -X -qAt -c "
   set role service_role;
@@ -47,6 +50,20 @@ if [[ "$accepted" == 5 && "$rows" == 5 && "$counter" == 5 ]]; then
   echo "ok - 30 concurrent requests against a limit of 5: 5 accepted, 5 rows, counter 5"
 else
   echo "FAIL: concurrent quota (accepted=$accepted rows=$rows counter=$counter)"; exit 1
+fi
+
+# 10 simultaneous create-job calls for user F (default max_active_jobs = 2): exactly 2 may win.
+seq 1 10 | xargs -P 10 -I{} psql -X -qAt -c "
+  set role service_role;
+  select set_config('request.jwt.claims', '{\"role\":\"service_role\"}', true);
+  select test.create_convert('aaaaaaaa-0000-0000-0000-000000000006', gen_random_uuid(), 10) ->> 'ok';" \
+  | grep -c '^true$' > "$tmp/accepted_f" || true
+accepted="$(cat "$tmp/accepted_f")"
+rows="$(psql -X -qAt -c "select count(*) from public.jobs where user_id = 'aaaaaaaa-0000-0000-0000-000000000006'")"
+if [[ "$accepted" == 2 && "$rows" == 2 ]]; then
+  echo "ok - 10 concurrent requests against max_active_jobs = 2: 2 accepted, 2 rows"
+else
+  echo "FAIL: concurrent active-job cap (accepted=$accepted rows=$rows)"; exit 1
 fi
 
 echo "all database tests passed"

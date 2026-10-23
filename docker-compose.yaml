@@ -14,8 +14,13 @@ services:
     restart: unless-stopped
     mem_limit: "${WORKER_MEMORY_LIMIT:-3g}"
     cpus: "${WORKER_CPU_LIMIT:-1.0}"
-    ports:
-      - "9090:8080"
+    # Calibre runs as an unprivileged user inside the container; nothing may regain
+    # privileges through setuid binaries, and a fork bomb hits this cap, not the host.
+    security_opt:
+      - "no-new-privileges:true"
+    pids_limit: 512
+    # No published ports: the health endpoint is only used by the healthcheck below,
+    # which runs inside the container.
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8080')"]
       interval: 30s

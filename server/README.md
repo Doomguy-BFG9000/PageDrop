@@ -61,7 +61,18 @@ WORKER_CPU_LIMIT=1.0
 ```
 
 6. Deploy and watch logs. The worker should claim pending jobs and update them
-to `complete` or `failed`.
+to `complete` or `failed`. It prints `Calibre sandbox: user convert (uid ...)` at start;
+if it prints `Refusing to start`, the image is not running as root or lacks the
+`convert` user.
+
+The compose file publishes **no ports**. The health endpoint (`:8080`) is only used by
+the container's own healthcheck, so Coolify shows the container's health from that
+healthcheck; there is no domain or port to configure in Coolify for this service. The
+container also runs with `no-new-privileges` and `pids_limit: 512`.
+
+**Coolify only deploys the worker.** Database migrations and the `create-job` Edge
+Function are not part of the compose file and must be deployed by hand (see the deploy
+order below) before the worker redeploy.
 
 The existing Ampere A1 box is the right place for this because Calibre can use
 real RAM/CPU. Keep `MAX_CONCURRENT=1` so it coexists politely with other
@@ -71,16 +82,33 @@ services.
 
 Every release that touches the server must be rolled out in this order:
 
-1. **Run migrations `003` then `004`** in the Supabase SQL editor (after `001`/`002` on a
-   fresh project).
-2. **Deploy `create-job`** (`supabase functions deploy create-job --no-verify-jwt`). The new
-   function passes a `p_ip_hash` argument that only exists after `004`.
-3. **Redeploy the worker** (Coolify redeploy). Do it last so it never runs against an older
-   schema, and so the SSRF-safe fetcher and exact-path retention go live together.
+1. **Run the migrations** in order: `003`, `004`, then `005` (after `001`/`002` on a fresh
+   project). Nothing applies them automatically: paste each file into the Supabase SQL
+   editor and run it, or use psql with the database connection string (Project Settings →
+   Database):
 
-Always re-run `003` **and then** `004` after `001` if you ever re-run `001`, and re-run
-`004` after any re-run of `003`: `003` recreates the old 12-argument
-`create_job_with_quota()`, which `004` drops again (both would otherwise be callable).
+   ```bash
+   psql "$SUPABASE_DB_URL" -v ON_ERROR_STOP=1 -f server/db/migrations/005_upload_limits.sql
+   ```
+
+   `005` checks that `003` and `004` are installed and stops with an error otherwise.
+2. **Deploy `create-job`**:
+
+   ```bash
+   supabase functions deploy create-job --no-verify-jwt
+   ```
+
+   It passes a `p_ip_hash` argument that only exists after `004`, and maps `005`'s
+   `too_many_active_jobs` refusal to a 429 with a readable message (an older function would
+   answer 400 with the raw code).
+3. **Redeploy the worker** (Coolify redeploy). Do it last so it never runs against an older
+   schema. The worker deletes uploads abandoned for more than an hour, which `005`'s
+   per-user cap assumes.
+
+Always re-run `003`, `004` **and then** `005` after `001` if you ever re-run `001`; re-run
+`004` and `005` after any re-run of `003`; and re-run `005` after any re-run of `004`.
+`003` recreates the old 12-argument `create_job_with_quota()`, which `004` drops again, and
+`004` recreates the 13-argument one without the per-user active-job cap that `005` adds.
 
 ### 1. Supabase Setup
 
@@ -95,11 +123,18 @@ Always re-run `003` **and then** `004` after `001` if you ever re-run `001`, and
      `sources` uploads at 100 MB
    - `004_abuse_caps.sql` — global active-job cap, global daily upload-byte cap and an
      optional per-IP daily job cap, all enforced inside `create_job_with_quota()`
+   - `005_upload_limits.sql` — per-user cap of 2 active jobs (`profiles.max_active_jobs`),
+     a 200 MB limit on the `artifacts` bucket, and default privileges that stop new tables,
+     sequences and functions from being granted to `anon` / `authenticated` (and new
+     functions from being executable by `PUBLIC`). Objects created after `005` need
+     explicit grants if clients must use them; `service_role` still gets them by default.
 3. Check **Storage**: both `sources` and `artifacts` must be **private**. Do not make
    `artifacts` public — the app downloads results with the user's token, and RLS
    limits each user to their own folder.
 4. Check **Storage → Settings**: the global upload file size limit must be at least
-   100 MB, or larger books fail to upload (Supabase's free plan caps it at 50 MB).
+   100 MB, or larger books fail to upload (Supabase's free plan caps it at 50 MB). The
+   worker uploads converted books of up to 200 MB (the `artifacts` bucket limit), so set it
+   to 200 MB if your plan allows; otherwise results above the global limit fail.
 5. Go to **Authentication → Sign In / Providers** and enable Anonymous Sign-Ins — the
    app signs in anonymously.
 
@@ -235,7 +270,8 @@ refuses uploads to any other path or after the job is queued.
 - `401` — Unauthorized
 - `403` — Storage quota exceeded
 - `413` — File exceeds 100 MB (cover: 15 MB)
-- `429` — Daily job limit reached, or too many jobs from this network today
+- `429` — Daily job limit reached, too many jobs from this network today, or the user
+  already has 2 jobs in progress (`too_many_active_jobs`)
 - `503` — Server busy (global queue cap) or the daily upload capacity is used up; retry later
 
 Limits are checked and the daily counter taken in one transaction, so concurrent
@@ -257,12 +293,16 @@ Enforced for every user (there is no paid tier yet):
 | Max source file | 100 MB | `create_job_with_quota()`, `sources` bucket limit, worker |
 | Max cover image | 15 MB | `create_job_with_quota()`, worker |
 | Uploads held per user | 500 MB | `profiles.storage_quota_bytes` (sum of the user's unexpired jobs) |
+| Active jobs per user | 2 (pending, processing, awaiting_upload younger than 1 h) | `profiles.max_active_jobs` (005) |
+| Converted book / cover size | 200 MB | `artifacts` bucket limit (005), worker |
 | Active jobs, all users | 200 (pending, processing, awaiting_upload younger than 1 h) | `c_max_active_jobs` in `create_job_with_quota()` (004) |
 | Declared upload bytes per UTC day, all users | 5 GB | `c_max_daily_bytes` (004), counted in `daily_totals` |
 | Jobs per client IP per UTC day | 30 | `c_max_ip_daily_jobs` (004), counted in `ip_rate_limits` |
 | Retention | 24 hours | worker `RETENTION_HOURS` |
 
-To change a cap, edit the constant in `004_abuse_caps.sql` and re-run it. Caps are checked
+To change a global cap, edit the constant in `005_upload_limits.sql` (the current
+definition of `create_job_with_quota()`) and re-run it; keep `004` in step so a re-run of
+it followed by `005` gives the same result. Caps are checked
 and counted in the same transaction as the job insert, and a refused job is not counted
 against any of them.
 
@@ -285,6 +325,14 @@ are deleted before the row: the worker removes the exact paths recorded on the j
 anything listed under `<user_id>/<job_id>/`, lists both buckets again, and deletes the
 row only if nothing is left. Otherwise it logs the job id and retries on the next pass. Local temp
 files are removed as soon as each job finishes.
+
+The same cleanup pass also:
+
+- deletes jobs still `awaiting_upload` an hour after they were created (abandoned or
+  partial uploads), files first, and the row only while it is still `awaiting_upload`;
+- fails jobs that have been `processing` for longer than `JOB_TIMEOUT` + `STUCK_JOB_MARGIN`
+  (default 300 + 900 s), e.g. because the worker was redeployed mid-job. This also runs once
+  when the worker starts.
 
 Retention only runs while a worker is running. To check it, run this in the SQL
 editor; it should return 0 (allowing for one cleanup interval):
@@ -315,6 +363,36 @@ The worker is a Python script (`server/worker/poll.py`) that:
 8. Updates job status to `complete` or `failed`
 9. Sleeps 5 seconds, repeats
 
+### Calibre sandbox
+
+Calibre parses untrusted files, so every Calibre or poppler process (`ebook-convert`,
+`ebook-meta`, `pdftotext`) is started through `server/worker/sandbox.py`:
+
+- as the unprivileged `convert` user created in the Dockerfile, with no supplementary
+  groups. The worker stays root only so it can drop privileges: the service key is in the
+  worker's environment, and `/proc/1/environ` is readable only by root or the same uid, so a
+  child running as another uid cannot read it (nor ptrace the worker). If the worker is
+  root but cannot switch user, it refuses to convert (`SANDBOX_REQUIRED=1` in the image);
+- with a fresh environment (`PATH`, `LANG`, `HOME`/`TMPDIR`/`CALIBRE_CONFIG_DIRECTORY`
+  inside the job directory) and no Supabase variables;
+- in its own session, with `RLIMIT_AS` (`SANDBOX_MEMORY_LIMIT_MB`, default 8192, generous
+  because Calibre's PDF output uses QtWebEngine), `RLIMIT_CPU` (timeout + 30 s),
+  `RLIMIT_FSIZE` (`SANDBOX_MAX_FILE_MB`, default 256), `RLIMIT_NPROC`
+  (`SANDBOX_MAX_PROCESSES`, default 256) and no core dumps;
+- with a timeout: `JOB_TIMEOUT` for `ebook-convert`, `HELPER_TIMEOUT` (60 s) for the
+  others, and `JOB_TIMEOUT` + 300 s for the whole job. On timeout the whole process group is
+  killed and reaped; after each job any process the `convert` user still has is killed.
+
+Each job gets a root-owned directory (mode 0711) containing a `work` directory owned by
+`convert` (mode 0700). Inputs are written with `O_EXCL | O_NOFOLLOW`, and outputs are read
+back with `O_NOFOLLOW`, regular files only and size-capped, so a converted book replaced by
+a symlink cannot make the root worker upload one of its own files.
+
+Users only ever see short generic messages in `error_message` and `logs` (both readable
+by the job owner): `Conversion failed`, `Conversion timed out`, `File too large`,
+`Unsupported file type`, `Unsupported URL`, `Invalid job`, `Could not fetch the article`.
+Calibre's stderr and exception details are printed to the worker log only.
+
 Article URLs go through `server/worker/safe_fetch.py`: only http/https on ports 80/443,
 no credentials, every address the host resolves to must be public (loopback, private,
 link-local, `100.64.0.0/10`, multicast, reserved, unspecified and mapped/embedded forms
@@ -334,7 +412,7 @@ checks stand on their own even if the database rules are loosened.
 ```bash
 server/db/tests/run.sh                                   # migrations + RLS/quota rules on a throwaway local Postgres
 python3 -m unittest discover -s server/worker           # SSRF validator + retention (stdlib, offline)
-python -m pytest server/worker/tests                     # worker path/size checks (pip install -r server/worker/requirements-dev.txt)
+python -m pytest server/worker/tests                     # worker path/size checks, sandbox, timeouts, generic errors (pip install -r server/worker/requirements-dev.txt)
 node --test server/supabase/functions/create-job/validation_test.ts   # create-job validation (Node 22.6+)
 ```
 
