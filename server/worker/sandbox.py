@@ -40,7 +40,12 @@ MB = 1024 * 1024
 # Virtual address space per process. Calibre's PDF output uses QtWebEngine (Chromium),
 # which reserves a lot of address space up front, so this is deliberately generous; the
 # container's mem_limit is the real memory cap. Lower it only after testing PDF output.
-MEMORY_LIMIT_BYTES = int(os.environ.get("SANDBOX_MEMORY_LIMIT_MB", "8192")) * MB
+# Off by default: Calibre's PDF output runs Chromium (QtWebEngine), which reserves far more
+# virtual address space than it uses, and any RLIMIT_AS makes its renderer fail to load the
+# book ("Load of clbr://internal.invalid/... failed"). Real memory is capped by the
+# container's cgroup limit (mem_limit in docker-compose). Set to a positive MB value to
+# enforce an address-space limit anyway.
+MEMORY_LIMIT_BYTES = int(os.environ.get("SANDBOX_MEMORY_LIMIT_MB", "0")) * MB
 # Largest single file a child may write. Artifacts are capped at 200 MB by the bucket.
 MAX_FILE_BYTES = int(os.environ.get("SANDBOX_MAX_FILE_MB", "256")) * MB
 # Processes + threads of the sandbox user (Linux counts threads), across all jobs.
@@ -206,8 +211,9 @@ def limits_preexec(cpu_seconds: int, limit_processes: bool):
         (resource.RLIMIT_CORE, 0, None),
         (resource.RLIMIT_CPU, cpu_seconds, cpu_seconds + 5),  # SIGXCPU, then SIGKILL at the hard limit
         (resource.RLIMIT_FSIZE, MAX_FILE_BYTES, None),
-        (resource.RLIMIT_AS, MEMORY_LIMIT_BYTES, None),
     ]
+    if MEMORY_LIMIT_BYTES > 0:
+        limits.append((resource.RLIMIT_AS, MEMORY_LIMIT_BYTES, None))
     if limit_processes:
         # Counted per real uid, so only meaningful (and only safe) once we run as the
         # dedicated sandbox user; it stops fork bombs from exhausting the container.

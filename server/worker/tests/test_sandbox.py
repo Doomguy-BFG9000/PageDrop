@@ -305,3 +305,18 @@ def test_unsafe_article_url_details_stay_in_the_server_log(monkeypatch, capsys):
     assert result["error_message"] == "Could not fetch the article"
     assert "10.0.0.7" not in str(result)
     assert "10.0.0.7" in capsys.readouterr().out
+
+
+def test_no_address_space_limit_by_default():
+    """Chromium (Calibre's PDF output) breaks under any RLIMIT_AS; memory is capped by the container."""
+    import resource
+    assert sandbox.MEMORY_LIMIT_BYTES == 0
+    applied = []
+    real = sandbox._limit
+    try:
+        sandbox._limit = lambda res, value, hard=None: applied.append(res)
+        sandbox.limits_preexec(60, limit_processes=True)()
+    finally:
+        sandbox._limit = real
+    assert resource.RLIMIT_AS not in applied
+    assert resource.RLIMIT_CPU in applied and resource.RLIMIT_NPROC in applied

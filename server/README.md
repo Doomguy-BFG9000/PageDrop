@@ -375,10 +375,12 @@ Calibre parses untrusted files, so every Calibre or poppler process (`ebook-conv
   root but cannot switch user, it refuses to convert (`SANDBOX_REQUIRED=1` in the image);
 - with a fresh environment (`PATH`, `LANG`, `HOME`/`TMPDIR`/`CALIBRE_CONFIG_DIRECTORY`
   inside the job directory) and no Supabase variables;
-- in its own session, with `RLIMIT_AS` (`SANDBOX_MEMORY_LIMIT_MB`, default 8192, generous
-  because Calibre's PDF output uses QtWebEngine), `RLIMIT_CPU` (timeout + 30 s),
+- in its own session, with `RLIMIT_CPU` (timeout + 30 s),
   `RLIMIT_FSIZE` (`SANDBOX_MAX_FILE_MB`, default 256), `RLIMIT_NPROC`
-  (`SANDBOX_MAX_PROCESSES`, default 256) and no core dumps;
+  (`SANDBOX_MAX_PROCESSES`, default 256) and no core dumps. There is no address-space
+  limit by default: Calibre's PDF output runs Chromium, which reserves far more virtual
+  memory than it uses and fails under any `RLIMIT_AS`. Memory is capped by the container's
+  `mem_limit` instead (set `SANDBOX_MEMORY_LIMIT_MB` to force an address-space limit);
 - with a timeout: `JOB_TIMEOUT` for `ebook-convert`, `HELPER_TIMEOUT` (60 s) for the
   others, and `JOB_TIMEOUT` + 300 s for the whole job. On timeout the whole process group is
   killed and reaped; after each job any process the `convert` user still has is killed.
