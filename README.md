@@ -71,8 +71,8 @@ Tried it on something else? [Open an issue](https://github.com/spandan-kumar/Pag
 
 **Install**
 
-- **F-Droid:** [f-droid.org/packages/app.pagedrop](https://f-droid.org/packages/app.pagedrop/). Built from source and signed by F-Droid. This build has no hosted conversion server: everything converts on the phone.
-- **GitHub Releases:** download the APK from the [latest release](https://github.com/spandan-kumar/PageDrop/releases/latest). Each release is signed; see [SECURITY.md](SECURITY.md) to verify it. Includes the optional conversion server.
+- **F-Droid:** [f-droid.org/packages/app.pagedrop](https://f-droid.org/packages/app.pagedrop/). Built from source and signed by F-Droid. Google Books lookups start switched off in this build.
+- **GitHub Releases:** download the APK from the [latest release](https://github.com/spandan-kumar/PageDrop/releases/latest). Each release is signed; see [SECURITY.md](SECURITY.md) to verify it.
 - **Obtainium:** add `https://github.com/spandan-kumar/PageDrop` as an app source to get the GitHub releases with automatic updates.
 
 The F-Droid and GitHub builds are signed with different keys, so one can't update over the other. To switch, uninstall first.
