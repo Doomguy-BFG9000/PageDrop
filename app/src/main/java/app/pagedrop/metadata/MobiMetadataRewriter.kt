@@ -34,6 +34,7 @@ object MobiMetadataRewriter {
     private const val EXTH_KF8_BOUNDARY = 121
     private const val EXTH_UPDATED_TITLE = 503
     private const val MAX_RECORD0 = 1 shl 20
+    private const val MAX_COVER_BYTES = 5 shl 20
 
     /** Reads the metadata we care about. Throws [MobiFormatException] for non-MOBI input. */
     fun read(file: File): Info = RandomAccessFile(file, "r").use { raf ->
@@ -48,6 +49,14 @@ object MobiMetadataRewriter {
             recordCount = pdb.count,
             coverRecord = coverRecordIndex(raf, pdb, rec0, 0),
         )
+    }
+
+    /** The cover image referenced by EXTH 201, or null when there is none (or it is implausibly large). */
+    fun readCover(file: File): ByteArray? = RandomAccessFile(file, "r").use { raf ->
+        val pdb = Pdb.open(raf)
+        val rec0 = Rec0.parse(pdb.record(raf, 0))
+        val idx = coverRecordIndex(raf, pdb, rec0, 0) ?: return@use null
+        if (pdb.size(idx) > MAX_COVER_BYTES) null else pdb.record(raf, idx)
     }
 
     /**

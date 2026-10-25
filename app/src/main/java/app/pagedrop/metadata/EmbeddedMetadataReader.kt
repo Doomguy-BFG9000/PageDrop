@@ -91,7 +91,8 @@ object EmbeddedMetadataReader {
 
     private fun readMobi(file: File): Embedded {
         val info = MobiMetadataRewriter.read(file)
-        return Embedded(info.title ?: info.fullName, info.author)
+        val cover = info.coverRecord?.let { runCatching { MobiMetadataRewriter.readCover(file) }.getOrNull() }
+        return Embedded(info.title ?: info.fullName, info.author, cover)
     }
 
     // ── EPUB: zip + OPF, no full-book parse ──────────────────────────────────

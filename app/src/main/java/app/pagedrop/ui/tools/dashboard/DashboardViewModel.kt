@@ -1,5 +1,7 @@
 package app.pagedrop.ui.tools.dashboard
 
+import app.pagedrop.metadata.Suggestion
+import app.pagedrop.metadata.MetadataSuggester
 import android.content.Context
 import androidx.lifecycle.ViewModel
 import app.pagedrop.data.BookRepository
@@ -204,6 +206,10 @@ class DashboardViewModel @Inject constructor(
         }
     }
 
+    /** Cover lookup for books saved from the Kindle; a seam for tests. */
+    internal var suggestCover: suspend (File, String, String) -> Suggestion =
+        { file, format, name -> MetadataSuggester.suggest(file, format, name) }
+
     /** Downloads one Kindle book into the PageDrop library. */
     fun saveToLibrary(group: KindleBookGroup) {
         val current = _state.value
@@ -226,7 +232,15 @@ class DashboardViewModel @Inject constructor(
             }
             try {
                 val (title, author) = withContext(Dispatchers.IO) { guessTitleAuthor(local) }
-                bookRepository.importDownloaded(local, title, author, null)
+                // Cover: the one inside the file first, else an online cover when the lookup is confident.
+                val suggestion = withContext(Dispatchers.IO) {
+                    runCatching { suggestCover(local, local.extension.uppercase(), file.name) }.getOrNull()
+                }
+                bookRepository.importDownloaded(
+                    local, title, author,
+                    coverUrl = suggestion?.coverUrl?.takeIf { suggestion.best != null },
+                    coverBytes = suggestion?.coverBytes,
+                )
                 runCatching {
                     val books = bookDao.getBooks().first()
                     val matches = KindleLibraryMatcher.matchBooks(books, report.files)

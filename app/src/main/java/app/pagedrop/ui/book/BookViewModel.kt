@@ -65,6 +65,9 @@ import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
+
+/** SharedPreferences key: books already looked up online without finding a cover. */
+private const val KEY_COVER_TRIED = "tried_uids"
 @HiltViewModel
 class BookViewModel @Inject constructor(
     @ApplicationContext private val appContext: Context,
@@ -220,7 +223,52 @@ class BookViewModel @Inject constructor(
         }
     }
 
-    init { loadPassword() }
+    init {
+        loadPassword()
+        // Books saved from the Kindle before covers were picked up: take the cover stored inside the file.
+        viewModelScope.launch {
+            runCatching { withContext(ioDispatcher) { bookRepository.fillMissingCoversFromFiles() } }
+            runCatching { withContext(ioDispatcher) { readCoverSearchTried() } }.onSuccess { _coverSearchTried.value = it }
+        }
+    }
+
+    private val _coverSearchTried = MutableStateFlow<Set<Int>>(emptySet())
+    /** Books already looked up online without finding a cover; the library doesn't offer them again. */
+    val coverSearchTried: StateFlow<Set<Int>> = _coverSearchTried.asStateFlow()
+
+    private val _findingCovers = MutableStateFlow(false)
+    val findingCovers: StateFlow<Boolean> = _findingCovers.asStateFlow()
+
+    private fun coverPrefs() = appContext.getSharedPreferences("library_covers", Context.MODE_PRIVATE)
+
+    private fun readCoverSearchTried(): Set<Int> =
+        coverPrefs().getStringSet(KEY_COVER_TRIED, emptySet()).orEmpty().mapNotNull { it.toIntOrNull() }.toSet()
+
+    /** Looks up covers online for books without one, then reports how it went. */
+    fun findMissingCovers() {
+        if (_findingCovers.value) return
+        viewModelScope.launch {
+            _findingCovers.value = true
+            try {
+                val results = withContext(ioDispatcher) { bookRepository.findMissingCoversOnline(_coverSearchTried.value) }
+                val found = results.count { it.second }
+                val tried = _coverSearchTried.value + results.filterNot { it.second }.map { it.first }
+                _coverSearchTried.value = tried
+                runCatching {
+                    withContext(ioDispatcher) { coverPrefs().edit().putStringSet(KEY_COVER_TRIED, tried.map { it.toString() }.toSet()).apply() }
+                }
+                val text = when {
+                    results.isEmpty() -> "Every book already has a cover"
+                    found == 0 -> "Couldn't find covers online for these books"
+                    found == results.size -> if (found == 1) "Found a cover" else "Found covers for all $found books"
+                    else -> "Found covers for $found of ${results.size} books"
+                }
+                _events.send(LibraryEvent.Message(text))
+            } finally {
+                _findingCovers.value = false
+            }
+        }
+    }
 
     private val _kindleDirectory = MutableStateFlow(kindleSettings.targetDirectory)
     val kindleDirectory: StateFlow<String> = _kindleDirectory.asStateFlow()
