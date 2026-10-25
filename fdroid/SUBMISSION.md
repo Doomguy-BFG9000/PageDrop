@@ -1,5 +1,7 @@
 # Submission texts
 
+> These are the texts used for the original submissions (Oct 2026). Since 0.9.4 the F-Droid build includes the conversion server and passes `PAGEDROP_GOOGLE_BOOKS_DEFAULT=false` instead of blank server properties (fdroid/fdroiddata!54185); see `README.md` for the current recipe.
+
 Ready-to-paste text for the two store requests. Background and the reasoning behind the
 recipe are in [`README.md`](README.md).
 
