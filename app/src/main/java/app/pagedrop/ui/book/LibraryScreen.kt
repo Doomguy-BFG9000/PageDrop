@@ -55,6 +55,7 @@ internal data class LibraryActions(
     val onSelectAll: () -> Unit,
     val onSendSelected: () -> Unit,
     val onDeleteSelected: () -> Unit,
+    val onFindCovers: () -> Unit = {},
 )
 
 @Composable
@@ -72,6 +73,8 @@ internal fun LibraryScreenContent(
     snackbarHostState: SnackbarHostState,
     actions: LibraryActions,
     modifier: Modifier = Modifier,
+    missingCovers: Int = 0,
+    findingCovers: Boolean = false,
 ) {
     val selectionMode = selectedIds.isNotEmpty()
     val books = (uiState as? LibraryUiState.Success)?.data.orEmpty()
@@ -207,6 +210,9 @@ internal fun LibraryScreenContent(
                                 onFindBook = actions.onFindBook,
                                     onFilterChange = actions.onFilterChange,
                                     onViewModeChange = actions.onViewModeChange,
+                                    missingCovers = missingCovers,
+                                    findingCovers = findingCovers,
+                                    onFindCovers = actions.onFindCovers,
                                 )
                                 if (visible.isEmpty()) {
                                     Text(

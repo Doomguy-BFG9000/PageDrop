@@ -67,6 +67,8 @@ fun BookScreen(
     val sendingIds by viewModel.sendingIds.collectAsStateWithLifecycle()
     val failedIds by viewModel.failedIds.collectAsStateWithLifecycle()
     val isConverting by viewModel.isConverting.collectAsStateWithLifecycle()
+    val coverSearchTried by viewModel.coverSearchTried.collectAsStateWithLifecycle()
+    val findingCovers by viewModel.findingCovers.collectAsStateWithLifecycle()
     val conversionError by viewModel.conversionError.collectAsStateWithLifecycle()
     val transferState by viewModel.transferState.collectAsStateWithLifecycle()
     val metadataLookupState by viewModel.metadataLookupState.collectAsStateWithLifecycle()
@@ -337,7 +339,11 @@ fun BookScreen(
         transferProgress = transferProgress,
         snackbarHostState = snackbarHostState,
         modifier = Modifier,
+        missingCovers = (uiState as? LibraryUiState.Success)?.data.orEmpty()
+            .count { it.coverPath.isNullOrBlank() && it.uid !in coverSearchTried },
+        findingCovers = findingCovers,
         actions = LibraryActions(
+            onFindCovers = viewModel::findMissingCovers,
             onAddBook = launchAddBook,
             onFindBook = { showFind = true },
             onOpenArticle = onOpenArticle,

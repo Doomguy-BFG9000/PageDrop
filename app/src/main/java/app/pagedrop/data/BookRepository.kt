@@ -30,6 +30,10 @@ import app.pagedrop.metadata.BookFileMetadataEmbedder
 import app.pagedrop.metadata.BookMetadataLookup
 import app.pagedrop.metadata.BookNameCleaner
 import app.pagedrop.metadata.CoverImages
+import app.pagedrop.metadata.MetadataLookupResult
+import app.pagedrop.metadata.LookupQuery
+import kotlinx.coroutines.flow.first
+import app.pagedrop.metadata.EmbeddedMetadataReader
 import app.pagedrop.server.PageDropApiClient
 import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.withTimeout
@@ -59,12 +63,32 @@ interface BookRepository {
         updateBookMetadata(book, title, author, coverPath)
 
     /**
-     * Imports a file downloaded by the Find-a-book flow: moves [file] into filesDir/books, saves the cover from
-     * [coverUrl] (when reachable), inserts the row (format from the extension) and embeds title/author/cover into
-     * AZW3/MOBI/PDF via [applyMetadata]. EPUB stays EPUB; see [convertImported].
+     * Imports a file downloaded by the Find-a-book flow or saved from the Kindle: moves [file] into filesDir/books,
+     * saves the cover ([coverBytes] when given, else from [coverUrl] when reachable), inserts the row (format from
+     * the extension) and embeds title/author/cover into AZW3/MOBI/PDF via [applyMetadata]. EPUB stays EPUB; see
+     * [convertImported].
      */
-    suspend fun importDownloaded(file: File, title: String, author: String, coverUrl: String?): Book =
-        throw UnsupportedOperationException("importDownloaded is not supported by this repository")
+    suspend fun importDownloaded(
+        file: File,
+        title: String,
+        author: String,
+        coverUrl: String?,
+        coverBytes: ByteArray? = null,
+    ): Book = throw UnsupportedOperationException("importDownloaded is not supported by this repository")
+
+    /**
+     * Gives library books that have no cover the one stored inside their own file (MOBI/AZW3/AZW/PRC/EPUB), when
+     * there is one. Reads local files only, never the network. Returns how many books got a cover.
+     */
+    suspend fun fillMissingCoversFromFiles(): Int = 0
+
+    /**
+     * Looks up a cover online (Open Library, and Google Books when it is switched on) for each library book that
+     * has none, skipping [skipUids]. A confident match's cover is saved for the library and Kindle thumbnail, and
+     * replaces the cover inside AZW3/MOBI/PDF files that already have one.
+     * Returns each book tried with whether a cover was found.
+     */
+    suspend fun findMissingCoversOnline(skipUids: Set<Int>): List<Pair<Int, Boolean>> = emptyList()
 
     /**
      * Converts a library book that is not Kindle-native (EPUB; also PDF/TXT) to MOBI with the existing server-or-phone
@@ -110,6 +134,7 @@ class DefaultBookRepository @Inject constructor(
         private const val TAG = "BookRepository"
         private const val BOOKS_DIR = "books"
         private const val COVERS_DIR = "covers"
+        private val EMBEDDED_COVER_FORMATS = setOf("MOBI", "AZW3", "AZW", "PRC", "EPUB")
 
         /** Supported ebook file extensions and their format names */
         private val FORMAT_MAP = mapOf(
@@ -475,7 +500,13 @@ class DefaultBookRepository @Inject constructor(
             updated
         }
 
-    override suspend fun importDownloaded(file: File, title: String, author: String, coverUrl: String?): Book =
+    override suspend fun importDownloaded(
+        file: File,
+        title: String,
+        author: String,
+        coverUrl: String?,
+        coverBytes: ByteArray?,
+    ): Book =
         withContext(Dispatchers.IO) {
             val context = appContext ?: throw IllegalStateException("No application context available for import")
             val booksDir = File(context.filesDir, BOOKS_DIR).apply { mkdirs() }
@@ -488,9 +519,11 @@ class DefaultBookRepository @Inject constructor(
             val cleanTitle = title.trim().ifBlank { target.nameWithoutExtension }
             val cleanAuthor = author.trim().ifBlank { "Unknown Author" }
 
-            val coverPath = coverUrl?.takeIf { it.isNotBlank() }?.let { url ->
-                BookMetadataLookup.downloadCoverBytes(url)?.let { saveCoverBytes(context, it, target.nameWithoutExtension) }
-            }
+            val coverPath = coverBytes?.takeIf { CoverImages.isUsableCover(it) }
+                ?.let { saveCoverBytes(context, it, target.nameWithoutExtension) }
+                ?: coverUrl?.takeIf { it.isNotBlank() }?.let { url ->
+                    BookMetadataLookup.downloadCoverBytes(url)?.let { saveCoverBytes(context, it, target.nameWithoutExtension) }
+                }
 
             val book = Book(
                 title = cleanTitle,
@@ -515,6 +548,51 @@ class DefaultBookRepository @Inject constructor(
                 inserted
             }
         }
+
+    override suspend fun fillMissingCoversFromFiles(): Int = withContext(Dispatchers.IO) {
+        val context = appContext ?: return@withContext 0
+        var filled = 0
+        for (book in bookDao.getBooks().first()) {
+            if (!book.coverPath.isNullOrBlank() && File(book.coverPath).isFile) continue
+            if (book.format.uppercase() !in EMBEDDED_COVER_FORMATS) continue
+            val file = File(book.filePath)
+            if (!file.isFile) continue
+            val bytes = EmbeddedMetadataReader.read(file, book.format).cover ?: continue
+            val path = saveCoverBytes(context, bytes, file.nameWithoutExtension) ?: continue
+            bookDao.updateMetadata(book.uid, book.title, book.author, path)
+            filled++
+        }
+        if (filled > 0) Log.d(TAG, "Filled $filled missing cover(s) from book files")
+        filled
+    }
+
+    /** Cover URL of a confident catalog match for [title]/[author]; a seam for tests. */
+    internal var coverUrlLookup: suspend (String, String) -> String? = { title, author ->
+        (BookMetadataLookup.lookup(LookupQuery(title, author)) as? MetadataLookupResult.Matches)?.best?.coverUrl
+    }
+
+    /** Downloads cover bytes; a seam for tests. */
+    internal var coverDownload: (String) -> ByteArray? = { BookMetadataLookup.downloadCoverBytes(it) }
+
+    override suspend fun findMissingCoversOnline(skipUids: Set<Int>): List<Pair<Int, Boolean>> = withContext(Dispatchers.IO) {
+        val context = appContext ?: return@withContext emptyList()
+        bookDao.getBooks().first()
+            .filter { it.uid !in skipUids && (it.coverPath.isNullOrBlank() || !File(it.coverPath).isFile) }
+            .map { book -> book.uid to (runCatching { coverFromCatalogs(context, book) }.getOrNull() == true) }
+    }
+
+    private suspend fun coverFromCatalogs(context: Context, book: Book): Boolean {
+        val author = book.author.takeUnless { it.equals("Unknown Author", ignoreCase = true) }.orEmpty()
+        val url = coverUrlLookup(book.title, author)?.takeIf { it.isNotBlank() } ?: return false
+        val bytes = coverDownload(url)?.takeIf { CoverImages.isUsableCover(it) } ?: return false
+        val path = saveCoverBytes(context, bytes, File(book.filePath).nameWithoutExtension) ?: return false
+        if (book.format.uppercase() in setOf("AZW3", "MOBI", "PDF")) {
+            val embedded = runCatching { applyMetadata(book, book.title, book.author, path) }.isSuccess
+            if (embedded) return true
+        }
+        bookDao.updateMetadata(book.uid, book.title, book.author, path)
+        return true
+    }
 
     override suspend fun convertImported(book: Book): Book = withContext(Dispatchers.IO) {
         val context = appContext ?: throw IllegalStateException("No application context available for conversion")

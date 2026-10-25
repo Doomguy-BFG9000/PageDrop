@@ -199,4 +199,23 @@ class MobiMetadataRewriterTest {
         MobiMetadataRewriter.rewrite(once, twice, "X", "Y")
         assertArrayEquals(once.readBytes(), twice.readBytes().also { assertNull(null) })
     }
+
+
+    @Test
+    fun readCoverReturnsTheEmbeddedImage() {
+        val src = synthetic(cover = jpeg)
+        assertArrayEquals(jpeg, MobiMetadataRewriter.readCover(src))
+    }
+
+    @Test
+    fun readCoverIsNullWithoutACover() {
+        assertNull(MobiMetadataRewriter.readCover(synthetic()))
+    }
+
+    @Test
+    fun embeddedReaderPassesTheMobiCoverThrough() {
+        val src = synthetic(title = "The Hunger Games", author = "Suzanne Collins", cover = jpeg)
+        assertArrayEquals(jpeg, EmbeddedMetadataReader.read(src, "MOBI").cover)
+        assertArrayEquals(jpeg, EmbeddedMetadataReader.read(src, "AZW3").cover)
+    }
 }

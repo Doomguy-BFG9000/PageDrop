@@ -31,6 +31,7 @@ import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
@@ -185,6 +186,9 @@ internal fun LibraryHeader(
     onViewModeChange: (LibraryViewMode) -> Unit,
     modifier: Modifier = Modifier,
     showControls: Boolean = true,
+    missingCovers: Int = 0,
+    findingCovers: Boolean = false,
+    onFindCovers: () -> Unit = {},
 ) {
     Column(modifier = modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
         SearchEntryField(onClick = onFindBook)
@@ -238,6 +242,33 @@ internal fun LibraryHeader(
                     val noun = if (transferProgress.total == 1) "book" else "books"
                     Text("Sending ${transferProgress.total} $noun…", style = MaterialTheme.typography.bodyMedium)
                     LinearProgressIndicator(modifier = Modifier.fillMaxWidth().height(2.dp))
+                }
+            }
+        }
+
+        if (showControls && (missingCovers > 0 || findingCovers)) {
+            HairlineCard(modifier = Modifier.fillMaxWidth()) {
+                Row(
+                    Modifier.padding(start = 12.dp, end = 4.dp, top = 2.dp, bottom = 2.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text(
+                        text = when {
+                            findingCovers -> "Looking for covers…"
+                            missingCovers == 1 -> "1 book has no cover"
+                            else -> "$missingCovers books have no cover"
+                        },
+                        style = MaterialTheme.typography.bodyMedium,
+                        modifier = Modifier.weight(1f),
+                    )
+                    if (findingCovers) {
+                        CircularProgressIndicator(
+                            strokeWidth = 2.dp,
+                            modifier = Modifier.padding(12.dp).size(18.dp),
+                        )
+                    } else {
+                        TextButton(onClick = onFindCovers) { Text("Find covers") }
+                    }
                 }
             }
         }

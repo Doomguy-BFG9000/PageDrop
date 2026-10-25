@@ -95,7 +95,7 @@ class DiscoverViewModelTest {
         var convertFails = false
         var nextFormat = "AZW3"
         override fun getBooks(): Flow<List<Book>> = books
-        override suspend fun importDownloaded(file: File, title: String, author: String, coverUrl: String?): Book {
+        override suspend fun importDownloaded(file: File, title: String, author: String, coverUrl: String?, coverBytes: ByteArray?): Book {
             val format = nextFormat
             return Book(uid = 10, title = title, author = author, fileName = file.name, filePath = file.path, format = format, fileSize = 1L)
                 .also { books.value = books.value + it }
