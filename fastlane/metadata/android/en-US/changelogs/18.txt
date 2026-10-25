@@ -1,0 +1,4 @@
+- Security fixes for the conversion server and the app: only book formats are converted, Calibre runs sandboxed, uploads are size-checked, stored tokens are encrypted, and imported file names are sanitized
+- Turning the conversion server off now stops any upload in progress
+- Books saved from the Kindle keep their covers
+- Google Books lookups have their own setting (Settings > Book details)
