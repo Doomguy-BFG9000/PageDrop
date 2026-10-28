@@ -97,4 +97,25 @@ class OpdsSearchTest {
         assertTrue(error is SourceUnavailableException)
         assertTrue(error!!.message!!.contains("HTTP"))
     }
+
+    @Test
+    fun warmUpFindsTheSearchAddressSoTheFirstSearchSkipsIt() = runBlocking {
+        val http = FakeHttp().apply {
+            on("lib.example.org/opds/search", fixture("opds_search_empty.xml"))
+            on("lib.example.org/opds/osd.xml", fixture("opds_osd.xml"))
+            on("lib.example.org/opds/", fixture("opds_root.xml"))
+        }
+        val settings = newSettings(http)
+        settings.addCatalog("https://lib.example.org/opds/", null, null).getOrThrow()
+        SourceKind.entries.filter { it != SourceKind.OPDS }.forEach { settings.setEnabled(it, false) }
+        val engine = BookSearchEngine(settings, http, 5_000)
+
+        engine.warmUp()
+        val before = http.requests.size
+        engine.search("anything")
+
+        val searchRequests = http.requests.drop(before).map { it.first }
+        assertEquals(1, searchRequests.size)
+        assertTrue(searchRequests.single().contains("lib.example.org/opds/search"))
+    }
 }

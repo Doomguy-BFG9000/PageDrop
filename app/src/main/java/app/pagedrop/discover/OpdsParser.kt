@@ -229,6 +229,11 @@ internal class OpdsSource(
         }
     }
 
+    /** Finds and caches the catalog's search address ahead of the first search. */
+    fun prefetchTemplate() {
+        if (templateCache[catalog.id] == null) templateCache[catalog.id] = discoverTemplate()
+    }
+
     private fun books(feed: OpdsFeed) = feed.entries.filter { OpdsParser.acquisitionOptions(it).isNotEmpty() }
 
     /**

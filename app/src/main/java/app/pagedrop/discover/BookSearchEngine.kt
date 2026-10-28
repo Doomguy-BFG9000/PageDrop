@@ -36,7 +36,9 @@ class BookSearchEngine internal constructor(
             sources.map { source ->
                 async {
                     try {
-                        val found = withTimeout(sourceTimeoutMs) { runInterruptible(Dispatchers.IO) { source.search(q) } }
+                        // Your own catalogs may need a second round (following "Search books" links), so they get longer.
+                        val limit = if (source is OpdsSource) sourceTimeoutMs * 3 / 2 else sourceTimeoutMs
+                        val found = withTimeout(limit) { runInterruptible(Dispatchers.IO) { source.search(q) } }
                         SourceOutcome(source, found, null)
                     } catch (e: TimeoutCancellationException) {
                         SourceOutcome(source, emptyList(), SourceError(source.name, false, "${source.name} took too long to answer"))
@@ -51,6 +53,20 @@ class BookSearchEngine internal constructor(
         val merged = mergeAndRank(q, outcomes.flatMap { it.results })
         return SearchResults(query, merged, outcomes.mapNotNull { it.error },
             BookWebSearch.links(q, outcomes.filter { it.error != null }.map { it.source.kind }.toSet(), settings.showShadowLibraries.value))
+    }
+
+    /**
+     * Looks up each enabled catalog's search address in the background (called when Find opens), so the first
+     * search doesn't spend its time limit on it. Failures are ignored; search reports them.
+     */
+    suspend fun warmUp() {
+        coroutineScope {
+            buildSources().filterIsInstance<OpdsSource>().map { source ->
+                async {
+                    runCatching { withTimeout(sourceTimeoutMs) { runInterruptible(Dispatchers.IO) { source.prefetchTemplate() } } }
+                }
+            }.awaitAll()
+        }
     }
 
     /** Fills [BookResult.options] when [BookResult.needsResolve] (Internet Archive). Throws [IOException] on network failure. */
