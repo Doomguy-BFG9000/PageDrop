@@ -37,7 +37,7 @@ They still read fine. A jailbroken Kindle running KOReader is a fine reader for 
 - **Make PDFs readable.** PDF reflow unwraps broken lines and strips running headers and page numbers, so a text PDF reads like a book on a small screen. It needs PDFs that contain text; it does not OCR scanned pages. Keep scans as PDF.
 - **Fix the details.** Title, author and cover are pulled from the file and open catalogs, then written into the book.
 - **Manage the Kindle.** See what is on it, delete books, save copies back to your phone.
-- **Get your Kindle ready.** A walkthrough that hands off to the [Kindle Modding Wiki](https://kindlemodding.org/)'s jailbreak wizard.
+- **Get your Kindle ready.** A walkthrough that hands off to the [Kindle Modding Wiki](https://kindlemodding.org/jailbreak-wizard.html)'s jailbreak wizard.
 - **Extras.** Screensavers, fonts, dictionaries, saved articles, and a read-only import of KOReader highlights and reading progress to your phone.
 - **Conversion server, on by default.** When a book needs converting, PageDrop uploads it to PageDrop's conversion server (Calibre), whose cleanup job deletes it about 24 hours later. PageDrop asks before the first upload. One switch in Settings keeps everything on the phone, and if the server fails PageDrop converts on the phone instead. You can also self-host the server. Details: [What leaves your phone](docs/PRIVACY.md).
 
