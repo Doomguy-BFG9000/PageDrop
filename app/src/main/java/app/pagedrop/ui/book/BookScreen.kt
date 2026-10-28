@@ -79,7 +79,7 @@ fun BookScreen(
     val books = (uiState as? LibraryUiState.Success)?.data.orEmpty()
 
     var filter by rememberSaveable { mutableStateOf(LibraryFilter.All) }
-    var viewMode by rememberSaveable { mutableStateOf(LibraryViewMode.List) }
+    var viewMode by rememberSaveable { mutableStateOf(LibraryViewMode.Grid) }
     var selectedIds by remember { mutableStateOf(emptySet<Int>()) }
     var sheetBookId by remember { mutableStateOf<Int?>(null) }
     var editBookId by remember { mutableStateOf<Int?>(null) }
