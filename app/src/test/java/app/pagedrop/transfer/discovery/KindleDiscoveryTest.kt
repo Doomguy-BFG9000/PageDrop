@@ -62,4 +62,13 @@ class KindleDiscoveryTest {
         assertFalse(KindleDiscovery.looksLikeKindle("SSH-2.0-OpenSSH_9.6"))
         assertFalse(KindleDiscovery.looksLikeKindle(""))
     }
+
+    @Test
+    fun connectTimeout_waitsLongerForKoreaderPort() {
+        assertEquals(KindleDiscovery.KOREADER_CONNECT_TIMEOUT_MS, KindleDiscovery.connectTimeoutFor(2222))
+        assertEquals(KindleDiscovery.CONNECT_TIMEOUT_MS, KindleDiscovery.connectTimeoutFor(22))
+        // A caller asking for an even longer timeout keeps it.
+        assertEquals(5_000, KindleDiscovery.connectTimeoutFor(2222, 5_000))
+        assertTrue(KindleDiscovery.KOREADER_CONNECT_TIMEOUT_MS >= 2_000)
+    }
 }
