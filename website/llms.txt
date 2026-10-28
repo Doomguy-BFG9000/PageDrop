@@ -1,0 +1,42 @@
+# PageDrop
+
+> PageDrop is a free, open-source (GPL-3.0) Android app that sends books from your phone to an old, jailbroken Kindle running KOReader, over Wi-Fi, with no cable, no computer and no Calibre. It was built for the Kindles that lost Kindle Store access on May 20, 2026.
+
+PageDrop is a phone-first companion for jailbroken Kindles running KOReader. You find a book on your phone, PageDrop converts it if needed, fixes its title, author and cover, and sends it to the Kindle through KOReader's built-in SSH server. Nothing extra is installed on the Kindle.
+
+Background: on May 20, 2026 Amazon stopped Kindle Store access (buying, borrowing, downloading) on every Kindle and Fire tablet released in 2012 or earlier: Kindle 1 and 2, Kindle DX, Kindle Keyboard, Kindle 4 and 5, Kindle Touch and the first Kindle Paperwhite. Books already on those devices still work and sideloading still works. Many owners jailbreak them and install KOReader; PageDrop is the phone app for getting books onto them afterwards.
+
+## What it does
+
+- Search Project Gutenberg, Standard Ebooks, the Internet Archive, Wikisource and your own OPDS catalogs from the phone
+- Save books from websites in its built-in browser
+- Convert EPUB, PDF (text PDFs, with reflow) and text to Kindle formats on the phone; an optional, self-hostable conversion server handles harder files after asking the user first (files deleted after about 24 hours, one switch keeps everything on the phone)
+- Fill in title, author and cover from the file and open catalogs (Open Library; Google Books optional)
+- Show, delete and copy back the books on the Kindle
+- A "Get your Kindle ready" checklist that links to the Kindle Modding Wiki's jailbreak guides
+- Key-based SSH login with pinned host keys; no account, no analytics, no ads
+
+## Requirements
+
+- Android 8.0 or newer
+- A jailbroken Kindle running KOReader, with KOReader's SSH server switched on, on the same Wi-Fi as the phone
+- Tested on a 2012 Kindle Paperwhite (firmware 5.6.1.1); other jailbroken Kindles running KOReader should work
+
+## Get it
+
+- [F-Droid](https://f-droid.org/packages/app.pagedrop/): built from source and signed by F-Droid
+- [GitHub releases](https://github.com/spandan-kumar/PageDrop/releases/latest): signed APK, also installable and updatable with Obtainium
+- [Source code](https://github.com/spandan-kumar/PageDrop) (GPL-3.0)
+- [Discord](https://discord.gg/cfsqhuHVfb) for setup help
+
+## Guides
+
+- [My Kindle can't reach the store anymore. What now?](https://spandan-kumar.github.io/PageDrop/old-kindle/): all the options, including USB + Calibre without a jailbreak
+- [Send books to a jailbroken Kindle without a computer](https://spandan-kumar.github.io/PageDrop/send-books-without-computer/)
+- [Kindle models](https://spandan-kumar.github.io/PageDrop/models/)
+- [What leaves your phone](https://github.com/spandan-kumar/PageDrop/blob/main/docs/PRIVACY.md)
+
+## Not
+
+- Not affiliated with Amazon. Does not remove DRM and does not touch books bought from Amazon.
+- Android only; there is no iPhone version.

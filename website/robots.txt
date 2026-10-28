@@ -3,3 +3,4 @@ User-agent: *
 Allow: /
 
 Sitemap: https://spandan-kumar.github.io/PageDrop/sitemap.xml
+# Plain-text summary for AI assistants: https://spandan-kumar.github.io/PageDrop/llms.txt
