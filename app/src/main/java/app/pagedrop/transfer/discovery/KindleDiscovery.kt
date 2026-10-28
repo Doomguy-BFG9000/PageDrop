@@ -64,7 +64,8 @@ class KindleDiscovery @Inject constructor(
             launch {
                 gate.withPermit {
                     for (port in ports) {
-                        probe(network, host, port, connectTimeoutMs, readTimeoutMs)?.let { send(ScanEvent.Found(it)) }
+                        probe(network, host, port, connectTimeoutFor(port, connectTimeoutMs), readTimeoutMs)
+                            ?.let { send(ScanEvent.Found(it)) }
                     }
                 }
                 val n = done.incrementAndGet()
@@ -121,8 +122,18 @@ class KindleDiscovery @Inject constructor(
         private const val TAG = "KindleDiscovery"
         val DEFAULT_PORTS = listOf(2222, 22)
         const val CONNECT_TIMEOUT_MS = 500
+        /**
+         * KOReader's port gets longer: a Kindle whose Wi-Fi has been idle took up to ~1.6 s to accept a
+         * connection in testing, so 500 ms often missed it. Other ports keep the short timeout to keep scans quick.
+         */
+        const val KOREADER_CONNECT_TIMEOUT_MS = 2_500
+        const val KOREADER_PORT = 2222
+
+        /** Connect timeout for [port]: never shorter than [base], longer for KOReader's SSH port. */
+        fun connectTimeoutFor(port: Int, base: Int = CONNECT_TIMEOUT_MS): Int =
+            if (port == KOREADER_PORT) maxOf(base, KOREADER_CONNECT_TIMEOUT_MS) else base
         const val READ_TIMEOUT_MS = 700
-        const val CONCURRENCY = 48
+        const val CONCURRENCY = 64
 
         /** KOReader's SSH server is dropbear, so either word suggests a Kindle running KOReader. */
         fun looksLikeKindle(banner: String): Boolean =
