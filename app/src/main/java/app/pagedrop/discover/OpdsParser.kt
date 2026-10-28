@@ -1,5 +1,9 @@
 package app.pagedrop.discover
 
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.runBlocking
 import org.w3c.dom.Element
 import org.w3c.dom.Node
 import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
@@ -147,6 +151,37 @@ internal object OpdsParser {
             DownloadOption(format, l.href, l.length, l.title ?: format.name)
         }.distinctBy { it.format }
 
+    /**
+     * Where a navigation feed's entries lead: links to other OPDS feeds from entries that offer no books themselves.
+     * Entries that look like a book/title search come first, author searches last.
+     */
+    fun navigationLinks(feed: OpdsFeed): List<String> =
+        feed.entries
+            .filter { e -> e.links.none { it.rel?.startsWith(ACQ) == true } }
+            .mapNotNull { e -> e.links.firstOrNull(::isFeedLink)?.let { e to it } }
+            .sortedBy { (e, l) -> navRank("${e.title} ${l.title.orEmpty()}") }
+            .map { it.second.href }
+            .distinct()
+
+    private val NOT_NAVIGATION = setOf("self", "start", "up", "search", "previous", "prev", "first", "last")
+
+    private fun isFeedLink(l: OpdsLink): Boolean {
+        val rel = l.rel.orEmpty()
+        val type = l.type?.lowercase().orEmpty()
+        if (rel in NOT_NAVIGATION || rel.startsWith(ACQ) || rel.startsWith("http://opds-spec.org/image")) return false
+        if (rel == "subsection" || "profile=opds-catalog" in type) return true
+        return type.startsWith("application/atom+xml") && "type=entry" !in type && (rel.isEmpty() || rel == "alternate")
+    }
+
+    private fun navRank(text: String): Int {
+        val t = text.lowercase()
+        return when {
+            "author" in t -> 2
+            "book" in t || "title" in t -> 0
+            else -> 1
+        }
+    }
+
     fun coverOf(entry: OpdsEntry): String? =
         (entry.links.firstOrNull { it.rel == "http://opds-spec.org/image" }
             ?: entry.links.firstOrNull { it.rel == "http://opds-spec.org/image/thumbnail" })?.href
@@ -176,12 +211,9 @@ internal class OpdsSource(
 
     override fun search(query: String): List<BookResult> {
         val template = templateCache[catalog.id] ?: discoverTemplate().also { templateCache[catalog.id] = it }
-        val url = OpdsParser.fillTemplate(template, query)
-        val reply = http.get(url, authFor(url), "application/atom+xml, application/xml;q=0.9, */*;q=0.5").requireOk(name)
-        val feed = OpdsParser.parseFeed(reply.body, reply.finalUrl)
-        return feed.entries.mapNotNull { e ->
-            val options = OpdsParser.acquisitionOptions(e)
-            if (options.isEmpty()) return@mapNotNull null
+        val feed = fetchFeed(OpdsParser.fillTemplate(template, query))
+        val books = books(feed).ifEmpty { followNavigation(feed) }
+        return books.distinctBy { it.id }.take(MAX_RESULTS).map { e ->
             BookResult(
                 id = "opds:${catalog.id}:${e.id}",
                 source = SourceKind.OPDS,
@@ -192,9 +224,35 @@ internal class OpdsSource(
                 language = e.language,
                 coverUrl = OpdsParser.coverOf(e),
                 description = e.summary,
-                options = options,
+                options = OpdsParser.acquisitionOptions(e),
             )
-        }.take(25)
+        }
+    }
+
+    private fun books(feed: OpdsFeed) = feed.entries.filter { OpdsParser.acquisitionOptions(it).isNotEmpty() }
+
+    /**
+     * Some catalogs answer a search with a navigation feed ("Search books", "Search authors") instead of books.
+     * Look one level down, in parallel; a failing link only matters if every link fails.
+     */
+    private fun followNavigation(feed: OpdsFeed): List<OpdsEntry> {
+        val links = OpdsParser.navigationLinks(feed).take(MAX_NAVIGATION_LINKS)
+        if (links.isEmpty()) return emptyList()
+        val outcomes = runBlocking(Dispatchers.IO) {
+            links.map { url -> async { runCatching { fetchFeed(url) } } }.awaitAll()
+        }
+        val feeds = outcomes.mapNotNull { it.getOrNull() }
+        if (feeds.isEmpty()) throw outcomes.first().exceptionOrNull()!!
+        return feeds.flatMap(::books)
+    }
+
+    private fun fetchFeed(url: String): OpdsFeed {
+        val reply = try {
+            http.get(url, authFor(url), ATOM_ACCEPT)
+        } catch (e: IllegalArgumentException) {
+            throw SourceUnavailableException("$name gave a search address PageDrop can't open", cause = e)
+        }.requireOk(name)
+        return OpdsParser.parseFeed(reply.body, reply.finalUrl)
     }
 
     private val catalogHost = catalog.url.toHttpUrlOrNull()?.host
@@ -203,7 +261,7 @@ internal class OpdsSource(
     private fun authFor(url: String): BasicAuth? = auth?.takeIf { url.toHttpUrlOrNull()?.host == catalogHost }
 
     private fun discoverTemplate(): String {
-        val root = http.get(catalog.url, authFor(catalog.url), "application/atom+xml, application/xml;q=0.9, */*;q=0.5").requireOk(name)
+        val root = http.get(catalog.url, authFor(catalog.url), ATOM_ACCEPT).requireOk(name)
         val feed = OpdsParser.parseFeed(root.body, root.finalUrl)
         val search = feed.links.firstOrNull { it.rel == "search" && it.type?.contains("opensearchdescription") == true }
         if (search != null) {
@@ -213,5 +271,10 @@ internal class OpdsSource(
         feed.links.firstOrNull { it.rel == "search" && it.type?.contains("atom+xml") == true && "{searchTerms}" in it.href }
             ?.let { return it.href }
         throw SourceUnavailableException("This catalog doesn't offer search")
+    }
+    private companion object {
+        const val ATOM_ACCEPT = "application/atom+xml, application/xml;q=0.9, */*;q=0.5"
+        const val MAX_RESULTS = 25
+        const val MAX_NAVIGATION_LINKS = 5
     }
 }

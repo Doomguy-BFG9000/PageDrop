@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<feed xmlns="http://www.w3.org/2005/Atom" xmlns:opds="http://opds-spec.org/2010/catalog">
+  <id>urn:example:search:empty</id>
+  <title>Search results</title>
+  <updated>2026-10-28T12:00:00Z</updated>
+</feed>

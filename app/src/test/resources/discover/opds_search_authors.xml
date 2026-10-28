@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<feed xmlns="http://www.w3.org/2005/Atom" xmlns:opds="http://opds-spec.org/2010/catalog">
+  <id>urn:example:search:authors:dune</id>
+  <title>Authors matching "dune"</title>
+  <updated>2026-10-28T12:00:00Z</updated>
+  <entry>
+    <title>Dune Writer</title>
+    <id>urn:example:author:7</id>
+    <link rel="subsection" type="application/atom+xml;profile=opds-catalog;kind=acquisition" href="/opds/author/7"/>
+  </entry>
+</feed>
