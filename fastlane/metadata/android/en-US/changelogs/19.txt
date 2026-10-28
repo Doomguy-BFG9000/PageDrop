@@ -1,0 +1,3 @@
+- Your OPDS catalogs work with more servers: Project Gutenberg's catalog search now returns books instead of "unavailable", each book shows once, and the first search no longer times out
+- Find my Kindle finds a Kindle whose Wi-Fi has been idle
+- The library opens in the card view
