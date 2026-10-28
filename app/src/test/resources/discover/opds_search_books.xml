@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<feed xmlns="http://www.w3.org/2005/Atom" xmlns:opds="http://opds-spec.org/2010/catalog">
+  <id>urn:example:search:books:dune</id>
+  <title>Books matching "dune"</title>
+  <updated>2026-10-28T12:00:00Z</updated>
+  <entry>
+    <title>Dune</title>
+    <id>urn:example:book:1</id>
+    <author><name>Frank Herbert</name></author>
+    <link rel="http://opds-spec.org/image" type="image/jpeg" href="/covers/1.jpg"/>
+    <link rel="http://opds-spec.org/acquisition" type="application/epub+zip" href="/files/1.epub"/>
+  </entry>
+  <entry>
+    <title>Dune Messiah</title>
+    <id>urn:example:book:2</id>
+    <author><name>Frank Herbert</name></author>
+    <link rel="http://opds-spec.org/acquisition" type="application/x-mobipocket-ebook" href="/files/2.mobi"/>
+  </entry>
+</feed>
