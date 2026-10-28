@@ -118,4 +118,19 @@ class OpdsSearchTest {
         assertEquals(1, searchRequests.size)
         assertTrue(searchRequests.single().contains("lib.example.org/opds/search"))
     }
+
+    @Test
+    fun oneBookListedTwiceInItsFeedShowsOnce() {
+        val http = FakeHttp().apply {
+            on("books.example.com/opds/book/1342.opds", fixture("opds_book_1342.xml"))
+            on("books.example.com/opds/book/42671.opds", fixture("opds_book_42671.xml"))
+            on("books.example.com/opds/search?q=", fixture("opds_search_gutenberg_nav.xml"))
+        }
+        val results = source(http).search("pride")
+        // Two editions (two book feeds), each once, not four cards.
+        assertEquals(listOf("urn:example:1342:2", "urn:example:42671:2"), results.map { it.id.removePrefix("opds:cat:") })
+        // The first packaging listed wins per format: the small "no images" Kindle file.
+        val mobi = results[0].options.single { it.format == BookFormat.MOBI }
+        assertEquals("https://books.example.com/files/1342.kindle.noimages", mobi.url)
+    }
 }

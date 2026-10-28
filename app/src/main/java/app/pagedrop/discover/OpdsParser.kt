@@ -248,8 +248,16 @@ internal class OpdsSource(
         }
         val feeds = outcomes.mapNotNull { it.getOrNull() }
         if (feeds.isEmpty()) throw outcomes.first().exceptionOrNull()!!
-        return feeds.flatMap(::books)
+        return feeds.flatMap { mergeSameBook(books(it)) }
     }
+
+    /**
+     * One book's feed can list the same book more than once (Project Gutenberg: "no images" and "with images"
+     * packagings under different ids). Show it once, with every download; the first listed wins per format.
+     */
+    private fun mergeSameBook(entries: List<OpdsEntry>): List<OpdsEntry> =
+        entries.groupBy { e -> e.title.trim().lowercase() to e.authors.map { it.trim().lowercase() } }
+            .values.map { same -> same.first().copy(links = same.flatMap { it.links }) }
 
     private fun fetchFeed(url: String): OpdsFeed {
         val reply = try {
