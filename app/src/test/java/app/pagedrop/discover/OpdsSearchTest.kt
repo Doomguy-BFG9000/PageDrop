@@ -97,4 +97,40 @@ class OpdsSearchTest {
         assertTrue(error is SourceUnavailableException)
         assertTrue(error!!.message!!.contains("HTTP"))
     }
+
+    @Test
+    fun warmUpFindsTheSearchAddressSoTheFirstSearchSkipsIt() = runBlocking {
+        val http = FakeHttp().apply {
+            on("lib.example.org/opds/search", fixture("opds_search_empty.xml"))
+            on("lib.example.org/opds/osd.xml", fixture("opds_osd.xml"))
+            on("lib.example.org/opds/", fixture("opds_root.xml"))
+        }
+        val settings = newSettings(http)
+        settings.addCatalog("https://lib.example.org/opds/", null, null).getOrThrow()
+        SourceKind.entries.filter { it != SourceKind.OPDS }.forEach { settings.setEnabled(it, false) }
+        val engine = BookSearchEngine(settings, http, 5_000)
+
+        engine.warmUp()
+        val before = http.requests.size
+        engine.search("anything")
+
+        val searchRequests = http.requests.drop(before).map { it.first }
+        assertEquals(1, searchRequests.size)
+        assertTrue(searchRequests.single().contains("lib.example.org/opds/search"))
+    }
+
+    @Test
+    fun oneBookListedTwiceInItsFeedShowsOnce() {
+        val http = FakeHttp().apply {
+            on("books.example.com/opds/book/1342.opds", fixture("opds_book_1342.xml"))
+            on("books.example.com/opds/book/42671.opds", fixture("opds_book_42671.xml"))
+            on("books.example.com/opds/search?q=", fixture("opds_search_gutenberg_nav.xml"))
+        }
+        val results = source(http).search("pride")
+        // Two editions (two book feeds), each once, not four cards.
+        assertEquals(listOf("urn:example:1342:2", "urn:example:42671:2"), results.map { it.id.removePrefix("opds:cat:") })
+        // The first packaging listed wins per format: the small "no images" Kindle file.
+        val mobi = results[0].options.single { it.format == BookFormat.MOBI }
+        assertEquals("https://books.example.com/files/1342.kindle.noimages", mobi.url)
+    }
 }

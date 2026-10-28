@@ -78,6 +78,7 @@ class DiscoverViewModel @Inject constructor(
         viewModelScope.launch {
             bookRepository.getBooks().catch { }.collect { _libraryBooks.value = it }
         }
+        viewModelScope.launch { runCatching { finder.warmUp() } }
     }
 
     fun onQueryChange(value: String) = _search.update { it.copy(query = value) }

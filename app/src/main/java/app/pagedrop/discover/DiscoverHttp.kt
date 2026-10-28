@@ -109,7 +109,7 @@ class OkHttpDiscoverHttp internal constructor(
     }
 
     private fun request(url: String, auth: BasicAuth?, accept: String?): Request =
-        Request.Builder().url(url)
+        Request.Builder().url(secureUrl(url))
             .header("User-Agent", DISCOVER_USER_AGENT)
             .apply {
                 if (accept != null) header("Accept", accept)
@@ -151,3 +151,11 @@ internal fun HttpReply.requireOk(what: String): HttpReply {
     if (!ok) throw SourceUnavailableException("$what answered with an error (HTTP $code)")
     return this
 }
+
+/**
+ * Android blocks plain-HTTP requests for this app, so an `http://` address would only ever fail. Catalogs still
+ * hand some out (Project Gutenberg's OpenSearch template is `http://m.gutenberg.org/...`), and those servers answer
+ * on HTTPS, so the request goes there instead. Anything that isn't `http://` is returned unchanged.
+ */
+internal fun secureUrl(url: String): String =
+    if (url.regionMatches(0, "http://", 0, 7, ignoreCase = true)) "https://" + url.substring(7) else url

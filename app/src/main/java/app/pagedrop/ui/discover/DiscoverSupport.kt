@@ -35,6 +35,8 @@ interface BookFinder {
     suspend fun resolve(result: BookResult): BookResult
     fun bestOption(result: BookResult): DownloadOption?
     fun hasEnabledSources(): Boolean
+    /** Prepares sources ahead of the first search; optional. */
+    suspend fun warmUp() {}
 }
 
 interface BookFetcher {
@@ -46,6 +48,7 @@ class EngineBookFinder @Inject constructor(
     private val settings: SourceSettings,
 ) : BookFinder {
     override suspend fun search(query: String) = engine.search(query)
+    override suspend fun warmUp() = engine.warmUp()
     override suspend fun resolve(result: BookResult) = engine.resolve(result)
     override fun bestOption(result: BookResult) = engine.bestOption(result)
     override fun hasEnabledSources(): Boolean =
