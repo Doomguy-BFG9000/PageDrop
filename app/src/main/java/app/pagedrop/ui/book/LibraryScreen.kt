@@ -32,7 +32,6 @@ import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.painterResource
@@ -85,30 +84,14 @@ internal fun LibraryScreenContent(
     val isEmptyLibrary = uiState is LibraryUiState.Success && books.isEmpty()
 
     Box(modifier = modifier.fillMaxSize()) {
-        // Background image — full-bleed, Kindle aesthetic
+        // Background poster: full width at its own proportions, pinned to the bottom of the screen.
         Image(
             painter = painterResource(id = R.drawable.bezos_bg),
             contentDescription = null,
-            modifier = Modifier.fillMaxSize(),
-            contentScale = ContentScale.Crop,
+            modifier = Modifier.fillMaxWidth().align(Alignment.BottomCenter),
+            contentScale = ContentScale.FillWidth,
+            alignment = Alignment.BottomCenter,
             alpha = 0.85f,
-        )
-
-        // Gradient overlay — fades from transparent at top to surface at bottom
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .background(
-                    Brush.verticalGradient(
-                        colors = listOf(
-                            Color.Transparent,
-                            Color.Transparent,
-                            MaterialTheme.colorScheme.surface.copy(alpha = 0.50f),
-                            MaterialTheme.colorScheme.surface.copy(alpha = 0.85f),
-                            MaterialTheme.colorScheme.surface,
-                        ),
-                    )
-                )
         )
 
         // Pinned bar: transparent at rest, solid with a hairline once the list or grid scrolls under it.
