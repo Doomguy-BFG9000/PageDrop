@@ -56,13 +56,6 @@ internal fun optionLabel(option: DownloadOption): String {
 private fun KeepChoice(format: String, keep: Boolean, onKeepChange: (Boolean) -> Unit, enabled: Boolean) {
     Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
         if (enabled) KeepChoiceRadios(format, keep, onKeepChange) else KeepChoiceRadios(format, keep) {}
-        if (keep && format.equals("EPUB", ignoreCase = true)) {
-            Text(
-                "Sent as is to KOReader’s Books folder.",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-        }
     }
 }
 

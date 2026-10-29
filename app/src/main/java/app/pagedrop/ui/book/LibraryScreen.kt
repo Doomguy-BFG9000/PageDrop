@@ -35,6 +35,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.runtime.remember
 import androidx.compose.ui.graphics.luminance
+import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.graphics.ColorMatrix
 import androidx.compose.ui.graphics.ColorFilter
 import androidx.compose.ui.layout.ContentScale
@@ -92,7 +93,8 @@ internal fun LibraryScreenContent(
         // Printed in two tones so its white parts are exactly the screen colour (no "sticker" patches):
         // white -> background, black -> ink. Dark mode prints black on the dark background.
         val background = MaterialTheme.colorScheme.background
-        val ink = if (background.luminance() < 0.5f) Color.Black else MaterialTheme.colorScheme.onBackground
+        // Light mode prints at about a third strength so book titles stay readable over it.
+        val ink = if (background.luminance() < 0.5f) Color.Black else lerp(background, MaterialTheme.colorScheme.onBackground, 0.32f)
         Image(
             painter = painterResource(id = R.drawable.bezos_bg),
             contentDescription = null,
