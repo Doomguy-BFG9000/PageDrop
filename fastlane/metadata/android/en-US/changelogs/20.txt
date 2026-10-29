@@ -1,0 +1,4 @@
+- Keep as is: send books in their original format, without converting (Settings > Send format, or per book)
+- Browse your OPDS catalogs: folders, books, more pages as you scroll, and search
+- When a catalog answers a search with a menu, you choose the option
+- Library: the top bar turns solid when you scroll; the background art sits at the bottom
