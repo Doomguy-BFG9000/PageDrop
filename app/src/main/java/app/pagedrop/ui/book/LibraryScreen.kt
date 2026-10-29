@@ -28,6 +28,8 @@ import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.material3.TopAppBarDefaults
+import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Brush
@@ -58,6 +60,7 @@ internal data class LibraryActions(
     val onFindCovers: () -> Unit = {},
 )
 
+@OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
 @Composable
 internal fun LibraryScreenContent(
     uiState: LibraryUiState,
@@ -108,8 +111,10 @@ internal fun LibraryScreenContent(
                 )
         )
 
+        // Pinned bar: transparent at rest, solid with a hairline once the list or grid scrolls under it.
+        val scrollBehavior = TopAppBarDefaults.pinnedScrollBehavior()
         Scaffold(
-            modifier = Modifier.fillMaxSize(),
+            modifier = Modifier.fillMaxSize().nestedScroll(scrollBehavior.nestedScrollConnection),
             // The shell applies system-bar and bottom-navigation padding to this screen.
             contentWindowInsets = WindowInsets(0, 0, 0, 0),
             containerColor = Color.Transparent,
@@ -120,9 +125,10 @@ internal fun LibraryScreenContent(
                         totalCount = visibleCount,
                         onClear = actions.onClearSelection,
                         onSelectAll = actions.onSelectAll,
+                        scrollBehavior = scrollBehavior,
                     )
                 } else {
-                    LibraryTopBar(onOpenSettings = actions.onOpenSettings)
+                    LibraryTopBar(onOpenSettings = actions.onOpenSettings, scrollBehavior = scrollBehavior)
                 }
             },
             bottomBar = {
