@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="utf-8"?>
+<feed xmlns="http://www.w3.org/2005/Atom">
+  <id>urn:example:browse:mixed</id>
+  <title>Staff picks</title>
+  <entry>
+    <title>More picks</title>
+    <id>urn:example:mixed:folder1</id>
+    <link rel="subsection" type="application/atom+xml;profile=opds-catalog" href="/opds/browse/more"/>
+  </entry>
+  <entry>
+    <title>A Quiet Harbour</title>
+    <id>urn:example:mixed:book1</id>
+    <author><name>Dara Lund</name></author>
+    <link rel="http://opds-spec.org/acquisition/open-access" type="application/epub+zip" href="/files/m1.epub"/>
+  </entry>
+  <entry>
+    <title>By author</title>
+    <id>urn:example:mixed:folder2</id>
+    <link rel="subsection" type="application/atom+xml;profile=opds-catalog" href="/opds/browse/authors"/>
+  </entry>
+  <entry>
+    <title>Borrow-only Title</title>
+    <id>urn:example:mixed:book2</id>
+    <link rel="http://opds-spec.org/acquisition/borrow" type="application/epub+zip" href="/files/m2.epub"/>
+  </entry>
+</feed>

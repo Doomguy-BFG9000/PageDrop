@@ -76,7 +76,7 @@ internal class OkHttpMetadataHttp(
 ) : MetadataHttp {
     override fun get(url: String): MetadataHttp.Reply {
         val request = Request.Builder().url(url)
-            .header("User-Agent", "PageDrop/1.0 (Android; book metadata lookup)")
+            .header("User-Agent", "PageDrop/${app.pagedrop.BuildConfig.VERSION_NAME} (Android; book metadata lookup)")
             .header("Accept", "application/json")
             .build()
         client.newCall(request).execute().use { response ->
@@ -333,7 +333,7 @@ object BookMetadataLookup {
     /** Blocking; rejects tiny placeholders (Open Library serves a 1x1 gif) and non-image payloads. */
     fun downloadCoverBytes(coverUrl: String): ByteArray? = try {
         val request = Request.Builder().url(coverUrl.replace("http://", "https://"))
-            .header("User-Agent", "PageDrop/1.0 (Android; book metadata lookup)").build()
+            .header("User-Agent", "PageDrop/${app.pagedrop.BuildConfig.VERSION_NAME} (Android; book metadata lookup)").build()
         okHttp.rawClient.newCall(request).execute().use { response ->
             if (!response.isSuccessful) null
             else response.body?.bytes()?.takeIf { CoverImages.isUsableCover(it) }

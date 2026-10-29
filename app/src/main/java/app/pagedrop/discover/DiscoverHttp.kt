@@ -11,7 +11,7 @@ import java.util.concurrent.TimeUnit
 import javax.inject.Inject
 import javax.inject.Singleton
 
-const val DISCOVER_USER_AGENT = "PageDrop/0.7.0 (+https://github.com/spandan-kumar/PageDrop)"
+val DISCOVER_USER_AGENT = "PageDrop/${app.pagedrop.BuildConfig.VERSION_NAME} (+https://github.com/spandan-kumar/PageDrop)"
 
 data class BasicAuth(val username: String, val password: String)
 

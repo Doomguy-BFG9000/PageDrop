@@ -60,6 +60,10 @@ class DiscoverViewModel @Inject constructor(
 
     val recent: StateFlow<List<String>> = recentSearches.items
 
+    /** Enabled OPDS catalogs, shown as "Your catalogs" while the search box is empty. */
+    val catalogs: StateFlow<List<app.pagedrop.discover.OpdsCatalog>> =
+        finder.catalogs.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+
     private val _libraryBooks = MutableStateFlow<List<Book>>(emptyList())
     val libraryBooks: StateFlow<List<Book>> = _libraryBooks.asStateFlow()
 
@@ -94,6 +98,14 @@ class DiscoverViewModel @Inject constructor(
         viewModelScope.launch {
             bookRepository.getBooks().catch { }.collect { _libraryBooks.value = it }
         }
+    }
+
+    private var warmedUp = false
+
+    /** Prepares sources ahead of the first search. Called by the Find screen only, not the catalog view. */
+    fun warmUp() {
+        if (warmedUp) return
+        warmedUp = true
         viewModelScope.launch { runCatching { finder.warmUp() } }
     }
 

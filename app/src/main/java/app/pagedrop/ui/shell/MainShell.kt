@@ -51,6 +51,7 @@ fun MainShell(
     onOpenFonts: () -> Unit,
     onOpenDictionaries: () -> Unit,
     onOpenBookSources: () -> Unit = {},
+    onOpenCatalog: (catalogId: String, feedUrl: String?) -> Unit = { _, _ -> },
     shellViewModel: ShellViewModel = hiltViewModel(),
 ) {
     var tabIndex by rememberSaveable { mutableIntStateOf(0) }
@@ -68,7 +69,8 @@ fun MainShell(
                     onOpenSettings = onOpenSettings,
                     onOpenConnectionSetup = onOpenSetup,
                     onOpenArticle = onOpenArticle,
-                    onOpenBookSources = onOpenBookSources
+                    onOpenBookSources = onOpenBookSources,
+                    onOpenCatalog = onOpenCatalog
                 )
                 Tab.Kindle -> KindleScreen(
                     onOpenSettings = onOpenSettings,

@@ -31,6 +31,9 @@ import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.navigation3.runtime.NavKey
 import androidx.navigation3.runtime.entryProvider
 import androidx.navigation3.runtime.rememberNavBackStack
+import androidx.navigation3.runtime.rememberSaveableStateHolderNavEntryDecorator
+import androidx.lifecycle.viewmodel.navigation3.rememberViewModelStoreNavEntryDecorator
+import app.pagedrop.ui.discover.CatalogScreen
 import androidx.navigation3.ui.NavDisplay
 import app.pagedrop.ui.connection.ConnectionScreen
 import app.pagedrop.ui.onboarding.KindleReadyScreen
@@ -66,6 +69,11 @@ fun MainNavigation(shellViewModel: ShellViewModel = hiltViewModel()) {
         backStack = backStack,
         onBack = { pop() },
         // Plain, quick cross-fade everywhere (e-ink friendly): no slide, and no scale-down on back.
+        // Per-screen ViewModels (the catalog view's back stack) live exactly as long as their entry.
+        entryDecorators = listOf(
+            rememberSaveableStateHolderNavEntryDecorator(),
+            rememberViewModelStoreNavEntryDecorator(),
+        ),
         transitionSpec = { fadeOnly },
         popTransitionSpec = { fadeOnly },
         predictivePopTransitionSpec = { fadeOnly },
@@ -81,7 +89,18 @@ fun MainNavigation(shellViewModel: ShellViewModel = hiltViewModel()) {
                     onOpenFonts = { push(Fonts) },
                     onOpenDictionaries = { push(Dictionaries) },
                     onOpenBookSources = { push(BookSources) },
+                    onOpenCatalog = { id, url -> push(CatalogRoute(id, url)) },
                     onOpenKindleReady = { push(KindleReady) }
+                )
+            }
+            entry<CatalogRoute> { route ->
+                CatalogScreen(
+                    catalogId = route.catalogId,
+                    feedUrl = route.feedUrl,
+                    modifier = Modifier.safeDrawingPadding(),
+                    onBack = pop,
+                    // A finished "Send to Kindle" goes back to the library, which runs the transfer.
+                    onSendBook = { backStack.removeAll { it is CatalogRoute } },
                 )
             }
             entry<Setup> {

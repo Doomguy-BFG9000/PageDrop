@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="utf-8"?>
+<feed xmlns="http://www.w3.org/2005/Atom">
+  <id>urn:example:browse:novels</id>
+  <title>Novels</title>
+  <link rel="self" type="application/atom+xml;profile=opds-catalog;kind=acquisition" href="/opds/browse/novels"/>
+  <link rel="next" type="application/atom+xml;profile=opds-catalog;kind=acquisition" href="/opds/browse/novels?page=2"/>
+  <entry>
+    <title>The Lantern Keeper</title>
+    <id>urn:example:novel:1</id>
+    <author><name>Ada Marsh</name></author>
+    <link rel="http://opds-spec.org/image" type="image/jpeg" href="/covers/n1.jpg"/>
+    <link rel="http://opds-spec.org/acquisition" type="application/epub+zip" href="/files/n1.epub"/>
+    <link rel="http://opds-spec.org/acquisition" type="application/x-mobipocket-ebook" href="/files/n1.mobi"/>
+  </entry>
+  <entry>
+    <title>Salt and Paper</title>
+    <id>urn:example:novel:2</id>
+    <author><name>Ben Okoro</name></author>
+    <link rel="http://opds-spec.org/acquisition" type="application/epub+zip" href="/files/n2.epub"/>
+  </entry>
+</feed>

@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<feed xmlns="http://www.w3.org/2005/Atom">
+  <id>https://books.example.com/opds/search?q=lighthouse</id>
+  <title>Search results</title>
+  <entry>
+    <id>https://books.example.com/opds/book/100.opds</id>
+    <title>The Copper Lighthouse</title>
+    <link type="application/atom+xml;profile=opds-catalog" rel="subsection" href="/opds/book/100.opds"/>
+  </entry>
+  <entry>
+    <id>https://books.example.com/opds/book/101.opds</id>
+    <title>The Copper Lighthouse (annotated)</title>
+    <link type="application/atom+xml;profile=opds-catalog" rel="subsection" href="/opds/book/101.opds"/>
+  </entry>
+</feed>

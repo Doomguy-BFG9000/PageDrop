@@ -36,10 +36,15 @@ class BookSearchEngine internal constructor(
             sources.map { source ->
                 async {
                     try {
-                        // Your own catalogs may need a second round (following "Search books" links), so they get longer.
+                        // Your own catalogs can be slow servers (and may need to find their search address first).
                         val limit = if (source is OpdsSource) sourceTimeoutMs * 3 / 2 else sourceTimeoutMs
-                        val found = withTimeout(limit) { runInterruptible(Dispatchers.IO) { source.search(q) } }
-                        SourceOutcome(source, found, null)
+                        if (source is OpdsSource) {
+                            val found = withTimeout(limit) { runInterruptible(Dispatchers.IO) { source.searchCatalog(q) } }
+                            SourceOutcome(source, found.results, null, found.menu)
+                        } else {
+                            val found = withTimeout(limit) { runInterruptible(Dispatchers.IO) { source.search(q) } }
+                            SourceOutcome(source, found, null)
+                        }
                     } catch (e: TimeoutCancellationException) {
                         SourceOutcome(source, emptyList(), SourceError(source.name, false, "${source.name} took too long to answer"))
                     } catch (e: kotlin.coroutines.cancellation.CancellationException) {
@@ -52,7 +57,31 @@ class BookSearchEngine internal constructor(
         }
         val merged = mergeAndRank(q, outcomes.flatMap { it.results })
         return SearchResults(query, merged, outcomes.mapNotNull { it.error },
-            BookWebSearch.links(q, outcomes.filter { it.error != null }.map { it.source.kind }.toSet(), settings.showShadowLibraries.value))
+            BookWebSearch.links(q, outcomes.filter { it.error != null }.map { it.source.kind }.toSet(), settings.showShadowLibraries.value),
+            outcomes.mapNotNull { it.menu })
+    }
+
+    /** Opens one page of a feed of a catalog the user added ([url] null = the catalog's root). */
+    suspend fun browseCatalog(catalogId: String, url: String? = null): CatalogPage =
+        catalogCall(catalogId) { it.page(url ?: it.catalog.url) }
+
+    /** Searches inside a catalog view; [link] is the current feed's search link (null = the catalog's own). */
+    suspend fun searchCatalog(catalogId: String, link: CatalogSearch?, query: String): CatalogPage =
+        catalogCall(catalogId) { it.search(link, TextUtil.cleanQuery(query)) }
+
+    private suspend fun <T> catalogCall(catalogId: String, block: (OpdsClient) -> T): T {
+        val catalog = settings.catalogs.value.firstOrNull { it.id == catalogId }
+            ?: throw SourceUnavailableException("This catalog is no longer in your book sources")
+        val client = OpdsClient(catalog, settings.credentialsFor(catalog.id), http.withTimeout(sourceTimeoutMs), opdsTemplates)
+        return try {
+            withTimeout(sourceTimeoutMs * 3 / 2) { runInterruptible(Dispatchers.IO) { block(client) } }
+        } catch (e: TimeoutCancellationException) {
+            throw SourceUnavailableException("${catalog.title} took too long to answer", cause = e)
+        } catch (e: kotlin.coroutines.cancellation.CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            throw describe(e, catalog.title)
+        }
     }
 
     /**
@@ -115,7 +144,7 @@ class BookSearchEngine internal constructor(
         return list
     }
 
-    private class SourceOutcome(val source: BookSource, val results: List<BookResult>, val error: SourceError?)
+    private class SourceOutcome(val source: BookSource, val results: List<BookResult>, val error: SourceError?, val menu: CatalogMenu? = null)
 
     private fun errorFor(source: BookSource, e: Exception): SourceError {
         val described = describe(e, source.name)

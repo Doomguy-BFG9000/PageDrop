@@ -1,12 +1,7 @@
 package app.pagedrop.discover
 
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.async
-import kotlinx.coroutines.awaitAll
-import kotlinx.coroutines.runBlocking
 import org.w3c.dom.Element
 import org.w3c.dom.Node
-import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 import java.io.ByteArrayInputStream
 import java.net.URI
 import javax.xml.parsers.DocumentBuilderFactory
@@ -22,6 +17,11 @@ internal data class OpdsEntry(
     val language: String?,
     val links: List<OpdsLink>,
 )
+
+internal sealed interface OpdsItem {
+    data class Folder(val entry: OpdsEntry, val url: String) : OpdsItem
+    data class Book(val entry: OpdsEntry) : OpdsItem
+}
 
 internal data class OpdsFeed(val title: String?, val baseUrl: String, val links: List<OpdsLink>, val entries: List<OpdsEntry>)
 
@@ -151,19 +151,48 @@ internal object OpdsParser {
             DownloadOption(format, l.href, l.length, l.title ?: format.name)
         }.distinctBy { it.format }
 
-    /**
-     * Where a navigation feed's entries lead: links to other OPDS feeds from entries that offer no books themselves.
-     * Entries that look like a book/title search come first, author searches last.
-     */
-    fun navigationLinks(feed: OpdsFeed): List<String> =
-        feed.entries
-            .filter { e -> e.links.none { it.rel?.startsWith(ACQ) == true } }
-            .mapNotNull { e -> e.links.firstOrNull(::isFeedLink)?.let { e to it } }
-            .sortedBy { (e, l) -> navRank("${e.title} ${l.title.orEmpty()}") }
-            .map { it.second.href }
-            .distinct()
+    /** The next page of a paginated feed (`rel="next"`), if any. */
+    fun nextUrl(feed: OpdsFeed): String? = feed.links.firstOrNull { it.rel == "next" }?.href
 
-    private val NOT_NAVIGATION = setOf("self", "start", "up", "search", "previous", "prev", "first", "last")
+    /** The feed's own search link: an OpenSearch description, else an Atom link that is itself a template. */
+    fun searchOf(feed: OpdsFeed): CatalogSearch? {
+        val searches = feed.links.filter { it.rel == "search" }
+        searches.firstOrNull { it.type?.contains("opensearchdescription") == true }
+            ?.let { return CatalogSearch(it.href, true) }
+        return searches.firstOrNull { it.type?.contains("atom+xml") == true && "{searchTerms}" in it.href }
+            ?.let { CatalogSearch(it.href, false) }
+    }
+
+    /**
+     * What each entry is, in feed order: a book when it carries acquisition links (even ones we can't use),
+     * otherwise a folder when it links to another feed. Entries that are neither are skipped.
+     */
+    fun items(feed: OpdsFeed): List<OpdsItem> = feed.entries.mapNotNull { e ->
+        if (e.links.any { it.rel?.startsWith(ACQ) == true }) OpdsItem.Book(e)
+        else e.links.firstOrNull(::isFeedLink)?.let { OpdsItem.Folder(e, it.href) }
+    }
+
+    /**
+     * Some catalogs list one book in several packagings (for example "with images" and "no images") as separate
+     * entries in that book's own feed. When every book on the page has the same title and authors, that is what
+     * this is: show it once, with every download; the first listed wins per format. On any other page (several
+     * different books, even if two share a title) nothing is merged, so each edition keeps its own files.
+     */
+    fun mergeSameBook(items: List<OpdsItem>): List<OpdsItem> {
+        val books = items.filterIsInstance<OpdsItem.Book>()
+        if (books.size < 2) return items
+        fun key(e: OpdsEntry) = e.title.trim().lowercase() to e.authors.map { it.trim().lowercase() }
+        if (books.map { key(it.entry) }.distinct().size != 1) return items
+        val first = books.first().entry
+        val merged = OpdsItem.Book(first.copy(links = books.flatMap { it.entry.links }))
+        return items.mapNotNull { if (it !is OpdsItem.Book) it else if (it === books.first()) merged else null }
+    }
+
+    fun thumbnailOf(entry: OpdsEntry): String? =
+        (entry.links.firstOrNull { it.rel == "http://opds-spec.org/image/thumbnail" }
+            ?: entry.links.firstOrNull { it.rel == "http://opds-spec.org/image" })?.href
+
+    private val NOT_NAVIGATION =setOf("self", "start", "up", "search", "previous", "prev", "first", "last")
 
     private fun isFeedLink(l: OpdsLink): Boolean {
         val rel = l.rel.orEmpty()
@@ -171,15 +200,6 @@ internal object OpdsParser {
         if (rel in NOT_NAVIGATION || rel.startsWith(ACQ) || rel.startsWith("http://opds-spec.org/image")) return false
         if (rel == "subsection" || "profile=opds-catalog" in type) return true
         return type.startsWith("application/atom+xml") && "type=entry" !in type && (rel.isEmpty() || rel == "alternate")
-    }
-
-    private fun navRank(text: String): Int {
-        val t = text.lowercase()
-        return when {
-            "author" in t -> 2
-            "book" in t || "title" in t -> 0
-            else -> 1
-        }
     }
 
     fun coverOf(entry: OpdsEntry): String? =
@@ -198,96 +218,4 @@ internal object OpdsParser {
 
     private fun Element.child(local: String): Element? = children(local).firstOrNull()
     private fun Element.text(): String = textContent.orEmpty().trim()
-}
-
-internal class OpdsSource(
-    private val catalog: OpdsCatalog,
-    private val auth: BasicAuth?,
-    private val http: DiscoverHttp,
-    private val templateCache: MutableMap<String, String>,
-) : BookSource {
-    override val kind = SourceKind.OPDS
-    override val name = catalog.title
-
-    override fun search(query: String): List<BookResult> {
-        val template = templateCache[catalog.id] ?: discoverTemplate().also { templateCache[catalog.id] = it }
-        val feed = fetchFeed(OpdsParser.fillTemplate(template, query))
-        val books = books(feed).ifEmpty { followNavigation(feed) }
-        return books.distinctBy { it.id }.take(MAX_RESULTS).map { e ->
-            BookResult(
-                id = "opds:${catalog.id}:${e.id}",
-                source = SourceKind.OPDS,
-                sourceName = catalog.title,
-                title = e.title,
-                author = e.authors.joinToString(", "),
-                year = e.year,
-                language = e.language,
-                coverUrl = OpdsParser.coverOf(e),
-                description = e.summary,
-                options = OpdsParser.acquisitionOptions(e),
-            )
-        }
-    }
-
-    /** Finds and caches the catalog's search address ahead of the first search. */
-    fun prefetchTemplate() {
-        if (templateCache[catalog.id] == null) templateCache[catalog.id] = discoverTemplate()
-    }
-
-    private fun books(feed: OpdsFeed) = feed.entries.filter { OpdsParser.acquisitionOptions(it).isNotEmpty() }
-
-    /**
-     * Some catalogs answer a search with a navigation feed ("Search books", "Search authors") instead of books.
-     * Look one level down, in parallel; a failing link only matters if every link fails.
-     */
-    private fun followNavigation(feed: OpdsFeed): List<OpdsEntry> {
-        val links = OpdsParser.navigationLinks(feed).take(MAX_NAVIGATION_LINKS)
-        if (links.isEmpty()) return emptyList()
-        val outcomes = runBlocking(Dispatchers.IO) {
-            links.map { url -> async { runCatching { fetchFeed(url) } } }.awaitAll()
-        }
-        val feeds = outcomes.mapNotNull { it.getOrNull() }
-        if (feeds.isEmpty()) throw outcomes.first().exceptionOrNull()!!
-        return feeds.flatMap { mergeSameBook(books(it)) }
-    }
-
-    /**
-     * One book's feed can list the same book more than once (Project Gutenberg: "no images" and "with images"
-     * packagings under different ids). Show it once, with every download; the first listed wins per format.
-     */
-    private fun mergeSameBook(entries: List<OpdsEntry>): List<OpdsEntry> =
-        entries.groupBy { e -> e.title.trim().lowercase() to e.authors.map { it.trim().lowercase() } }
-            .values.map { same -> same.first().copy(links = same.flatMap { it.links }) }
-
-    private fun fetchFeed(url: String): OpdsFeed {
-        val reply = try {
-            http.get(url, authFor(url), ATOM_ACCEPT)
-        } catch (e: IllegalArgumentException) {
-            throw SourceUnavailableException("$name gave a search address PageDrop can't open", cause = e)
-        }.requireOk(name)
-        return OpdsParser.parseFeed(reply.body, reply.finalUrl)
-    }
-
-    private val catalogHost = catalog.url.toHttpUrlOrNull()?.host
-
-    /** Credentials only ever go to the catalog's own host. */
-    private fun authFor(url: String): BasicAuth? = auth?.takeIf { url.toHttpUrlOrNull()?.host == catalogHost }
-
-    private fun discoverTemplate(): String {
-        val root = http.get(catalog.url, authFor(catalog.url), ATOM_ACCEPT).requireOk(name)
-        val feed = OpdsParser.parseFeed(root.body, root.finalUrl)
-        val search = feed.links.firstOrNull { it.rel == "search" && it.type?.contains("opensearchdescription") == true }
-        if (search != null) {
-            val desc = http.get(search.href, authFor(search.href), "application/opensearchdescription+xml, application/xml, */*").requireOk(name)
-            OpdsParser.parseOpenSearchTemplate(desc.body)?.let { return OpdsParser.resolve(desc.finalUrl, it) }
-        }
-        feed.links.firstOrNull { it.rel == "search" && it.type?.contains("atom+xml") == true && "{searchTerms}" in it.href }
-            ?.let { return it.href }
-        throw SourceUnavailableException("This catalog doesn't offer search")
-    }
-    private companion object {
-        const val ATOM_ACCEPT = "application/atom+xml, application/xml;q=0.9, */*;q=0.5"
-        const val MAX_RESULTS = 25
-        const val MAX_NAVIGATION_LINKS = 5
-    }
 }
