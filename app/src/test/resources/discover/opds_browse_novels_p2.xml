@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<feed xmlns="http://www.w3.org/2005/Atom">
+  <id>urn:example:browse:novels:2</id>
+  <title>Novels</title>
+  <link rel="self" type="application/atom+xml;profile=opds-catalog;kind=acquisition" href="/opds/browse/novels?page=2"/>
+  <link rel="previous" type="application/atom+xml;profile=opds-catalog;kind=acquisition" href="/opds/browse/novels"/>
+  <entry>
+    <title>Salt and Paper</title>
+    <id>urn:example:novel:2</id>
+    <author><name>Ben Okoro</name></author>
+    <link rel="http://opds-spec.org/acquisition" type="application/epub+zip" href="/files/n2.epub"/>
+  </entry>
+  <entry>
+    <title>Winter Orchard</title>
+    <id>urn:example:novel:3</id>
+    <author><name>Chen Wei</name></author>
+    <link rel="http://opds-spec.org/acquisition" type="application/pdf" href="/files/n3.pdf"/>
+  </entry>
+</feed>

@@ -61,7 +61,9 @@ fun BookScreen(
     onOpenConnectionSetup: () -> Unit,
     onOpenArticle: () -> Unit,
     onOpenBookSources: () -> Unit = {},
+    onOpenCatalog: (catalogId: String, feedUrl: String?) -> Unit = { _, _ -> },
     viewModel: BookViewModel = hiltViewModel(),
+    handoffViewModel: app.pagedrop.ui.discover.SendHandoffViewModel = hiltViewModel(),
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val sendingIds by viewModel.sendingIds.collectAsStateWithLifecycle()
@@ -358,7 +360,17 @@ fun BookScreen(
                 viewModel.sendBooks(listOf(book))
             },
             onOpenSources = { showFind = false; onOpenBookSources() },
+            onOpenCatalog = onOpenCatalog,
         )
+    }
+    // "Send to Kindle" finished in a catalog view: the library runs the transfer.
+    val handedOff by handoffViewModel.handoff.pending.collectAsStateWithLifecycle()
+    LaunchedEffect(handedOff) {
+        handedOff?.let { book ->
+            showFind = false
+            handoffViewModel.handoff.consume()
+            viewModel.sendBooks(listOf(book))
+        }
     }
     }
 }

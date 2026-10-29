@@ -7,11 +7,19 @@ import app.pagedrop.discover.BookDownloader
 import app.pagedrop.discover.BookFormat
 import app.pagedrop.discover.BookResult
 import app.pagedrop.discover.BookSearchEngine
+import app.pagedrop.discover.CatalogPage
+import app.pagedrop.discover.CatalogSearch
+import app.pagedrop.discover.OpdsCatalog
 import app.pagedrop.discover.DownloadOption
 import app.pagedrop.discover.SearchResults
 import app.pagedrop.discover.SourceSettings
 import app.pagedrop.discover.TextUtil
+import androidx.lifecycle.ViewModel
 import dagger.Binds
+import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.emptyFlow
+import kotlinx.coroutines.flow.map
 import dagger.Module
 import dagger.hilt.InstallIn
 import dagger.hilt.android.qualifiers.ApplicationContext
@@ -37,7 +45,38 @@ interface BookFinder {
     fun hasEnabledSources(): Boolean
     /** Prepares sources ahead of the first search; optional. */
     suspend fun warmUp() {}
+    /** The user's enabled OPDS catalogs, for the "Your catalogs" list. */
+    val catalogs: Flow<List<OpdsCatalog>> get() = emptyFlow()
 }
+
+/** What the catalog view needs: open a feed, search inside it. Failures arrive as exceptions with user-ready messages. */
+interface CatalogBrowser {
+    fun catalogName(catalogId: String): String?
+    suspend fun open(catalogId: String, url: String?): CatalogPage
+    suspend fun search(catalogId: String, link: CatalogSearch?, query: String): CatalogPage
+}
+
+class EngineCatalogBrowser @Inject constructor(
+    private val engine: BookSearchEngine,
+    private val settings: SourceSettings,
+) : CatalogBrowser {
+    override fun catalogName(catalogId: String) = settings.catalogs.value.firstOrNull { it.id == catalogId }?.title
+    override suspend fun open(catalogId: String, url: String?) = engine.browseCatalog(catalogId, url)
+    override suspend fun search(catalogId: String, link: CatalogSearch?, query: String) =
+        engine.searchCatalog(catalogId, link, query)
+}
+
+/** Hands a finished "Send to Kindle" from the catalog view back to the library, which owns the send flow. */
+@Singleton
+class SendHandoff @Inject constructor() {
+    private val _pending = MutableStateFlow<Book?>(null)
+    val pending: StateFlow<Book?> = _pending.asStateFlow()
+    fun offer(book: Book) { _pending.value = book }
+    fun consume() { _pending.value = null }
+}
+
+@HiltViewModel
+class SendHandoffViewModel @Inject constructor(val handoff: SendHandoff) : ViewModel()
 
 interface BookFetcher {
     suspend fun download(result: BookResult, option: DownloadOption, onProgress: (Float?) -> Unit): File
@@ -49,6 +88,7 @@ class EngineBookFinder @Inject constructor(
 ) : BookFinder {
     override suspend fun search(query: String) = engine.search(query)
     override suspend fun warmUp() = engine.warmUp()
+    override val catalogs: Flow<List<OpdsCatalog>> = settings.catalogs.map { all -> all.filter { it.enabled } }
     override suspend fun resolve(result: BookResult) = engine.resolve(result)
     override fun bestOption(result: BookResult) = engine.bestOption(result)
     override fun hasEnabledSources(): Boolean =
@@ -93,6 +133,7 @@ class PrefsRecentSearches @Inject constructor(@ApplicationContext context: Conte
 @InstallIn(SingletonComponent::class)
 abstract class DiscoverUiModule {
     @Binds abstract fun finder(impl: EngineBookFinder): BookFinder
+    @Binds abstract fun catalogBrowser(impl: EngineCatalogBrowser): CatalogBrowser
     @Binds abstract fun fetcher(impl: DownloaderBookFetcher): BookFetcher
     @Binds abstract fun recent(impl: PrefsRecentSearches): RecentSearches
 }

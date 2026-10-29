@@ -52,6 +52,46 @@ data class SearchResults(
     val results: List<BookResult>,
     val errors: List<SourceError>,
     val websiteSearches: List<BookSearchLink> = emptyList(),
+    /** Catalogs that answered with a menu instead of books; the user picks where to look. */
+    val catalogMenus: List<CatalogMenu> = emptyList(),
+)
+
+/** A catalog's answer to a search was a menu ("Search books", "Search authors"): [feedUrl] is that menu. */
+data class CatalogMenu(
+    val catalogId: String,
+    val catalogName: String,
+    val feedUrl: String,
+    val optionCount: Int,
+    val optionTitles: List<String>,
+)
+
+/** Where a catalog (or one of its feeds) can be searched: an OpenSearch description or a ready-made template. */
+data class CatalogSearch(val href: String, val isDescription: Boolean)
+
+enum class CatalogPageKind { NAVIGATION, ACQUISITION, MIXED, EMPTY }
+
+sealed interface CatalogItem {
+    /** A way further into the catalog; opens [url] as a feed. */
+    data class Folder(
+        val id: String,
+        val title: String,
+        val summary: String?,
+        val thumbnailUrl: String?,
+        val url: String,
+    ) : CatalogItem
+
+    /** A book; [result] opens in the usual result sheet. */
+    data class Book(val result: BookResult) : CatalogItem
+}
+
+/** One page of one OPDS feed, in feed order. */
+data class CatalogPage(
+    val title: String?,
+    val url: String,
+    val items: List<CatalogItem>,
+    val nextUrl: String?,
+    val search: CatalogSearch?,
+    val kind: CatalogPageKind,
 )
 
 data class OpdsCatalog(

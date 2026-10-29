@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8"?>
+<feed xmlns="http://www.w3.org/2005/Atom">
+  <id>urn:example:browse:find</id>
+  <title>Search results</title>
+  <entry>
+    <title>Search authors</title>
+    <id>urn:example:find:authors</id>
+    <content type="text">3 authors</content>
+    <link rel="subsection" type="application/atom+xml;profile=opds-catalog;kind=navigation" href="/opds/browse/find/authors?q=lantern"/>
+  </entry>
+  <entry>
+    <title>Search books</title>
+    <id>urn:example:find:books</id>
+    <content type="text">5 books</content>
+    <link rel="subsection" type="application/atom+xml;profile=opds-catalog;kind=acquisition" href="/opds/browse/find/books?q=lantern"/>
+  </entry>
+  <entry>
+    <title>Search series</title>
+    <id>urn:example:find:series</id>
+    <link rel="subsection" type="application/atom+xml;profile=opds-catalog;kind=navigation" href="/opds/browse/find/series?q=lantern"/>
+  </entry>
+</feed>

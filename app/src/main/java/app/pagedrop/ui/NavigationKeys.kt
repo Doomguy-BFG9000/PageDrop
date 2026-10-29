@@ -39,3 +39,7 @@ data object KindleReady : NavKey
 /** Settings -> Book sources (built-in catalogs and OPDS). */
 @Serializable
 data object BookSources : NavKey
+
+/** Browse one of the user's OPDS catalogs, starting at [feedUrl] (null = the catalog's root). */
+@Serializable
+data class CatalogRoute(val catalogId: String, val feedUrl: String? = null) : NavKey
