@@ -33,6 +33,10 @@ import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.runtime.remember
+import androidx.compose.ui.graphics.luminance
+import androidx.compose.ui.graphics.ColorMatrix
+import androidx.compose.ui.graphics.ColorFilter
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.dp
@@ -85,13 +89,17 @@ internal fun LibraryScreenContent(
 
     Box(modifier = modifier.fillMaxSize()) {
         // Background poster: full width at its own proportions, pinned to the bottom of the screen.
+        // Printed in two tones so its white parts are exactly the screen colour (no "sticker" patches):
+        // white -> background, black -> ink. Dark mode prints black on the dark background.
+        val background = MaterialTheme.colorScheme.background
+        val ink = if (background.luminance() < 0.5f) Color.Black else MaterialTheme.colorScheme.onBackground
         Image(
             painter = painterResource(id = R.drawable.bezos_bg),
             contentDescription = null,
             modifier = Modifier.fillMaxWidth().align(Alignment.BottomCenter),
             contentScale = ContentScale.FillWidth,
             alignment = Alignment.BottomCenter,
-            alpha = 0.85f,
+            colorFilter = remember(background, ink) { posterDuotone(paper = background, ink = ink) },
         )
 
         // Pinned bar: transparent at rest, solid with a hairline once the list or grid scrolls under it.
@@ -277,4 +285,21 @@ private fun AddFab(onAddBook: () -> Unit, onOpenArticle: () -> Unit) {
             Text("Add file")
         }
     }
+}
+
+/**
+ * Maps the poster's greyscale onto two colours: luminance 1 (white) becomes [paper], 0 (black) becomes [ink],
+ * and everything in between blends linearly. Alpha is left as it is.
+ */
+internal fun posterDuotone(paper: Color, ink: Color): ColorFilter {
+    fun row(inkC: Float, paperC: Float): FloatArray {
+        val k = paperC - inkC
+        return floatArrayOf(k * 0.299f, k * 0.587f, k * 0.114f, 0f, inkC * 255f)
+    }
+    return ColorFilter.colorMatrix(
+        ColorMatrix(
+            row(ink.red, paper.red) + row(ink.green, paper.green) + row(ink.blue, paper.blue) +
+                floatArrayOf(0f, 0f, 0f, 1f, 0f)
+        )
+    )
 }
