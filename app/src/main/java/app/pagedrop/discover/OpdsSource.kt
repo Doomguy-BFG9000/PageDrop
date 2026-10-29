@@ -96,7 +96,7 @@ internal class OpdsClient(
         source = SourceKind.OPDS,
         sourceName = catalog.title,
         title = e.title,
-        author = e.authors.joinToString(", "),
+        author = e.authors.joinToString(", ") { TextUtil.displayAuthor(it, simpleOnly = true) },
         year = e.year,
         language = e.language,
         coverUrl = OpdsParser.coverOf(e),

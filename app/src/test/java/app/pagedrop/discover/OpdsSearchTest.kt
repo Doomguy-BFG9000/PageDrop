@@ -1,5 +1,6 @@
 package app.pagedrop.discover
 
+import app.pagedrop.metadata.BookFileMetadataEmbedder
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
@@ -53,6 +54,62 @@ class OpdsSearchTest {
         // Books were found, so the folder entry next to them is not offered as a menu either.
         assertNull(outcome.menu)
         assertEquals(1, http.requests.size)
+    }
+
+    private fun httpWithAuthors(vararg authors: String): FakeHttp {
+        val xml = """
+            <feed xmlns="http://www.w3.org/2005/Atom">
+              <entry>
+                <id>urn:example:pride</id><title>Pride and Prejudice</title>
+                ${authors.joinToString("") { "<author><name>$it</name></author>" }}
+                <link rel="http://opds-spec.org/acquisition" type="application/x-mobipocket-ebook" href="/pride.mobi"/>
+              </entry>
+            </feed>
+        """.trimIndent()
+        return FakeHttp().apply { on("books.example.com/opds/search?q=", xml) }
+    }
+
+    private fun searchWithAuthors(vararg authors: String): BookResult =
+        source(httpWithAuthors(*authors)).search("pride").single()
+
+    @Test
+    fun simpleAuthorIsNormalizedForDisplayAndFileName() {
+        val book = searchWithAuthors("Austen, Jane")
+        assertEquals("Jane Austen", book.author)
+        assertEquals(
+            "Pride and Prejudice - Jane Austen.mobi",
+            BookFileMetadataEmbedder.fileNameFor(book.title, book.author, "mobi"),
+        )
+    }
+
+    @Test
+    fun eachAuthorIsNormalizedBeforeJoining() {
+        val book = searchWithAuthors("Austen, Jane", "Shelley, Mary Wollstonecraft", "Anonymous")
+        assertEquals("Jane Austen, Mary Wollstonecraft Shelley, Anonymous", book.author)
+    }
+
+    @Test
+    fun complexAuthorsStayUnchangedAlongsideSimpleAuthors() {
+        val book = searchWithAuthors("Twain, Mark, 1835-1910", "Example, Inc.", "King, Martin Luther Jr.", "Austen, Jane")
+        assertEquals("Twain, Mark, 1835-1910, Example, Inc., King, Martin Luther Jr., Jane Austen", book.author)
+    }
+
+    @Test
+    fun missingAuthorsStayEmpty() {
+        assertEquals("", searchWithAuthors().author)
+    }
+
+    @Test
+    fun catalogBrowsingNormalizesAuthorsForDisplayAndFileName() {
+        val http = httpWithAuthors("Austen, Jane", "Shelley, Mary Wollstonecraft", "Twain, Mark, 1835-1910")
+        val client = OpdsClient(catalog, null, http, mutableMapOf())
+        val page = client.page("https://books.example.com/opds/search?q=pride")
+        val book = (page.items.single() as CatalogItem.Book).result
+        assertEquals("Jane Austen, Mary Wollstonecraft Shelley, Twain, Mark, 1835-1910", book.author)
+        assertEquals(
+            "Pride and Prejudice - Jane Austen, Mary Wollstonecraft Shelley, Twain, Mark, 1835-1910.mobi",
+            BookFileMetadataEmbedder.fileNameFor(book.title, book.author, "mobi"),
+        )
     }
 
     @Test

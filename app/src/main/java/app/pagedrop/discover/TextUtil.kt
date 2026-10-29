@@ -28,8 +28,26 @@ internal object TextUtil {
         unescapeHtml(s.replace(Regex("<br\\s*/?>|</p>", RegexOption.IGNORE_CASE), "\n").replace(Regex("<[^>]*>"), ""))
             .lines().joinToString("\n") { it.trim() }.replace(Regex("\n{3,}"), "\n\n").trim()
 
-    /** "Shelley, Mary Wollstonecraft (1797-1851)" or "Fitzgerald, F. Scott (Francis Scott), 1896-1940" -> "Mary Wollstonecraft Shelley". */
-    fun displayAuthor(raw: String): String {
+    private val authorNamePart = Regex("[\\p{L}\\p{M}\\s.'’-]+")
+    private val authorQualifiers = setOf(
+        "jr", "sr", "ii", "iii", "iv", "ca", "fl",
+        "inc", "incorporated", "ltd", "limited", "llc", "corp", "corporation", "co", "company",
+        "press", "university", "institute", "foundation", "society", "association",
+        "organization", "organisation", "committee", "department", "bureau",
+    )
+
+    /**
+     * Cleans catalog names and dates, e.g. "Shelley, Mary Wollstonecraft (1797-1851)".
+     * [simpleOnly] only reverses a plain "Last, First" name, retaining dates, suffixes and common organization qualifiers.
+     */
+    fun displayAuthor(raw: String, simpleOnly: Boolean = false): String {
+        if (simpleOnly) {
+            val parts = raw.split(',')
+            if (parts.size != 2 || parts.any { part ->
+                    !authorNamePart.matches(part.trim()) || part.none { it.isLetter() } ||
+                        words(part).any { it in authorQualifiers }
+                }) return raw
+        }
         var s = raw.replace(Regex("\\([^)]*\\)"), " ")
         s = s.replace(Regex(",?\\s*(\\d{3,4}\\??|ca\\.?\\s*\\d+|fl\\.).*$"), "")
         s = s.replace(Regex("\\s+"), " ").trim().trim(',').trim()
