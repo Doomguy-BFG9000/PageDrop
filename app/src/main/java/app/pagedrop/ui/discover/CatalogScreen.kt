@@ -1,5 +1,7 @@
 package app.pagedrop.ui.discover
 
+import app.pagedrop.data.SendPlan
+import app.pagedrop.data.SendFormatDecision
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
@@ -78,6 +80,8 @@ fun CatalogScreen(
     val selected by discover.selected.collectAsStateWithLifecycle()
     val action by discover.action.collectAsStateWithLifecycle()
     val chosen by discover.chosenOption.collectAsStateWithLifecycle()
+    val sendFormat by discover.sendFormat.collectAsStateWithLifecycle()
+    val keepOverride by discover.keepOverride.collectAsStateWithLifecycle()
     val keyboard = LocalSoftwareKeyboardController.current
 
     // System back: close the sheet, then the search box, then go up a level, and only then leave.
@@ -146,6 +150,13 @@ fun CatalogScreen(
             action = action,
             chosen = chosen,
             libraryBook = if (result.source == SourceKind.WEBSITE) null else library.firstOrNull { matchesLibraryBook(result, it) },
+            keepOriginal = SendFormatDecision.decide(
+                library.firstOrNull { result.source != SourceKind.WEBSITE && matchesLibraryBook(result, it) }?.format
+                    ?: chosen?.format?.name.orEmpty(),
+                sendFormat,
+                keepOverride,
+            ) == SendPlan.KeepOriginal,
+            onKeepOriginalChange = discover::setKeepOriginal,
             onChoose = discover::chooseOption,
             onSend = discover::sendToKindle,
             onAdd = discover::addToLibrary,
