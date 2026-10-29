@@ -126,6 +126,33 @@ class KindleSftpClientTest {
     }
 
     @Test
+    fun destinationsFor_epubOnlyGoesToKoreaderEvenWithExtraFoldersAndLowercaseFormat() {
+        assertEquals(
+            listOf("/mnt/us/custom", "/mnt/us/Books"),
+            KindleSftpClient.destinationsFor(book("epub"), listOf("/mnt/us/documents", "/mnt/us/custom"))
+        )
+    }
+
+    @Test
+    fun destinationsFor_mobiAndAzw3IncludeHomeScreenButEpubNever() {
+        listOf("MOBI", "AZW3").forEach {
+            assertTrue(KindleSftpClient.destinationsFor(book(it), emptyList()).contains(KindleSftpClient.KINDLE_HOME_DIR))
+        }
+        assertFalse(KindleSftpClient.destinationsFor(book("EPUB"), emptyList()).contains(KindleSftpClient.KINDLE_HOME_DIR))
+        assertEquals(listOf(KindleSftpClient.KOREADER_BOOKS_DIR), KindleSftpClient.destinationsFor(book("EPUB"), emptyList()))
+    }
+
+    @Test
+    fun destinationsFor_keptPdfAndTxtShowOnHomeScreenToo() {
+        listOf("PDF", "TXT", "pdf").forEach {
+            assertEquals(
+                it, listOf("/mnt/us/documents", "/mnt/us/Books"),
+                KindleSftpClient.destinationsFor(book(it), listOf("/mnt/us/documents"))
+            )
+        }
+    }
+
+    @Test
     fun destinationsFor_epubSkipsHomeScreen() {
         assertEquals(
             listOf("/mnt/us/Books"),

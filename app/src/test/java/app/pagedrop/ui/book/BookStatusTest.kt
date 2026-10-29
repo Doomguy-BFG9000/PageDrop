@@ -49,9 +49,9 @@ class BookStatusTest {
         assertEquals(AddPlan.KindleReady, addPlanFor("MOBI"))
         assertEquals(AddPlan.KindleReady, addPlanFor("azw3"))
         assertEquals(AddPlan.KindleReady, addPlanFor("PRC"))
-        assertEquals(AddPlan.Convert, addPlanFor("EPUB"))
-        assertEquals(AddPlan.Convert, addPlanFor("TXT"))
-        assertEquals(AddPlan.PdfChoice, addPlanFor("PDF"))
+        assertEquals(AddPlan.Choice, addPlanFor("EPUB"))
+        assertEquals(AddPlan.Choice, addPlanFor("TXT"))
+        assertEquals(AddPlan.Choice, addPlanFor("PDF"))
         assertEquals(AddPlan.Other, addPlanFor("CBZ"))
     }
 

@@ -3,6 +3,8 @@ package app.pagedrop.ui.settings
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import app.pagedrop.data.KindleSettings
+import app.pagedrop.data.SendFormatSetting
+import app.pagedrop.data.SendFormatSettings
 import app.pagedrop.metadata.MetadataSettings
 import app.pagedrop.server.PageDropApiClient
 import app.pagedrop.server.ServerSettings
@@ -22,7 +24,13 @@ class SettingsViewModel @Inject constructor(
     private val pageDropApiClient: PageDropApiClient,
     private val uploadConsent: ServerUploadConsent,
     private val metadataSettings: MetadataSettings,
+    private val sendFormatSettings: SendFormatSettings,
 ) : ViewModel() {
+
+    /** What an EPUB does by default: convert to a Kindle book, or keep it for KOReader. */
+    val sendFormat: StateFlow<SendFormatSetting> = sendFormatSettings.format
+
+    fun updateSendFormat(value: SendFormatSetting) = sendFormatSettings.set(value)
 
     /** Whether Google Books is asked for titles, authors and covers (Open Library always is). */
     val useGoogleBooks: StateFlow<Boolean> = metadataSettings.useGoogleBooks

@@ -33,6 +33,12 @@ import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.unit.dp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import app.pagedrop.BuildConfig
+import app.pagedrop.data.SendFormatSetting
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.selection.selectable
+import androidx.compose.foundation.selection.selectableGroup
+import androidx.compose.material3.RadioButton
+import androidx.compose.ui.semantics.Role
 import app.pagedrop.ui.shell.HairlineCard
 import app.pagedrop.ui.shell.NavRow
 import app.pagedrop.ui.shell.OutlineButton
@@ -51,6 +57,7 @@ fun SettingsScreen(
 ) {
     val state by viewModel.state.collectAsState()
     val useGoogleBooks by viewModel.useGoogleBooks.collectAsState()
+    val sendFormat by viewModel.sendFormat.collectAsState()
     LaunchedEffect(Unit) { viewModel.refresh() }
 
     Scaffold(
@@ -90,6 +97,24 @@ fun SettingsScreen(
                 icon = Icons.Default.Wifi,
                 onClick = onOpenKindleReady
             )
+
+            SectionLabel("Send format")
+            HairlineCard(Modifier.fillMaxWidth()) {
+                Column(Modifier.padding(vertical = 8.dp, horizontal = 16.dp).selectableGroup()) {
+                    SendFormatRow(
+                        selected = sendFormat == SendFormatSetting.CONVERT,
+                        onClick = { viewModel.updateSendFormat(SendFormatSetting.CONVERT) },
+                        title = "Convert to Kindle format (MOBI)",
+                        note = "Shows on the Kindle home screen and in KOReader.",
+                    )
+                    SendFormatRow(
+                        selected = sendFormat == SendFormatSetting.KEEP_ORIGINAL,
+                        onClick = { viewModel.updateSendFormat(SendFormatSetting.KEEP_ORIGINAL) },
+                        title = "Keep the original format",
+                        note = "Sent exactly as added. Formats the Kindle’s own reader can’t open go to KOReader only.",
+                    )
+                }
+            }
 
             SectionLabel("Find a book")
             NavRow(
@@ -212,6 +237,27 @@ fun SettingsScreen(
                     )
                 }
             }
+        }
+    }
+}
+
+@Composable
+private fun SendFormatRow(selected: Boolean, onClick: () -> Unit, title: String, note: String) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .heightIn(min = 48.dp)
+            .selectable(selected = selected, onClick = onClick, role = Role.RadioButton),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        RadioButton(selected = selected, onClick = null)
+        Column(Modifier.padding(start = 12.dp, top = 8.dp, bottom = 8.dp)) {
+            Text(title, style = MaterialTheme.typography.bodyMedium)
+            Text(
+                note,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
         }
     }
 }

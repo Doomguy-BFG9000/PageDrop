@@ -75,7 +75,11 @@ class BookViewModel @Inject constructor(
     private val kindleSettings: KindleSettings,
     private val pageDropApiClient: PageDropApiClient? = null,
     private val pendingSharedFile: PendingSharedFile = PendingSharedFile(),
+    sendFormatSettings: app.pagedrop.data.SendFormatSettings,
 ) : ViewModel() {
+
+    /** The Send format setting: what an EPUB does unless the Add book sheet overrides it. */
+    val sendFormatSetting: StateFlow<app.pagedrop.data.SendFormatSetting> = sendFormatSettings.format
 
     /** A single file shared to PageDrop, waiting for the Add book sheet. */
     val pendingSharedUri: StateFlow<Uri?> = pendingSharedFile.uri
@@ -372,6 +376,41 @@ class BookViewModel @Inject constructor(
             } catch (e: Exception) {
                 _conversionError.value = e.localizedMessage ?: "Could not add this book"
             }
+        }
+    }
+
+    /**
+     * Carries out what the Add book sheet decided. Keeping the file as is ([AddDecision.convert] false)
+     * never converts and never reaches the server or its consent prompt.
+     */
+    internal fun confirmAdd(
+        context: Context,
+        pending: PendingAdd,
+        decision: AddDecision,
+        coverUri: Uri?,
+    ) {
+        val options = AddOptions(
+            title = decision.title,
+            author = decision.author,
+            coverUri = coverUri,
+            coverUrl = decision.coverUrl,
+            sendAfterAdd = decision.sendToKindle,
+            originalBookId = pending.originalBookId,
+        )
+        when {
+            !decision.convert -> addBook(context, pending.uri, options)
+            isServerConversionAvailable -> addBookWithServerConversion(
+                context = context,
+                uri = pending.uri,
+                outputTitle = decision.title ?: pending.initialTitle,
+                outputAuthor = decision.author ?: pending.initialAuthor.ifBlank { "Unknown Author" },
+                targetFormat = decision.serverFormat.lowercase(),
+                coverUri = coverUri,
+                coverUrl = decision.coverUrl,
+                sendAfterAdd = decision.sendToKindle,
+                originalBookId = pending.originalBookId,
+            )
+            else -> addBookWithConversion(context, pending.uri, decision.title, options)
         }
     }
 

@@ -47,6 +47,8 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import app.pagedrop.data.SendFormatDecision
+import app.pagedrop.data.SendPlan
 import app.pagedrop.data.local.database.Book
 import app.pagedrop.discover.BookResult
 import app.pagedrop.discover.SourceError
@@ -86,6 +88,8 @@ fun FindScreen(
     val selected by viewModel.selected.collectAsStateWithLifecycle()
     val action by viewModel.action.collectAsStateWithLifecycle()
     val chosen by viewModel.chosenOption.collectAsStateWithLifecycle()
+    val keepOverride by viewModel.keepOverride.collectAsStateWithLifecycle()
+    val sendFormat by viewModel.sendFormat.collectAsStateWithLifecycle()
 
     val focus = remember { FocusRequester() }
     val keyboard = LocalSoftwareKeyboardController.current
@@ -233,6 +237,13 @@ fun FindScreen(
                 action = action,
                 chosen = chosen,
                 libraryBook = if (result.source == SourceKind.WEBSITE) null else library.firstOrNull { matchesLibraryBook(result, it) },
+                keepOriginal = SendFormatDecision.decide(
+                    library.firstOrNull { result.source != SourceKind.WEBSITE && matchesLibraryBook(result, it) }?.format
+                        ?: chosen?.format?.name.orEmpty(),
+                    sendFormat,
+                    keepOverride,
+                ) == SendPlan.KeepOriginal,
+                onKeepOriginalChange = viewModel::setKeepOriginal,
                 onChoose = viewModel::chooseOption,
                 onSend = viewModel::sendToKindle,
                 onAdd = viewModel::addToLibrary,

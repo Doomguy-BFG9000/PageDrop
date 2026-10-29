@@ -42,6 +42,8 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 import app.pagedrop.data.BookRepository
 import app.pagedrop.data.KindleSettings
+import app.pagedrop.data.NullSharedPreferences
+import app.pagedrop.data.SendFormatSettings
 import app.pagedrop.data.local.database.Book
 import app.pagedrop.metadata.BookMetadataCandidate
 import app.pagedrop.metadata.MetadataLookupResult
@@ -62,7 +64,7 @@ class BookViewModelTest {
 
     /** Every ViewModel is built here so no coroutine (or real socket/IO) outlives its test. */
     private fun newVm(context: Context, repo: BookRepository, settings: KindleSettings): BookViewModel =
-        BookViewModel(context, repo, settings, null, PendingSharedFile()).also {
+        BookViewModel(context, repo, settings, null, PendingSharedFile(), SendFormatSettings(NullSharedPreferences())).also {
             it.ioDispatcher = dispatcher
             it.defaultDispatcher = dispatcher
             it.sftpTestConnection = { _, _, _, _ -> Result.failure(java.io.IOException("no network in tests")) }
@@ -445,6 +447,38 @@ class BookViewModelTest {
     private fun prepared() = app.pagedrop.server.PageDropApiClient.PreparedArtifact(
         file = File("/fake/server.mobi"), title = "T", author = "A", format = "MOBI", coverFile = null,
     )
+
+    private fun epubPending() = PendingAdd(uri = TestUri(), displayName = "Dune.epub", format = "EPUB", initialTitle = "Dune")
+
+    private fun decision(convert: Boolean, send: Boolean = false) =
+        AddDecision(title = null, author = null, coverUrl = null, convert = convert, serverFormat = "MOBI", sendToKindle = send)
+
+    @Test
+    fun keepEpub_addsAsIsWithoutConvertingOrAskingToUpload() = runTest(dispatcher) {
+        val repo = FakeBookRepository()
+        val vm = newVm(ContextWrapper(null), repo, KindleSettings())
+        val calls = mutableListOf<String>()
+        vm.confirmUploadFn = { calls += "confirm"; true }
+        vm.serverConvertFn = { _, _, _, _, _, _ -> calls += "upload"; prepared() }
+        vm.confirmAdd(ContextWrapper(null), epubPending(), decision(convert = false), coverUri = null)
+        advanceUntilIdle()
+        assertEquals(emptyList<String>(), calls)
+        assertEquals(0, repo.localConversions)
+        assertEquals(1, repo.getBooks().first().size)
+        assertFalse(vm.isConverting.value)
+    }
+
+    @Test
+    fun convertEpub_withoutServerConvertsOnThePhoneAndNeverAsksToUpload() = runTest(dispatcher) {
+        val repo = FakeBookRepository()
+        val vm = newVm(ContextWrapper(null), repo, KindleSettings())
+        val calls = mutableListOf<String>()
+        vm.confirmUploadFn = { calls += "confirm"; true }
+        vm.confirmAdd(ContextWrapper(null), epubPending(), decision(convert = true), coverUri = null)
+        advanceUntilIdle()
+        assertEquals(emptyList<String>(), calls)
+        assertEquals(1, repo.localConversions)
+    }
 
     @Test
     fun addWithServer_declinedConsentNeverUploadsAndConvertsMobiOnThePhone() = runTest(dispatcher) {

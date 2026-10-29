@@ -19,6 +19,14 @@ class KindleDeleteTest {
         }
     }
 
+    @Test fun epubInKoreaderFolderIsDeletableButNotOutsideKnownFolders() {
+        val epub = "/mnt/us/Books/Dune - Frank Herbert.epub"
+        assertTrue(KindleDelete.isDeletableBookPath(epub, setOf(epub)))
+        assertFalse(KindleDelete.isDeletableBookPath(epub, emptySet()))
+        val stray = "/mnt/us/koreader/Dune.epub"
+        assertFalse(KindleDelete.isDeletableBookPath(stray, setOf(stray)))
+    }
+
     @Test fun rejectsBadPaths() {
         fun bad(p: String) = assertFalse(p, KindleDelete.isDeletableBookPath(p, allowed + p))
         bad("/mnt/us/documents")
