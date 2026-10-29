@@ -101,10 +101,16 @@ fun SettingsScreen(
             SectionLabel("Send format")
             HairlineCard(Modifier.fillMaxWidth()) {
                 Column(Modifier.padding(vertical = 8.dp, horizontal = 16.dp).selectableGroup()) {
+                    Text(
+                        "Applies to EPUB, PDF and text files. Kindle formats are always sent as is.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(top = 4.dp, bottom = 4.dp),
+                    )
                     SendFormatRow(
                         selected = sendFormat == SendFormatSetting.CONVERT,
                         onClick = { viewModel.updateSendFormat(SendFormatSetting.CONVERT) },
-                        title = "Convert to Kindle format (MOBI)",
+                        title = "Convert to Kindle format",
                         note = "Shows on the Kindle home screen and in KOReader.",
                     )
                     SendFormatRow(

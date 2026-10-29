@@ -218,9 +218,9 @@ class DiscoverViewModel @Inject constructor(
                     book = bookRepository.importDownloaded(file, resolved.title, resolved.author, resolved.coverUrl)
                     importedBook = book
                 }
-                // Keep = no conversion at all (no on-phone work, no server, no upload prompt).
+                // Keep = no conversion at all (no on-phone work, no server, no upload prompt); Convert applies to Add to library too.
                 val plan = SendFormatDecision.decide(book.format, sendFormatSettings.format.value, _keepOverride.value)
-                if (send && plan != SendPlan.KeepOriginal) {
+                if (plan != SendPlan.KeepOriginal) {
                     stage = "convert"
                     _action.value = ActionState.Working(WorkStage.Converting)
                     book = bookRepository.convertImported(book)

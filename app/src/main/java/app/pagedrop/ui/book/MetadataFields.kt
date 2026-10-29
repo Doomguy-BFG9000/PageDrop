@@ -46,6 +46,9 @@ internal class MetadataFormState(initialTitle: String, initialAuthor: String) {
     var coverUrl by mutableStateOf<String?>(null)
     var userEdited by mutableStateOf(false)
 
+    /** The user confirmed a catalog match ("Use" or another match); an automatic suggestion does not set this. */
+    var matchChosen by mutableStateOf(false)
+
     /** The confident match that pre-filled the fields and is waiting for "Use" / "Other matches". */
     var suggested by mutableStateOf<BookMetadataCandidate?>(null)
     var showOthers by mutableStateOf(false)
@@ -57,6 +60,7 @@ internal class MetadataFormState(initialTitle: String, initialAuthor: String) {
     fun editAuthor(value: String) { author = value; userEdited = true; provenance = null }
 
     fun apply(candidate: BookMetadataCandidate) {
+        matchChosen = true
         // Keep a title we already have when the catalog only differs by case or a leading article.
         if (!sameTitle(title, candidate.title)) title = candidate.title
         if (!isPlaceholderAuthor(candidate.author) || author.isBlank()) author = candidate.author

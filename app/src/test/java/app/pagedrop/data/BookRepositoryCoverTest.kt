@@ -163,4 +163,25 @@ class BookRepositoryCoverTest {
         assertEquals(listOf(1 to false), repo.findMissingCoversOnline(emptySet()))
         assertTrue(dao.coverUpdates.isEmpty())
     }
+
+    @Test
+    fun onlineSearchStoresPdfCoverForTheLibraryWithoutRewritingTheFile() = runBlocking {
+        val root = java.nio.file.Files.createTempDirectory("cover-online-pdf").toFile()
+        val files = File(root, "files")
+        val bytes = java.io.ByteArrayOutputStream().also { out ->
+            com.tom_roush.pdfbox.pdmodel.PDDocument().use { d -> d.addPage(com.tom_roush.pdfbox.pdmodel.PDPage()); d.save(out) }
+        }.toByteArray()
+        val f = File(files, "books/Paper.pdf").apply { parentFile.mkdirs(); writeBytes(bytes) }
+        val dao = FakeDao(listOf(Book(uid = 1, title = "Paper", author = "A", fileName = f.name, filePath = f.path, format = "PDF", fileSize = f.length())))
+        val repo = DefaultBookRepository(dao.dao, null, context(files)).apply {
+            coverUrlLookup = { _, _ -> "https://covers.example/p.jpg" }
+            coverDownload = { jpeg }
+        }
+
+        assertEquals(listOf(1 to true), repo.findMissingCoversOnline(emptySet()))
+
+        assertArrayEquals(jpeg, File(dao.coverUpdates[1]!!).readBytes())
+        assertArrayEquals(bytes, f.readBytes())
+        assertTrue(File(files, "books/Paper.pdf").isFile)
+    }
 }

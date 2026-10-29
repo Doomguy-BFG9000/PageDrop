@@ -1,6 +1,7 @@
 package app.pagedrop.share
 
 import android.net.TestUri
+import app.pagedrop.data.SendFormatSetting
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -18,5 +19,20 @@ class ShareHandlerUriTest {
         assertFalse(ShareHandler.isAcceptedShareUri(TestUri("https://example.com/a.epub", scheme = "https")))
         assertFalse(ShareHandler.isAcceptedShareUri(TestUri("/sdcard/book.epub", scheme = null)))
         assertFalse(ShareHandler.isAcceptedShareUri(null))
+    }
+
+    @Test
+    fun sharedFilesFollowTheSendFormatSetting() {
+        listOf("EPUB", "PDF", "TXT").forEach {
+            assertTrue(it, ShareHandler.shouldConvertShared(it, SendFormatSetting.CONVERT))
+            assertFalse(it, ShareHandler.shouldConvertShared(it, SendFormatSetting.KEEP_ORIGINAL))
+        }
+    }
+
+    @Test
+    fun kindleFormatsAndUnconvertibleFilesAreNeverConverted() {
+        listOf("MOBI", "AZW3", "AZW", "PRC", "CBZ").forEach {
+            assertFalse(it, ShareHandler.shouldConvertShared(it, SendFormatSetting.CONVERT))
+        }
     }
 }

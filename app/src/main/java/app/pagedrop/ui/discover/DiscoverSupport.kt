@@ -118,11 +118,15 @@ internal fun matchesLibraryBook(result: BookResult, book: Book): Boolean {
     return a in unknown || b in unknown || a == b
 }
 
-/** Text for the "will it work on my Kindle" chip. */
-internal fun formatChipLabel(format: BookFormat?): String? = when (format) {
+/** Text for the "will it work on my Kindle" chip; EPUB says what the Send format setting will do with it. */
+internal fun formatChipLabel(
+    format: BookFormat?,
+    setting: app.pagedrop.data.SendFormatSetting = app.pagedrop.data.SendFormatSetting.KEEP_ORIGINAL,
+): String? = when (format) {
     null -> null
     BookFormat.AZW3, BookFormat.MOBI -> "Kindle-ready"
-    BookFormat.EPUB -> "EPUB · will convert"
+    BookFormat.EPUB ->
+        if (setting == app.pagedrop.data.SendFormatSetting.CONVERT) "EPUB · converts" else "EPUB"
     BookFormat.PDF -> "PDF"
     BookFormat.TXT -> "Plain text"
 }

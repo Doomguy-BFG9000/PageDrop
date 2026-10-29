@@ -27,7 +27,7 @@ class SettingsViewModel @Inject constructor(
     private val sendFormatSettings: SendFormatSettings,
 ) : ViewModel() {
 
-    /** What an EPUB does by default: convert to a Kindle book, or keep it for KOReader. */
+    /** What a convertible format (EPUB, PDF, TXT) does by default: convert to a Kindle book, or keep it as is. */
     val sendFormat: StateFlow<SendFormatSetting> = sendFormatSettings.format
 
     fun updateSendFormat(value: SendFormatSetting) = sendFormatSettings.set(value)

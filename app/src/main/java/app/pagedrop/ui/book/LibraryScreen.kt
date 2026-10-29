@@ -291,15 +291,16 @@ private fun AddFab(onAddBook: () -> Unit, onOpenArticle: () -> Unit) {
  * Maps the poster's greyscale onto two colours: luminance 1 (white) becomes [paper], 0 (black) becomes [ink],
  * and everything in between blends linearly. Alpha is left as it is.
  */
-internal fun posterDuotone(paper: Color, ink: Color): ColorFilter {
+internal fun posterDuotone(paper: Color, ink: Color): ColorFilter =
+    ColorFilter.colorMatrix(posterDuotoneMatrix(paper, ink))
+
+internal fun posterDuotoneMatrix(paper: Color, ink: Color): ColorMatrix {
     fun row(inkC: Float, paperC: Float): FloatArray {
         val k = paperC - inkC
         return floatArrayOf(k * 0.299f, k * 0.587f, k * 0.114f, 0f, inkC * 255f)
     }
-    return ColorFilter.colorMatrix(
-        ColorMatrix(
-            row(ink.red, paper.red) + row(ink.green, paper.green) + row(ink.blue, paper.blue) +
-                floatArrayOf(0f, 0f, 0f, 1f, 0f)
-        )
+    return ColorMatrix(
+        row(ink.red, paper.red) + row(ink.green, paper.green) + row(ink.blue, paper.blue) +
+            floatArrayOf(0f, 0f, 0f, 1f, 0f)
     )
 }

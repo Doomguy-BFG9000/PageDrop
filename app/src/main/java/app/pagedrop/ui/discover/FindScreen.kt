@@ -178,7 +178,7 @@ fun FindScreen(
                     results != null && results.results.isNotEmpty() -> items(results.results, key = { it.id }) { r ->
                         ResultRow(
                             result = r,
-                            bestLabel = formatChipLabel(viewModel.bestFormat(r)),
+                            bestLabel = formatChipLabel(viewModel.bestFormat(r), sendFormat),
                             inLibrary = library.any { matchesLibraryBook(r, it) },
                             onClick = { keyboard?.hide(); viewModel.select(r) },
                         )

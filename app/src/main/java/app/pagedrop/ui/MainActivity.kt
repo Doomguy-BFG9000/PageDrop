@@ -53,6 +53,7 @@ class MainActivity : ComponentActivity() {
     @Inject lateinit var pageDropApiClient: PageDropApiClient
     @Inject lateinit var pendingSharedFile: PendingSharedFile
     @Inject lateinit var serverUploadConsent: ServerUploadConsent
+    @Inject lateinit var sendFormatSettings: app.pagedrop.data.SendFormatSettings
 
     private val notificationPermissionLauncher = registerForActivityResult(
         ActivityResultContracts.RequestPermission()
@@ -101,7 +102,7 @@ class MainActivity : ComponentActivity() {
         }
 
         CoroutineScope(Dispatchers.Main).launch {
-            val result = ShareHandler.processSendIntent(intent, application, bookRepository, pageDropApiClient)
+            val result = ShareHandler.processSendIntent(intent, application, bookRepository, pageDropApiClient, sendFormatSettings.format.value)
             if (result.successCount > 0) {
                 Toast.makeText(
                     this@MainActivity,

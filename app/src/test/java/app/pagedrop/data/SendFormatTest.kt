@@ -91,7 +91,7 @@ class SendFormatTest {
         assertFalse(SendFormatDecision.hasChoice("EPUB", convertOnly = true))
     }
 
-    @Test fun everyConvertibleFormatOffersAChoiceAndPdfDefaultsToKeep() {
+    @Test fun everyConvertibleFormatOffersAChoiceAndTheDefaultFollowsTheSetting() {
         listOf("epub", "PDF", "TXT").forEach { assertEquals(it, AddPlan.Choice, addPlanFor(it)) }
         assertFalse(SendFormatDecision.keepByDefault(CONVERT))
         assertTrue(SendFormatDecision.keepByDefault(KEEP_ORIGINAL))

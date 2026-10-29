@@ -468,6 +468,39 @@ class BookViewModelTest {
         assertFalse(vm.isConverting.value)
     }
 
+    private fun pdfPending() = PendingAdd(uri = TestUri(), displayName = "Paper.pdf", format = "PDF", initialTitle = "Paper")
+
+    @Test
+    fun keepPdf_withoutEdits_keepsTheFileUntouchedAndStoresDetailsInTheLibraryOnly() = runTest(dispatcher) {
+        val repo = FakeBookRepository()
+        val vm = newVm(ContextWrapper(null), repo, KindleSettings())
+        val d = decision(convert = false).copy(title = "Suggested Title", author = "Suggested Author", userEdited = false)
+        vm.confirmAdd(ContextWrapper(null), pdfPending(), d, coverUri = null)
+        advanceUntilIdle()
+        assertEquals(emptyList<Triple<String, String, String?>>(), repo.applied)
+        assertEquals(listOf(Triple("Suggested Title", "Suggested Author", null as String?)), repo.dbOnly)
+    }
+
+    @Test
+    fun keepPdf_afterAnExplicitEdit_writesTheDetailsIntoTheFile() = runTest(dispatcher) {
+        val repo = FakeBookRepository()
+        val vm = newVm(ContextWrapper(null), repo, KindleSettings())
+        val d = decision(convert = false).copy(title = "My Title", author = "Me", userEdited = true)
+        vm.confirmAdd(ContextWrapper(null), pdfPending(), d, coverUri = null)
+        advanceUntilIdle()
+        assertEquals(listOf(Triple("My Title", "Me", null as String?)), repo.applied)
+    }
+
+    @Test
+    fun keepKindleNative_stillEmbedsWithoutEdits() = runTest(dispatcher) {
+        val repo = FakeBookRepository()
+        val vm = newVm(ContextWrapper(null), repo, KindleSettings())
+        val pending = PendingAdd(uri = TestUri(), displayName = "Book.azw3", format = "AZW3", initialTitle = "Book")
+        vm.confirmAdd(ContextWrapper(null), pending, decision(convert = false).copy(title = "Auto"), coverUri = null)
+        advanceUntilIdle()
+        assertEquals(1, repo.applied.size)
+    }
+
     @Test
     fun convertEpub_withoutServerConvertsOnThePhoneAndNeverAsksToUpload() = runTest(dispatcher) {
         val repo = FakeBookRepository()
@@ -571,8 +604,12 @@ private class FakeBookRepository : BookRepository {
 
     override suspend fun markTransferredBookIds(uids: List<Int>) {}
 
-    override suspend fun updateBookMetadata(book: Book, title: String, author: String, coverPath: String?): Book =
-        book.copy(title = title, author = author, coverPath = coverPath)
+    val dbOnly = mutableListOf<Triple<String, String, String?>>()
+
+    override suspend fun updateBookMetadata(book: Book, title: String, author: String, coverPath: String?): Book {
+        dbOnly += Triple(title, author, coverPath)
+        return book.copy(title = title, author = author, coverPath = coverPath)
+    }
 
     override suspend fun applyMetadata(book: Book, title: String, author: String, coverPath: String?): Book {
         applied += Triple(title, author, coverPath)

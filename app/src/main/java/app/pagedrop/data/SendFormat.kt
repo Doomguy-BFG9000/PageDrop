@@ -57,6 +57,9 @@ sealed interface SendPlan {
 object SendFormatDecision {
     private val KINDLE_READY = setOf("MOBI", "AZW3", "AZW", "PRC")
 
+    /** Kindle-native formats: always sent as is, and PageDrop embeds metadata into them. */
+    fun isKindleNative(format: String): Boolean = format.uppercase() in KINDLE_READY
+
     /** Whether PageDrop can convert [sourceFormat] at all: on this phone, or on the server when [serverAvailable]. */
     fun canConvert(sourceFormat: String, serverAvailable: Boolean = false): Boolean =
         sourceFormat.uppercase() !in KINDLE_READY && (BookConverter.canConvert(sourceFormat) || serverAvailable)

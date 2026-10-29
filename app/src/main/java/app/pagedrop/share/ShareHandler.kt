@@ -7,6 +7,9 @@ import android.util.Log
 import app.pagedrop.converter.BookConverter
 import app.pagedrop.data.BookRepository
 import app.pagedrop.data.DefaultBookRepository
+import app.pagedrop.data.SendFormatDecision
+import app.pagedrop.data.SendFormatSetting
+import app.pagedrop.data.SendPlan
 import app.pagedrop.data.local.database.Book
 import app.pagedrop.server.PageDropApiClient
 import app.pagedrop.tools.articles.ArticleExtractor
@@ -27,7 +30,8 @@ object ShareHandler {
         intent: Intent,
         application: Application,
         bookRepository: BookRepository,
-        pageDropApiClient: PageDropApiClient? = null
+        pageDropApiClient: PageDropApiClient? = null,
+        sendFormat: SendFormatSetting = SendFormatSetting.CONVERT,
     ): ShareResult = withContext(Dispatchers.IO) {
         val errors = mutableListOf<String>()
         var successCount = 0
@@ -49,7 +53,7 @@ object ShareHandler {
             } else {
                 uris.forEach { uri ->
                     try {
-                        val ok = handleSharedFile(uri, application, bookRepository)
+                        val ok = handleSharedFile(uri, application, bookRepository, sendFormat)
                         if (ok) successCount++ else errors.add("Failed: ${uri.lastPathSegment}")
                     } catch (e: Exception) {
                         Log.e(TAG, "Shared file failed: ${e.javaClass.simpleName}")
@@ -98,14 +102,19 @@ object ShareHandler {
         return accepted
     }
 
+    /** Several shared files follow the Send format setting: Keep adds them as is (no embedding, no server). */
+    internal fun shouldConvertShared(format: String, setting: SendFormatSetting): Boolean =
+        SendFormatDecision.decide(format, setting, null) != SendPlan.KeepOriginal
+
     private suspend fun handleSharedFile(
         uri: Uri,
         application: Application,
-        bookRepository: BookRepository
+        bookRepository: BookRepository,
+        sendFormat: SendFormatSetting,
     ): Boolean {
         val displayName = getDisplayName(application, uri)
         val format = DefaultBookRepository.detectFormat(displayName ?: "")
-        if (BookConverter.canConvert(format)) {
+        if (shouldConvertShared(format, sendFormat)) {
             bookRepository.convertAndAddBook(application, uri)
         } else {
             bookRepository.addBook(application, uri)

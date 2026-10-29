@@ -59,6 +59,8 @@ internal data class AddDecision(
     val convert: Boolean,
     val serverFormat: String,
     val sendToKindle: Boolean,
+    /** The user typed a title/author, confirmed a match or picked a cover; auto-detected details do not count. */
+    val userEdited: Boolean = false,
 )
 
 /** How a picked file will reach the Kindle, in plain language. */
@@ -118,6 +120,7 @@ internal fun AddBookSheet(
             convert = convert,
             serverFormat = serverOutputFormat,
             sendToKindle = send,
+            userEdited = form.userEdited || form.matchChosen || selectedCoverUri != null,
         )
     )
 
@@ -245,11 +248,7 @@ private fun FormatDecision(
             AddPlan.Other -> DecisionText("This format may not open on your Kindle. It will be sent as is.")
             AddPlan.Choice -> {
                 KeepChoiceRadios(format, keepChosen, onKeepChange)
-                if (keepChosen) {
-                    DecisionNote(
-                        if (format.equals("EPUB", ignoreCase = true)) "Sent as is to KOReader’s Books folder." else "Sent as is."
-                    )
-                } else {
+                if (!keepChosen) {
                     DecisionNote(
                         when {
                             !serverConversionAvailable -> "Converted on this phone."
@@ -284,7 +283,7 @@ internal fun KeepChoiceRadios(format: String, keep: Boolean, onKeepChange: (Bool
         RadioRow(
             selected = !keep,
             onClick = { onKeepChange(false) },
-            title = "Convert to Kindle book",
+            title = "Convert to Kindle format",
             note = "Opens on the Kindle home screen and in KOReader.",
         )
     }
