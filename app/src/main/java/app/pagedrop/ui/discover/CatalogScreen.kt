@@ -32,6 +32,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -118,7 +119,14 @@ fun CatalogScreen(
                     (level.request as? CatalogRequest.Search)?.let { "Nothing found for “${it.query}”." } ?: "Nothing here."
                 )
                 level.status == LevelStatus.Ready -> {
-                    val listState = listStates.getOrPut(level.id) { LazyListState() }
+                    val listState = listStates.getOrPut(level.id) {
+                        val (index, offset) = viewModel.scrollOf(level.id)
+                        LazyListState(index, offset)
+                    }
+                    LaunchedEffect(level.id, listState) {
+                        snapshotFlow { listState.firstVisibleItemIndex to listState.firstVisibleItemScrollOffset }
+                            .collect { (i, o) -> viewModel.saveScroll(level.id, i, o) }
+                    }
                     ItemList(
                         level = level,
                         listState = listState,

@@ -47,13 +47,16 @@ data class CatalogState(
     val catalogName: String = "",
     val stack: List<CatalogLevel> = emptyList(),
     val searchOpen: Boolean = false,
+    /** Opened at a specific feed (e.g. from a search menu), whose own feed may not carry a search link. */
+    val startedAtFeed: Boolean = false,
 ) {
     val current: CatalogLevel? get() = stack.lastOrNull()
     val atRoot: Boolean get() = stack.size <= 1
 
     /** Search link for the current level: its own, else the one the catalog's root feed offers. */
     val searchLink: CatalogSearch? get() = current?.search ?: stack.firstOrNull()?.search
-    val canSearch: Boolean get() = searchLink != null
+    /** A catalog opened at a feed can still search: with no link at hand the catalog root's template is used. */
+    val canSearch: Boolean get() = searchLink != null || startedAtFeed
 }
 
 private fun CatalogItem.key(): String = when (this) {
@@ -72,6 +75,11 @@ class CatalogViewModel @Inject constructor(
     private var catalogId: String? = null
     private var nextLevelId = 0
     private val jobs = HashMap<Int, Job>()
+    private val scroll = HashMap<Int, Pair<Int, Int>>()
+
+    /** First visible item index and offset last reported for a level, so a recreated screen can scroll back to it. */
+    fun scrollOf(levelId: Int): Pair<Int, Int> = scroll[levelId] ?: (0 to 0)
+    fun saveScroll(levelId: Int, index: Int, offset: Int) { scroll[levelId] = index to offset }
 
     /** Opens the catalog at [feedUrl] (null = its root). Only the first call counts, so rotation keeps the stack. */
     fun start(catalogId: String, feedUrl: String?) {
@@ -79,7 +87,7 @@ class CatalogViewModel @Inject constructor(
         this.catalogId = catalogId
         val name = browser.catalogName(catalogId).orEmpty()
         val root = newLevel(CatalogRequest.Browse(feedUrl), title = name)
-        _state.value = CatalogState(catalogName = name, stack = listOf(root))
+        _state.value = CatalogState(catalogName = name, stack = listOf(root), startedAtFeed = feedUrl != null)
         fetch(root)
     }
 
@@ -99,6 +107,7 @@ class CatalogViewModel @Inject constructor(
         if (s.stack.size <= 1) return false
         s.current?.let { jobs.remove(it.id)?.cancel() }
         _state.value = s.copy(stack = s.stack.dropLast(1))
+        scroll.remove(s.current!!.id)
         return true
     }
 

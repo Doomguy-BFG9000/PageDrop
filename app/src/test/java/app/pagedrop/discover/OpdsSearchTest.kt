@@ -2,7 +2,6 @@ package app.pagedrop.discover
 
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
-import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -104,6 +103,7 @@ class OpdsSearchTest {
         val menu = res.catalogMenus.single()
         assertEquals(catalog.id, menu.catalogId)
         assertEquals(2, menu.optionCount)
+        assertEquals(listOf("Search authors", "Search books"), menu.optionTitles)
         val sent = http.requests.drop(before).map { it.first }
         assertEquals(1, sent.size)
         assertTrue(sent.none { "/search/books" in it || "/search/authors" in it })
@@ -151,21 +151,44 @@ class OpdsSearchTest {
 
     @Test
     fun aSingleBooksFeedListingItTwiceShowsOnceWithEveryDownload() {
-        val http = FakeHttp().apply { on("books.example.com/opds/book/1342.opds", fixture("opds_book_1342.xml")) }
+        val http = FakeHttp().apply { on("books.example.com/opds/book/100.opds", fixture("opds_single_book_two_packagings.xml")) }
         val client = OpdsClient(catalog, null, http, mutableMapOf())
-        val page = client.page("https://books.example.com/opds/book/1342.opds")
+        val page = client.page("https://books.example.com/opds/book/100.opds")
         val book = (page.items.single() as CatalogItem.Book).result
-        // Two packagings listed (two ids) become one book; the first listed wins per format.
-        assertEquals("urn:example:1342:2", book.id.removePrefix("opds:cat:"))
-        assertEquals("https://books.example.com/files/1342.kindle.noimages", book.options.single { it.format == BookFormat.MOBI }.url)
-        assertEquals("https://books.example.com/files/1342.epub.noimages", book.options.single { it.format == BookFormat.EPUB }.url)
-        assertNotNull(book)
+        // Two packagings (two ids) become one row; the first listed wins per format and the formats are combined.
+        assertEquals("urn:example:100:plain", book.id.removePrefix("opds:cat:"))
+        assertEquals(
+            setOf(BookFormat.EPUB, BookFormat.MOBI, BookFormat.PDF),
+            book.options.map { it.format }.toSet(),
+        )
+        assertEquals("https://books.example.com/files/100.plain.mobi", book.options.single { it.format == BookFormat.MOBI }.url)
+        assertEquals("https://books.example.com/files/100.plain.epub", book.options.single { it.format == BookFormat.EPUB }.url)
+        assertEquals("https://books.example.com/files/100.illustrated.pdf", book.options.single { it.format == BookFormat.PDF }.url)
+    }
+
+    @Test
+    fun twoEditionsOfTheSameTitleOnAMultiBookPageStayTwoRows() {
+        val http = FakeHttp().apply { on("books.example.com/opds/search?q=salt", fixture("opds_two_editions.xml")) }
+        val page = OpdsClient(catalog, null, http, mutableMapOf()).page("https://books.example.com/opds/search?q=salt")
+        val books = page.items.map { (it as CatalogItem.Book).result }
+        assertEquals(listOf("Salt Roads", "Salt Roads", "Paper Boats"), books.map { it.title })
+        assertEquals(
+            listOf("https://books.example.com/files/200.epub", "https://books.example.com/files/201.epub", "https://books.example.com/files/300.epub"),
+            books.map { it.options.single().url },
+        )
+    }
+
+    @Test
+    fun sameTitledEntriesWithNoAuthorsOnAMultiBookPageStaySeparate() {
+        val http = FakeHttp().apply { on("books.example.com/opds/anon", fixture("opds_two_editions_no_author.xml")) }
+        val page = OpdsClient(catalog, null, http, mutableMapOf()).page("https://books.example.com/opds/anon")
+        assertEquals(3, page.items.size)
     }
 
     @Test
     fun aSearchAnswerThatLinksToBookFeedsIsAMenuOfThoseBooks() {
-        val http = FakeHttp().apply { on("books.example.com/opds/search?q=", fixture("opds_search_gutenberg_nav.xml")) }
-        val outcome = source(http).searchCatalog("pride")
+        val http = FakeHttp().apply { on("books.example.com/opds/search?q=", fixture("opds_search_nav_books.xml")) }
+        val outcome = source(http).searchCatalog("lighthouse")
         assertEquals(2, outcome.menu!!.optionCount)
         assertEquals(1, http.requests.size)
     }

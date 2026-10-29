@@ -98,6 +98,14 @@ class DiscoverViewModel @Inject constructor(
         viewModelScope.launch {
             bookRepository.getBooks().catch { }.collect { _libraryBooks.value = it }
         }
+    }
+
+    private var warmedUp = false
+
+    /** Prepares sources ahead of the first search. Called by the Find screen only, not the catalog view. */
+    fun warmUp() {
+        if (warmedUp) return
+        warmedUp = true
         viewModelScope.launch { runCatching { finder.warmUp() } }
     }
 

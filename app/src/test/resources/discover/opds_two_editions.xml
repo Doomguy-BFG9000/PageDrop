@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<feed xmlns="http://www.w3.org/2005/Atom">
+  <id>https://books.example.com/opds/search?q=salt</id>
+  <title>Search results</title>
+  <entry>
+    <id>urn:example:200</id>
+    <title>Salt Roads</title>
+    <author><name>Okafor, Dele</name></author>
+    <link type="application/epub+zip" rel="http://opds-spec.org/acquisition" href="/files/200.epub"/>
+  </entry>
+  <entry>
+    <id>urn:example:201</id>
+    <title>Salt Roads</title>
+    <author><name>Okafor, Dele</name></author>
+    <link type="application/epub+zip" rel="http://opds-spec.org/acquisition" href="/files/201.epub"/>
+  </entry>
+  <entry>
+    <id>urn:example:300</id>
+    <title>Paper Boats</title>
+    <author><name>Lindqvist, Maja</name></author>
+    <link type="application/epub+zip" rel="http://opds-spec.org/acquisition" href="/files/300.epub"/>
+  </entry>
+</feed>

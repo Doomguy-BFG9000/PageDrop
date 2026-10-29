@@ -60,7 +60,9 @@ class DiscoverViewModelTest {
         var resolved: BookResult? = null
         var resolveError: Exception? = null
         var sources = true
+        var searches = 0
         override suspend fun search(query: String): SearchResults {
+            searches++
             error?.let { throw it }
             return results ?: SearchResults(query, emptyList(), emptyList())
         }
@@ -146,6 +148,22 @@ class DiscoverViewModelTest {
         assertEquals(1, vm.search.value.results?.results?.size)
         assertEquals(1, vm.search.value.results?.errors?.size)
         assertEquals(listOf("austen"), vm.recent.value)
+    }
+
+    @Test
+    fun search_aCatalogMenuAnswerIsKeptAsAMenuWithItsChoices() = runTest(dispatcher) {
+        val menu = app.pagedrop.discover.CatalogMenu(
+            "cat", "Example Shelf", "https://books.example.com/opds/search?q=dune", 2, listOf("Search authors", "Search books"),
+        )
+        finder.results = SearchResults("dune", emptyList(), emptyList(), catalogMenus = listOf(menu))
+        val vm = vm()
+        vm.runSearch("dune")
+        advanceUntilIdle()
+        val shown = vm.search.value.results!!.catalogMenus.single()
+        assertEquals(2, shown.optionCount)
+        assertEquals(listOf("Search authors", "Search books"), shown.optionTitles)
+        assertEquals("Example Shelf: 2 search options", catalogMenuTitle(shown))
+        assertEquals(1, finder.searches) // nothing is followed on the user's behalf
     }
 
     @Test

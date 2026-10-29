@@ -108,6 +108,7 @@ fun FindScreen(
         browserUrl = url
         browserInstance++
     }
+    LaunchedEffect(Unit) { viewModel.warmUp() }
     LaunchedEffect(Unit) { if (search.results == null && browserUrl == null) focus.requestFocus() }
 
     BackHandler { if (selected != null) viewModel.dismissSelected() else onBack() }

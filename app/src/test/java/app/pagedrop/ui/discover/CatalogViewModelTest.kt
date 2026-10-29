@@ -220,14 +220,97 @@ class CatalogViewModelTest {
         assertEquals(2, vm.state.value.stack.size)
     }
 
+    private fun noSearchHttp() = FakeHttp().apply {
+        on("books.example.com/opds/browse/", fixture("opds_browse_fiction.xml"))
+    }
+
     @Test
     fun noSearchIconWhenTheCatalogOffersNone() = runTest(dispatcher) {
-        val (vm, _) = newVm(shelfHttp())
-        vm.start("cat", "https://books.example.com/opds/browse/fiction")
+        val (vm, _) = newVm(noSearchHttp())
+        vm.start("cat", null)
         advanceUntilIdle()
         assertFalse(vm.state.value.canSearch)
         vm.setSearchOpen(true)
         assertFalse(vm.state.value.searchOpen)
+    }
+
+    @Test
+    fun aCatalogOpenedAtAMenuFeedSearchesWithTheCatalogRootsTemplate() = runTest(dispatcher) {
+        val http = shelfHttp()
+        val (vm, _) = newVm(http)
+        // As from a global-search menu row: the feed itself carries no search link.
+        vm.start("cat", "https://books.example.com/opds/browse/fiction")
+        advanceUntilIdle()
+        assertNull(vm.state.value.current!!.search)
+        assertTrue(vm.state.value.canSearch)
+        vm.setSearchOpen(true)
+        assertTrue(vm.state.value.searchOpen)
+
+        vm.search("lantern")
+        advanceUntilIdle()
+        val level = vm.state.value.current!!
+        assertEquals(LevelStatus.Ready, level.status)
+        assertEquals(listOf("Search authors", "Search books", "Search series"), level.folderTitles)
+        assertTrue(http.requests.any { it.first.contains("/opds/browse/find") })
+    }
+
+    @Test
+    fun searchingFromAFeedOfACatalogWithNoSearchShowsTheError() = runTest(dispatcher) {
+        val (vm, _) = newVm(noSearchHttp())
+        vm.start("cat", "https://books.example.com/opds/browse/fiction")
+        advanceUntilIdle()
+        vm.search("lantern")
+        advanceUntilIdle()
+        val level = vm.state.value.current!!
+        assertEquals(LevelStatus.Failed, level.status)
+        assertEquals("This catalog doesn't offer search", level.error)
+    }
+
+    private val ns = "xmlns=\"http://www.w3.org/2005/Atom\""
+    private fun loopFeed(self: String, next: String, id: String) = """<feed $ns><id>$id</id><title>Loop</title>
+        <link rel="next" type="application/atom+xml;profile=opds-catalog" href="$next"/>
+        <entry><title>Book $id</title><id>$id</id>
+        <link rel="http://opds-spec.org/acquisition" type="application/epub+zip" href="/files/$id.epub"/></entry></feed>"""
+
+    @Test
+    fun aNextLinkPointingAtTheFeedItselfStopsPaging() = runTest(dispatcher) {
+        val http = FakeHttp().apply {
+            on("books.example.com/loop/self", loopFeed("self", "https://books.example.com/loop/self", "s1"))
+        }
+        val (vm, _) = newVm(http)
+        vm.start("cat", "https://books.example.com/loop/self")
+        advanceUntilIdle()
+        assertEquals("https://books.example.com/loop/self", vm.state.value.current!!.nextUrl)
+        vm.loadMore()
+        advanceUntilIdle()
+        assertNull(vm.state.value.current!!.nextUrl)
+        assertEquals(1, vm.state.value.current!!.items.size)
+        val requests = http.requests.size
+        vm.loadMore()
+        advanceUntilIdle()
+        assertEquals(requests, http.requests.size)
+    }
+
+    @Test
+    fun aCycleOfNextLinksStopsOnceNothingNewArrives() = runTest(dispatcher) {
+        val http = FakeHttp().apply {
+            on("books.example.com/loop/a", loopFeed("a", "https://books.example.com/loop/b", "a1"))
+            on("books.example.com/loop/b", loopFeed("b", "https://books.example.com/loop/a", "b1"))
+        }
+        val (vm, _) = newVm(http)
+        vm.start("cat", "https://books.example.com/loop/a")
+        advanceUntilIdle()
+        vm.loadMore() // A -> B: one new book
+        advanceUntilIdle()
+        assertEquals(2, vm.state.value.current!!.items.size)
+        vm.loadMore() // B -> A: nothing new, so paging ends
+        advanceUntilIdle()
+        assertEquals(2, vm.state.value.current!!.items.size)
+        assertNull(vm.state.value.current!!.nextUrl)
+        val requests = http.requests.size
+        vm.loadMore()
+        advanceUntilIdle()
+        assertEquals(requests, http.requests.size)
     }
 
     @Test

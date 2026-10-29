@@ -173,26 +173,19 @@ internal object OpdsParser {
     }
 
     /**
-     * One book's feed can list the same book more than once (Project Gutenberg: "no images" and "with images"
-     * packagings under different ids). Show it once, with every download; the first listed wins per format.
+     * Some catalogs list one book in several packagings (for example "with images" and "no images") as separate
+     * entries in that book's own feed. When every book on the page has the same title and authors, that is what
+     * this is: show it once, with every download; the first listed wins per format. On any other page (several
+     * different books, even if two share a title) nothing is merged, so each edition keeps its own files.
      */
     fun mergeSameBook(items: List<OpdsItem>): List<OpdsItem> {
-        val out = mutableListOf<OpdsItem>()
-        val at = HashMap<Pair<String, List<String>>, Int>()
-        for (item in items) {
-            if (item !is OpdsItem.Book) { out += item; continue }
-            val e = item.entry
-            val key = e.title.trim().lowercase() to e.authors.map { it.trim().lowercase() }
-            val i = at[key]
-            if (i == null) {
-                at[key] = out.size
-                out += item
-            } else {
-                val first = (out[i] as OpdsItem.Book).entry
-                out[i] = OpdsItem.Book(first.copy(links = first.links + e.links))
-            }
-        }
-        return out
+        val books = items.filterIsInstance<OpdsItem.Book>()
+        if (books.size < 2) return items
+        fun key(e: OpdsEntry) = e.title.trim().lowercase() to e.authors.map { it.trim().lowercase() }
+        if (books.map { key(it.entry) }.distinct().size != 1) return items
+        val first = books.first().entry
+        val merged = OpdsItem.Book(first.copy(links = books.flatMap { it.entry.links }))
+        return items.mapNotNull { if (it !is OpdsItem.Book) it else if (it === books.first()) merged else null }
     }
 
     fun thumbnailOf(entry: OpdsEntry): String? =

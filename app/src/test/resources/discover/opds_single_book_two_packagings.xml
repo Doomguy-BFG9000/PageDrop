@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<feed xmlns="http://www.w3.org/2005/Atom">
+  <id>https://books.example.com/opds/book/100.opds</id>
+  <title>The Copper Lighthouse</title>
+  <entry>
+    <id>urn:example:100:plain</id>
+    <title>The Copper Lighthouse</title>
+    <author><name>Marlowe, Ines</name></author>
+    <link type="application/epub+zip" rel="http://opds-spec.org/acquisition" href="/files/100.plain.epub" length="600000"/>
+    <link type="application/x-mobipocket-ebook" rel="http://opds-spec.org/acquisition" href="/files/100.plain.mobi" length="540000"/>
+  </entry>
+  <entry>
+    <id>urn:example:100:illustrated</id>
+    <title>The Copper Lighthouse</title>
+    <author><name>Marlowe, Ines</name></author>
+    <link type="application/x-mobipocket-ebook" rel="http://opds-spec.org/acquisition" href="/files/100.illustrated.mobi" length="26000000"/>
+    <link type="application/pdf" rel="http://opds-spec.org/acquisition" href="/files/100.illustrated.pdf" length="30000000"/>
+  </entry>
+</feed>

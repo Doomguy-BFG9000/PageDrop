@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<feed xmlns="http://www.w3.org/2005/Atom">
+  <id>https://books.example.com/opds/anon</id>
+  <title>Anonymous works</title>
+  <entry>
+    <id>urn:example:400</id>
+    <title>Harbour Songs</title>
+    <link type="application/epub+zip" rel="http://opds-spec.org/acquisition" href="/files/400.epub"/>
+  </entry>
+  <entry>
+    <id>urn:example:401</id>
+    <title>Harbour Songs</title>
+    <link type="application/epub+zip" rel="http://opds-spec.org/acquisition" href="/files/401.epub"/>
+  </entry>
+  <entry>
+    <id>urn:example:500</id>
+    <title>Tidewater</title>
+    <link type="application/epub+zip" rel="http://opds-spec.org/acquisition" href="/files/500.epub"/>
+  </entry>
+</feed>
