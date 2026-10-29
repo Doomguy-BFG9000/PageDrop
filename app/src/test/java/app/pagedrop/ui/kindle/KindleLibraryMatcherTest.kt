@@ -26,6 +26,16 @@ class KindleLibraryMatcherTest {
             format = fileName.substringAfterLast('.').uppercase(), fileSize = size, lastTransferred = last)
 
     @Test
+    fun keptEpubMatchesItsKoreaderOnlyCopy() {
+        val onKindle = listOf(f(books, "Dune - Frank Herbert.epub", 5000))
+        val m = KindleLibraryMatcher.matchBooks(
+            listOf(book(9, "Dune - Frank Herbert.epub", "Dune", "Frank Herbert", size = 5000)), onKindle
+        )
+        assertTrue(m[9]!!.all { it.folder == books && it.name.endsWith(".epub") })
+        assertEquals(1, m[9]!!.size)
+    }
+
+    @Test
     fun azw3UploadedAsAzw() {
         val m = KindleLibraryMatcher.matchBooks(listOf(book(1, "of-mice-and-men.azw3", "Of Mice and Men", "Steinbeck")), all)
         assertTrue(m[1]!!.any { it.name == "of-mice-and-men.azw" && it.folder == docs })

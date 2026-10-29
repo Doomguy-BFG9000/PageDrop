@@ -34,6 +34,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.unit.dp
 import app.pagedrop.converter.BookConverter
+import app.pagedrop.data.SendFormatDecision
+import app.pagedrop.data.SendFormatSetting
+import app.pagedrop.data.SendPlan
 
 /** A file the user picked (or an existing library book to convert) waiting for decisions. */
 internal data class PendingAdd(
@@ -56,19 +59,20 @@ internal data class AddDecision(
     val convert: Boolean,
     val serverFormat: String,
     val sendToKindle: Boolean,
+    /** The user typed a title/author, confirmed a match or picked a cover; auto-detected details do not count. */
+    val userEdited: Boolean = false,
 )
 
 /** How a picked file will reach the Kindle, in plain language. */
-internal enum class AddPlan { KindleReady, Convert, PdfChoice, Other }
+internal enum class AddPlan { KindleReady, Convert, Choice, Other }
 
 private val kindleReadyFormats = setOf("MOBI", "AZW3", "AZW", "PRC")
 
-internal fun addPlanFor(format: String): AddPlan {
+internal fun addPlanFor(format: String, serverAvailable: Boolean = false): AddPlan {
     val f = format.uppercase()
     return when {
         f in kindleReadyFormats -> AddPlan.KindleReady
-        f == "PDF" -> AddPlan.PdfChoice
-        BookConverter.canConvert(f) -> AddPlan.Convert
+        SendFormatDecision.canConvert(f, serverAvailable) -> AddPlan.Choice
         else -> AddPlan.Other
     }
 }
@@ -81,6 +85,7 @@ internal fun AddBookSheet(
     pending: PendingAdd,
     serverConversionAvailable: Boolean,
     serverNoticeAnswered: Boolean = true,
+    sendFormatSetting: SendFormatSetting = SendFormatSetting.CONVERT,
     lookupState: BookViewModel.MetadataLookupState,
     selectedCoverUri: Uri?,
     onSearch: (String, String) -> Unit,
@@ -89,14 +94,23 @@ internal fun AddBookSheet(
     onConfirm: (AddDecision) -> Unit,
     onDismiss: () -> Unit,
 ) {
-    val plan = if (pending.convertOnly) AddPlan.Convert else addPlanFor(pending.format)
+    val plan = if (pending.convertOnly) AddPlan.Convert else addPlanFor(pending.format, serverConversionAvailable)
     val form = rememberMetadataFormState(pending, pending.initialTitle, pending.initialAuthor, lookupState)
     // Embedded details are cheap and often better than the file name: always look, never overwrite typing.
     LaunchedEffect(pending) { onSuggest() }
-    var convertPdf by remember(pending) { mutableStateOf(false) }
+    // null = follow the default (the Send format setting); true/false = the user's pick.
+    var keepOverride by remember(pending) { mutableStateOf<Boolean?>(null) }
     var serverOutputFormat by remember(pending) { mutableStateOf("MOBI") }
     var formatMenuExpanded by remember { mutableStateOf(false) }
-    val convert = plan == AddPlan.Convert || (plan == AddPlan.PdfChoice && convertPdf)
+    val sendPlan = SendFormatDecision.decide(
+        sourceFormat = pending.format,
+        setting = sendFormatSetting,
+        keepOverride = keepOverride,
+        serverOutput = serverOutputFormat.takeIf { serverConversionAvailable },
+        convertOnly = pending.convertOnly,
+    )
+    val convert = sendPlan != SendPlan.KeepOriginal
+    val keepChosen = !convert
 
     fun decide(send: Boolean) = onConfirm(
         AddDecision(
@@ -106,6 +120,7 @@ internal fun AddBookSheet(
             convert = convert,
             serverFormat = serverOutputFormat,
             sendToKindle = send,
+            userEdited = form.userEdited || form.matchChosen || selectedCoverUri != null,
         )
     )
 
@@ -152,10 +167,11 @@ internal fun AddBookSheet(
 
             FormatDecision(
                 plan = plan,
+                format = pending.format,
                 serverConversionAvailable = serverConversionAvailable,
                 serverNoticeAnswered = serverNoticeAnswered,
-                convertPdf = convertPdf,
-                onConvertPdfChange = { convertPdf = it },
+                keepChosen = keepChosen,
+                onKeepChange = { keepOverride = it },
             )
 
             if (convert && serverConversionAvailable) {
@@ -164,7 +180,18 @@ internal fun AddBookSheet(
                         Text("Output format: $serverOutputFormat")
                     }
                     DropdownMenu(expanded = formatMenuExpanded, onDismissRequest = { formatMenuExpanded = false }) {
-                        serverOutputFormats.forEach { outputFormat ->
+                        if (plan == AddPlan.Choice) {
+                            // The original is the first item: no conversion, no upload. It flips the radio above.
+                            val original = pending.format.uppercase()
+                            DropdownMenuItem(
+                                text = { Text("$original (original)") },
+                                onClick = {
+                                    keepOverride = true
+                                    formatMenuExpanded = false
+                                },
+                            )
+                        }
+                        serverOutputFormats.filter { !(plan == AddPlan.Choice && it == pending.format.uppercase()) }.forEach { outputFormat ->
                             DropdownMenuItem(
                                 text = { Text(outputFormat) },
                                 onClick = {
@@ -198,10 +225,11 @@ internal fun AddBookSheet(
 @Composable
 private fun FormatDecision(
     plan: AddPlan,
+    format: String,
     serverConversionAvailable: Boolean,
     serverNoticeAnswered: Boolean,
-    convertPdf: Boolean,
-    onConvertPdfChange: (Boolean) -> Unit,
+    keepChosen: Boolean,
+    onKeepChange: (Boolean) -> Unit,
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
         Text("How it will be added", style = MaterialTheme.typography.titleSmall)
@@ -218,21 +246,46 @@ private fun FormatDecision(
                 )
             }
             AddPlan.Other -> DecisionText("This format may not open on your Kindle. It will be sent as is.")
-            AddPlan.PdfChoice -> Column(Modifier.selectableGroup()) {
-                RadioRow(
-                    selected = !convertPdf,
-                    onClick = { onConvertPdfChange(false) },
-                    title = "Keep as PDF",
-                    note = "Best for scanned or illustrated PDFs.",
-                )
-                RadioRow(
-                    selected = convertPdf,
-                    onClick = { onConvertPdfChange(true) },
-                    title = "Convert to Kindle book",
-                    note = "Reflowable text you can resize; images and layout are not kept.",
-                )
+            AddPlan.Choice -> {
+                KeepChoiceRadios(format, keepChosen, onKeepChange)
+                if (!keepChosen) {
+                    DecisionNote(
+                        when {
+                            !serverConversionAvailable -> "Converted on this phone."
+                            !serverNoticeAnswered -> "Converted on this phone or by the PageDrop server — you’ll be asked first."
+                            else -> "Converted by your PageDrop server."
+                        }
+                    )
+                }
             }
         }
+    }
+}
+
+/** One-line reason to keep each convertible format as is. */
+internal fun keepNote(format: String): String = when (format.uppercase()) {
+    "EPUB" -> "For KOReader. The Kindle’s own reader can’t open EPUB."
+    "PDF" -> "Best for scanned or illustrated PDFs."
+    "TXT" -> "Plain text; opens on the Kindle and in KOReader."
+    else -> "Sent without conversion."
+}
+
+/** Keep/convert choice for a convertible file, shared by the Add book and Find a book sheets. */
+@Composable
+internal fun KeepChoiceRadios(format: String, keep: Boolean, onKeepChange: (Boolean) -> Unit) {
+    Column(Modifier.selectableGroup()) {
+        RadioRow(
+            selected = keep,
+            onClick = { onKeepChange(true) },
+            title = "Keep as ${format.uppercase()}",
+            note = keepNote(format),
+        )
+        RadioRow(
+            selected = !keep,
+            onClick = { onKeepChange(false) },
+            title = "Convert to Kindle format",
+            note = "Opens on the Kindle home screen and in KOReader.",
+        )
     }
 }
 
@@ -241,11 +294,11 @@ private fun DecisionText(text: String) =
     Text(text, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurface)
 
 @Composable
-private fun DecisionNote(text: String) =
+internal fun DecisionNote(text: String) =
     Text(text, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
 
 @Composable
-private fun RadioRow(selected: Boolean, onClick: () -> Unit, title: String, note: String) {
+internal fun RadioRow(selected: Boolean, onClick: () -> Unit, title: String, note: String) {
     Row(
         modifier = Modifier
             .fillMaxWidth()

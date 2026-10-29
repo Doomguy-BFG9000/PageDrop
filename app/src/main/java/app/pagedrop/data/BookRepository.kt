@@ -65,8 +65,9 @@ interface BookRepository {
     /**
      * Imports a file downloaded by the Find-a-book flow or saved from the Kindle: moves [file] into filesDir/books,
      * saves the cover ([coverBytes] when given, else from [coverUrl] when reachable), inserts the row (format from
-     * the extension) and embeds title/author/cover into AZW3/MOBI/PDF via [applyMetadata]. EPUB stays EPUB; see
-     * [convertImported].
+     * the extension) and embeds title/author/cover into AZW3/MOBI via [applyMetadata]. Catalog metadata is not a
+     * user edit, so every other format (EPUB, PDF, ...) is stored byte for byte and keeps its file name; the
+     * title/author/cover live in the library entry only. See [convertImported].
      */
     suspend fun importDownloaded(
         file: File,
@@ -85,7 +86,7 @@ interface BookRepository {
     /**
      * Looks up a cover online (Open Library, and Google Books when it is switched on) for each library book that
      * has none, skipping [skipUids]. A confident match's cover is saved for the library and Kindle thumbnail, and
-     * replaces the cover inside AZW3/MOBI/PDF files that already have one.
+     * is embedded into AZW3/MOBI files; other formats (PDF, EPUB, ...) are never rewritten for it.
      * Returns each book tried with whether a cover was found.
      */
     suspend fun findMissingCoversOnline(skipUids: Set<Int>): List<Pair<Int, Boolean>> = emptyList()
@@ -97,16 +98,23 @@ interface BookRepository {
      */
     suspend fun convertImported(book: Book): Book = book
 
-    /** [addBook] then [applyMetadata] when any of [title]/[author]/[coverPath] is given. */
+    /**
+     * [addBook] then, when any of [title]/[author]/[coverPath] is given, [applyMetadata] if [embed] (the user edited
+     * the details, or the file is Kindle-native), else [updateBookMetadata]: library entry only, file untouched.
+     */
     suspend fun addBookWithMetadata(
         context: Context,
         uri: Uri,
         title: String? = null,
         author: String? = null,
         coverPath: String? = null,
+        embed: Boolean = true,
     ): Book {
         val book = addBook(context, uri)
         if (title.isNullOrBlank() && author.isNullOrBlank() && coverPath == null) return book
+        if (!embed) {
+            return updateBookMetadata(book, title?.takeIf { it.isNotBlank() } ?: book.title, author?.takeIf { it.isNotBlank() } ?: book.author, coverPath ?: book.coverPath)
+        }
         return applyMetadata(book, title?.takeIf { it.isNotBlank() } ?: book.title, author?.takeIf { it.isNotBlank() } ?: book.author, coverPath ?: book.coverPath)
     }
 
@@ -131,6 +139,8 @@ class DefaultBookRepository @Inject constructor(
 ) : BookRepository {
 
     companion object {
+        /** Formats whose files PageDrop rewrites with catalog metadata automatically; anything else stays byte for byte. */
+        private val EMBED_ON_IMPORT_FORMATS = setOf("AZW3", "MOBI")
         private const val TAG = "BookRepository"
         private const val BOOKS_DIR = "books"
         private const val COVERS_DIR = "covers"
@@ -537,7 +547,7 @@ class DefaultBookRepository @Inject constructor(
             val inserted = book.copy(uid = bookDao.insertBook(book).toInt())
             Log.d(TAG, "Imported download as id=${inserted.uid}")
 
-            if (format in setOf("AZW3", "MOBI", "PDF")) {
+            if (format in EMBED_ON_IMPORT_FORMATS) {
                 try {
                     applyMetadata(inserted, cleanTitle, cleanAuthor, coverPath)
                 } catch (e: Exception) {
@@ -586,7 +596,7 @@ class DefaultBookRepository @Inject constructor(
         val url = coverUrlLookup(book.title, author)?.takeIf { it.isNotBlank() } ?: return false
         val bytes = coverDownload(url)?.takeIf { CoverImages.isUsableCover(it) } ?: return false
         val path = saveCoverBytes(context, bytes, File(book.filePath).nameWithoutExtension) ?: return false
-        if (book.format.uppercase() in setOf("AZW3", "MOBI", "PDF")) {
+        if (book.format.uppercase() in EMBED_ON_IMPORT_FORMATS) {
             val embedded = runCatching { applyMetadata(book, book.title, book.author, path) }.isSuccess
             if (embedded) return true
         }

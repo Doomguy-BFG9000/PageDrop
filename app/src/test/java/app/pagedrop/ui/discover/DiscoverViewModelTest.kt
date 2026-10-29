@@ -3,6 +3,9 @@ package app.pagedrop.ui.discover
 import android.content.Context
 import android.net.Uri
 import app.pagedrop.data.BookRepository
+import app.pagedrop.data.NullSharedPreferences
+import app.pagedrop.data.SendFormatSetting
+import app.pagedrop.data.SendFormatSettings
 import app.pagedrop.data.local.database.Book
 import app.pagedrop.discover.BookFormat
 import app.pagedrop.discover.BookResult
@@ -127,8 +130,10 @@ class DiscoverViewModelTest {
         Dispatchers.resetMain()
     }
 
+    private val sendFormat = SendFormatSettings(NullSharedPreferences())
+
     private fun vm(repo: FakeRepo = FakeRepo()) =
-        DiscoverViewModel(finder, fetcher, repo, recent).also { created += it }
+        DiscoverViewModel(finder, fetcher, repo, recent, sendFormat).also { created += it }
 
     @Test
     fun search_publishesResultsAndRemembersQuery() = runTest(dispatcher) {
@@ -217,7 +222,124 @@ class DiscoverViewModelTest {
     }
 
     @Test
-    fun addToLibrary_keepsEpubAndDoesNotRequestSend() = runTest(dispatcher) {
+    fun sendEpub_withKeepEpubSetting_skipsConversionAndSendsAsEpub() = runTest(dispatcher) {
+        sendFormat.set(SendFormatSetting.KEEP_ORIGINAL)
+        val repo = FakeRepo().apply { nextFormat = "EPUB" }
+        val vm = vm(repo)
+        vm.select(result(options = listOf(epub)))
+        assertEquals(null, vm.keepOverride.value)
+        vm.sendToKindle()
+        advanceUntilIdle()
+        val done = vm.action.value as ActionState.Finished
+        assertTrue(done.sendRequested)
+        assertEquals("EPUB", done.book.format)
+        assertEquals(0, repo.converted)
+    }
+
+    @Test
+    fun addToLibrary_withConvertPlan_convertsButDoesNotRequestSend() = runTest(dispatcher) {
+        val repo = FakeRepo().apply { nextFormat = "EPUB" }
+        val vm = vm(repo)
+        vm.select(result(options = listOf(epub)))
+        vm.addToLibrary()
+        advanceUntilIdle()
+        val done = vm.action.value as ActionState.Finished
+        assertFalse(done.sendRequested)
+        assertEquals("MOBI", done.book.format)
+        assertEquals(1, repo.converted)
+    }
+
+    @Test
+    fun addToLibrary_perBookKeepOverridesTheConvertSetting() = runTest(dispatcher) {
+        val repo = FakeRepo().apply { nextFormat = "EPUB" }
+        val vm = vm(repo)
+        vm.select(result(options = listOf(epub)))
+        vm.setKeepOriginal(true)
+        vm.addToLibrary()
+        advanceUntilIdle()
+        assertEquals("EPUB", (vm.action.value as ActionState.Finished).book.format)
+        assertEquals(0, repo.converted)
+    }
+
+    @Test
+    fun sendEpub_perBookKeepOverridesTheKindleFormatSetting() = runTest(dispatcher) {
+        val repo = FakeRepo().apply { nextFormat = "EPUB" }
+        val vm = vm(repo)
+        vm.select(result(options = listOf(epub)))
+        vm.setKeepOriginal(true)
+        vm.sendToKindle()
+        advanceUntilIdle()
+        assertEquals("EPUB", (vm.action.value as ActionState.Finished).book.format)
+        assertEquals(0, repo.converted)
+    }
+
+    @Test
+    fun sendEpub_perBookConvertOverridesTheKeepEpubSetting() = runTest(dispatcher) {
+        sendFormat.set(SendFormatSetting.KEEP_ORIGINAL)
+        val repo = FakeRepo().apply { nextFormat = "EPUB" }
+        val vm = vm(repo)
+        vm.select(result(options = listOf(epub)))
+        vm.setKeepOriginal(false)
+        vm.sendToKindle()
+        advanceUntilIdle()
+        assertEquals("MOBI", (vm.action.value as ActionState.Finished).book.format)
+        assertEquals(1, repo.converted)
+    }
+
+    private val txt = DownloadOption(BookFormat.TXT, "https://x/a.txt")
+    private val pdf = DownloadOption(BookFormat.PDF, "https://x/a.pdf")
+
+    @Test
+    fun sendPdf_followsTheSettingLikeAnyFormat() = runTest(dispatcher) {
+        val repo = FakeRepo().apply { nextFormat = "PDF" }
+        val vm = vm(repo)
+        vm.select(result(options = listOf(pdf)))
+        vm.sendToKindle()
+        advanceUntilIdle()
+        assertEquals(1, repo.converted)
+
+        val repo2 = FakeRepo().apply { nextFormat = "PDF" }
+        val vm2 = vm(repo2)
+        vm2.select(result(options = listOf(pdf)))
+        vm2.setKeepOriginal(true)
+        vm2.sendToKindle()
+        advanceUntilIdle()
+        assertEquals("PDF", (vm2.action.value as ActionState.Finished).book.format)
+        assertEquals(0, repo2.converted)
+    }
+
+    @Test
+    fun sendTxt_followsTheSetting() = runTest(dispatcher) {
+        val repo = FakeRepo().apply { nextFormat = "TXT" }
+        val vm = vm(repo)
+        vm.select(result(options = listOf(txt)))
+        vm.sendToKindle()
+        advanceUntilIdle()
+        assertEquals(1, repo.converted)
+
+        sendFormat.set(SendFormatSetting.KEEP_ORIGINAL)
+        val repo2 = FakeRepo().apply { nextFormat = "TXT" }
+        val vm2 = vm(repo2)
+        vm2.select(result(options = listOf(txt)))
+        vm2.sendToKindle()
+        advanceUntilIdle()
+        assertEquals("TXT", (vm2.action.value as ActionState.Finished).book.format)
+        assertEquals(0, repo2.converted)
+    }
+
+    @Test
+    fun keepOverride_resetsWhenAnotherBookIsSelected() = runTest(dispatcher) {
+        val vm = vm()
+        vm.select(result(options = listOf(epub)))
+        vm.setKeepOriginal(true)
+        assertEquals(true, vm.keepOverride.value)
+        vm.select(result(id = "gutenberg:2", options = listOf(epub)))
+        assertNull(vm.keepOverride.value)
+    }
+
+    @Test
+    fun addToLibrary_withKeepSetting_keepsEpubAndDoesNotRequestSend() = runTest(dispatcher) {
+        sendFormat.set(SendFormatSetting.KEEP_ORIGINAL)
         val repo = FakeRepo().apply { nextFormat = "EPUB" }
         val vm = vm(repo)
         vm.select(result(options = listOf(epub)))
@@ -359,7 +481,8 @@ class DiscoverViewModelTest {
     fun chipLabels() {
         assertEquals("Kindle-ready", formatChipLabel(BookFormat.AZW3))
         assertEquals("Kindle-ready", formatChipLabel(BookFormat.MOBI))
-        assertEquals("EPUB · will convert", formatChipLabel(BookFormat.EPUB))
+        assertEquals("EPUB", formatChipLabel(BookFormat.EPUB, SendFormatSetting.KEEP_ORIGINAL))
+        assertEquals("EPUB · converts", formatChipLabel(BookFormat.EPUB, SendFormatSetting.CONVERT))
         assertEquals("PDF", formatChipLabel(BookFormat.PDF))
         assertNull(formatChipLabel(null))
     }

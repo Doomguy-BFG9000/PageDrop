@@ -35,6 +35,8 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
+import androidx.compose.material3.TopAppBarScrollBehavior
+import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -44,11 +46,30 @@ import app.pagedrop.ui.components.HairlineCard
 import app.pagedrop.ui.components.OverBackgroundSurfaceAlpha
 import app.pagedrop.ui.theme.BookSerif
 
-/** "PageDrop" with a gear; transparent so the background image shows through. */
+/** Hairline along the bottom edge, shown only while content is scrolled under the bar. */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-internal fun LibraryTopBar(onOpenSettings: () -> Unit) {
+private fun Modifier.hairlineWhenScrolled(scrollBehavior: TopAppBarScrollBehavior): Modifier {
+    val line = MaterialTheme.colorScheme.outlineVariant
+    return drawWithContent {
+        drawContent()
+        if (scrollBehavior.state.overlappedFraction > 0f) {
+            val h = 1.dp.toPx()
+            drawRect(line, topLeft = androidx.compose.ui.geometry.Offset(0f, size.height - h), size = androidx.compose.ui.geometry.Size(size.width, h))
+        }
+    }
+}
+
+/**
+ * "PageDrop" with a gear. Transparent at rest so the background image shows through; turns paper-coloured
+ * with a hairline once the list scrolls under it, so cards never collide with the title.
+ */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+internal fun LibraryTopBar(onOpenSettings: () -> Unit, scrollBehavior: TopAppBarScrollBehavior) {
     TopAppBar(
+        modifier = Modifier.hairlineWhenScrolled(scrollBehavior),
+        scrollBehavior = scrollBehavior,
         title = { Text("PageDrop", style = MaterialTheme.typography.titleLarge) },
         actions = {
             IconButton(onClick = onOpenSettings) {
@@ -57,6 +78,7 @@ internal fun LibraryTopBar(onOpenSettings: () -> Unit) {
         },
         colors = TopAppBarDefaults.topAppBarColors(
             containerColor = Color.Transparent,
+            scrolledContainerColor = MaterialTheme.colorScheme.background,
             titleContentColor = MaterialTheme.colorScheme.onSurface,
             actionIconContentColor = MaterialTheme.colorScheme.onSurface,
         ),
@@ -71,8 +93,11 @@ internal fun SelectionTopBar(
     totalCount: Int,
     onClear: () -> Unit,
     onSelectAll: () -> Unit,
+    scrollBehavior: TopAppBarScrollBehavior,
 ) {
     TopAppBar(
+        modifier = Modifier.hairlineWhenScrolled(scrollBehavior),
+        scrollBehavior = scrollBehavior,
         title = { Text("$selectedCount selected", style = MaterialTheme.typography.titleLarge) },
         navigationIcon = {
             IconButton(onClick = onClear) {
@@ -86,6 +111,7 @@ internal fun SelectionTopBar(
         },
         colors = TopAppBarDefaults.topAppBarColors(
             containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.92f),
+            scrolledContainerColor = MaterialTheme.colorScheme.surface,
             titleContentColor = MaterialTheme.colorScheme.onSurface,
             navigationIconContentColor = MaterialTheme.colorScheme.onSurface,
             actionIconContentColor = MaterialTheme.colorScheme.onSurface,

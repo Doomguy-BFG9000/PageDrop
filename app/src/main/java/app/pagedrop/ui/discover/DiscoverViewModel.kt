@@ -3,6 +3,10 @@ package app.pagedrop.ui.discover
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import app.pagedrop.data.BookRepository
+import app.pagedrop.data.SendFormatDecision
+import app.pagedrop.data.SendFormatSetting
+import app.pagedrop.data.SendFormatSettings
+import app.pagedrop.data.SendPlan
 import app.pagedrop.data.local.database.Book
 import app.pagedrop.discover.BookResult
 import app.pagedrop.discover.DownloadOption
@@ -48,6 +52,7 @@ class DiscoverViewModel @Inject constructor(
     private val fetcher: BookFetcher,
     private val bookRepository: BookRepository,
     private val recentSearches: RecentSearches,
+    private val sendFormatSettings: SendFormatSettings,
 ) : ViewModel() {
 
     private val _search = MutableStateFlow(SearchState())
@@ -63,6 +68,17 @@ class DiscoverViewModel @Inject constructor(
 
     private val _chosenOption = MutableStateFlow<DownloadOption?>(null)
     val chosenOption: StateFlow<DownloadOption?> = _chosenOption.asStateFlow()
+
+    /** The user's keep/convert pick on this sheet; null follows the Send format setting. */
+    private val _keepOverride = MutableStateFlow<Boolean?>(null)
+    val keepOverride: StateFlow<Boolean?> = _keepOverride.asStateFlow()
+
+    /** The Send format setting, for the sheet's preselection. */
+    val sendFormat: StateFlow<SendFormatSetting> = sendFormatSettings.format
+
+    fun setKeepOriginal(keep: Boolean) {
+        if (_action.value !is ActionState.Working) _keepOverride.value = keep
+    }
 
     private val _action = MutableStateFlow<ActionState>(ActionState.Idle)
     val action: StateFlow<ActionState> = _action.asStateFlow()
@@ -120,6 +136,7 @@ class DiscoverViewModel @Inject constructor(
     fun select(result: BookResult) {
         actionJob?.cancel()
         importedBook = null
+        _keepOverride.value = null
         _action.value = ActionState.Idle
         _selected.value = result
         _chosenOption.value = finder.bestOption(result)
@@ -158,6 +175,7 @@ class DiscoverViewModel @Inject constructor(
         actionJob?.cancel()
         actionJob = null
         importedBook = null
+        _keepOverride.value = null
         _selected.value = null
         _chosenOption.value = null
         _action.value = ActionState.Idle
@@ -200,7 +218,9 @@ class DiscoverViewModel @Inject constructor(
                     book = bookRepository.importDownloaded(file, resolved.title, resolved.author, resolved.coverUrl)
                     importedBook = book
                 }
-                if (send && book.format.equals("EPUB", ignoreCase = true)) {
+                // Keep = no conversion at all (no on-phone work, no server, no upload prompt); Convert applies to Add to library too.
+                val plan = SendFormatDecision.decide(book.format, sendFormatSettings.format.value, _keepOverride.value)
+                if (plan != SendPlan.KeepOriginal) {
                     stage = "convert"
                     _action.value = ActionState.Working(WorkStage.Converting)
                     book = bookRepository.convertImported(book)

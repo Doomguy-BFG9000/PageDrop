@@ -73,6 +73,7 @@ fun BookScreen(
     val transferState by viewModel.transferState.collectAsStateWithLifecycle()
     val metadataLookupState by viewModel.metadataLookupState.collectAsStateWithLifecycle()
     val kindleStatus by viewModel.kindleStatus.collectAsStateWithLifecycle()
+    val sendFormatSetting by viewModel.sendFormatSetting.collectAsStateWithLifecycle()
 
     val context = LocalContext.current
     val snackbarHostState = remember { SnackbarHostState() }
@@ -264,6 +265,7 @@ fun BookScreen(
             pending = pending,
             serverConversionAvailable = viewModel.isServerConversionAvailable,
             serverNoticeAnswered = viewModel.isUploadNoticeAnswered,
+            sendFormatSetting = sendFormatSetting,
             lookupState = metadataLookupState,
             selectedCoverUri = coverUri,
             onSearch = viewModel::searchBookMetadata,
@@ -274,29 +276,7 @@ fun BookScreen(
                     ?.takeIf { coverUri == null && decision.coverUrl == null }
                     ?.let { Uri.fromFile(File(it)) }
                 val effectiveCover = coverUri ?: embeddedCover
-                val options = BookViewModel.AddOptions(
-                    title = decision.title,
-                    author = decision.author,
-                    coverUri = effectiveCover,
-                    coverUrl = decision.coverUrl,
-                    sendAfterAdd = decision.sendToKindle,
-                    originalBookId = pending.originalBookId,
-                )
-                when {
-                    !decision.convert -> viewModel.addBook(context, pending.uri, options)
-                    viewModel.isServerConversionAvailable -> viewModel.addBookWithServerConversion(
-                        context = context,
-                        uri = pending.uri,
-                        outputTitle = decision.title ?: pending.initialTitle,
-                        outputAuthor = decision.author ?: pending.initialAuthor.ifBlank { "Unknown Author" },
-                        targetFormat = decision.serverFormat.lowercase(),
-                        coverUri = effectiveCover,
-                        coverUrl = decision.coverUrl,
-                        sendAfterAdd = decision.sendToKindle,
-                        originalBookId = pending.originalBookId,
-                    )
-                    else -> viewModel.addBookWithConversion(context, pending.uri, decision.title, options)
-                }
+                viewModel.confirmAdd(context, pending, decision, effectiveCover)
                 closeAddSheets()
             },
             onDismiss = ::closeAddSheets,

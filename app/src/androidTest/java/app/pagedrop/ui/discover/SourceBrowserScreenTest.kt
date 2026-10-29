@@ -44,7 +44,9 @@ class SourceBrowserScreenTest {
             MaterialTheme {
                 SourceBrowserScreen(SourceBrowserTarget("Test library", "https://catalog.example/edition"), {}, { selected.value = it })
                 selected.value?.let { result ->
-                    ResultSheet(result, ActionState.Idle, result.options.single(), null, {},
+                    ResultSheet(
+                        result = result, action = ActionState.Idle, chosen = result.options.single(), libraryBook = null,
+                        keepOriginal = false, onKeepOriginalChange = {}, onChoose = {},
                         onSend = { sendRequested.set(true) }, onAdd = {}, onRetry = {},
                         onEditMetadata = { t, a -> selected.value = result.copy(title = t, author = a) },
                         onOpenWebsite = {}, onDismiss = { selected.value = null })

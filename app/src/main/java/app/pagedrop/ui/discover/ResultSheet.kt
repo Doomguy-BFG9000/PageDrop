@@ -37,6 +37,8 @@ import app.pagedrop.data.local.database.Book
 import app.pagedrop.discover.BookResult
 import app.pagedrop.discover.DownloadOption
 import app.pagedrop.discover.SourceKind
+import app.pagedrop.ui.book.KeepChoiceRadios
+import app.pagedrop.data.SendFormatDecision
 
 /** Plain-language progress line for the current step. */
 internal fun progressLabel(action: ActionState.Working): String = when (action.stage) {
@@ -50,6 +52,13 @@ internal fun optionLabel(option: DownloadOption): String {
     return option.format.name + size
 }
 
+@Composable
+private fun KeepChoice(format: String, keep: Boolean, onKeepChange: (Boolean) -> Unit, enabled: Boolean) {
+    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        if (enabled) KeepChoiceRadios(format, keep, onKeepChange) else KeepChoiceRadios(format, keep) {}
+    }
+}
+
 /** Big cover, details, format picker, and the two ways to take the book. */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -58,6 +67,8 @@ internal fun ResultSheet(
     action: ActionState,
     chosen: DownloadOption?,
     libraryBook: Book?,
+    keepOriginal: Boolean,
+    onKeepOriginalChange: (Boolean) -> Unit,
     onChoose: (DownloadOption) -> Unit,
     onSend: () -> Unit,
     onAdd: () -> Unit,
@@ -153,12 +164,11 @@ internal fun ResultSheet(
                             )
                         }
                     }
-                    formatChipLabel(chosen?.format)?.let {
+                    if (chosen != null && SendFormatDecision.hasChoice(chosen.format.name)) {
+                        KeepChoice(chosen.format.name, keepOriginal, onKeepOriginalChange, enabled = !busy)
+                    } else formatChipLabel(chosen?.format)?.let {
                         Text(
-                            when (chosen?.format) {
-                                app.pagedrop.discover.BookFormat.EPUB -> "Stock Kindles can’t open EPUB, so PageDrop converts it before sending."
-                                else -> it
-                            },
+                            it,
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
@@ -171,6 +181,11 @@ internal fun ResultSheet(
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
+            }
+
+            // A book already in the library in a convertible format: "Send again" follows the same choice.
+            if (libraryBook != null && !added && SendFormatDecision.hasChoice(libraryBook.format)) {
+                KeepChoice(libraryBook.format, keepOriginal, onKeepOriginalChange, enabled = !busy)
             }
 
             when (action) {

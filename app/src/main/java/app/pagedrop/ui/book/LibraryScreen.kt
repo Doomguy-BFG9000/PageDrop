@@ -28,10 +28,16 @@ import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.material3.TopAppBarDefaults
+import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.runtime.remember
+import androidx.compose.ui.graphics.luminance
+import androidx.compose.ui.graphics.lerp
+import androidx.compose.ui.graphics.ColorMatrix
+import androidx.compose.ui.graphics.ColorFilter
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.dp
@@ -58,6 +64,7 @@ internal data class LibraryActions(
     val onFindCovers: () -> Unit = {},
 )
 
+@OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
 @Composable
 internal fun LibraryScreenContent(
     uiState: LibraryUiState,
@@ -82,34 +89,25 @@ internal fun LibraryScreenContent(
     val isEmptyLibrary = uiState is LibraryUiState.Success && books.isEmpty()
 
     Box(modifier = modifier.fillMaxSize()) {
-        // Background image — full-bleed, Kindle aesthetic
+        // Background poster: full width at its own proportions, pinned to the bottom of the screen.
+        // Printed in two tones so its white parts are exactly the screen colour (no "sticker" patches):
+        // white -> background, black -> ink. Dark mode prints black on the dark background.
+        val background = MaterialTheme.colorScheme.background
+        // Light mode prints at about a third strength so book titles stay readable over it.
+        val ink = if (background.luminance() < 0.5f) Color.Black else lerp(background, MaterialTheme.colorScheme.onBackground, 0.32f)
         Image(
             painter = painterResource(id = R.drawable.bezos_bg),
             contentDescription = null,
-            modifier = Modifier.fillMaxSize(),
-            contentScale = ContentScale.Crop,
-            alpha = 0.85f,
+            modifier = Modifier.fillMaxWidth().align(Alignment.BottomCenter),
+            contentScale = ContentScale.FillWidth,
+            alignment = Alignment.BottomCenter,
+            colorFilter = remember(background, ink) { posterDuotone(paper = background, ink = ink) },
         )
 
-        // Gradient overlay — fades from transparent at top to surface at bottom
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .background(
-                    Brush.verticalGradient(
-                        colors = listOf(
-                            Color.Transparent,
-                            Color.Transparent,
-                            MaterialTheme.colorScheme.surface.copy(alpha = 0.50f),
-                            MaterialTheme.colorScheme.surface.copy(alpha = 0.85f),
-                            MaterialTheme.colorScheme.surface,
-                        ),
-                    )
-                )
-        )
-
+        // Pinned bar: transparent at rest, solid with a hairline once the list or grid scrolls under it.
+        val scrollBehavior = TopAppBarDefaults.pinnedScrollBehavior()
         Scaffold(
-            modifier = Modifier.fillMaxSize(),
+            modifier = Modifier.fillMaxSize().nestedScroll(scrollBehavior.nestedScrollConnection),
             // The shell applies system-bar and bottom-navigation padding to this screen.
             contentWindowInsets = WindowInsets(0, 0, 0, 0),
             containerColor = Color.Transparent,
@@ -120,9 +118,10 @@ internal fun LibraryScreenContent(
                         totalCount = visibleCount,
                         onClear = actions.onClearSelection,
                         onSelectAll = actions.onSelectAll,
+                        scrollBehavior = scrollBehavior,
                     )
                 } else {
-                    LibraryTopBar(onOpenSettings = actions.onOpenSettings)
+                    LibraryTopBar(onOpenSettings = actions.onOpenSettings, scrollBehavior = scrollBehavior)
                 }
             },
             bottomBar = {
@@ -288,4 +287,22 @@ private fun AddFab(onAddBook: () -> Unit, onOpenArticle: () -> Unit) {
             Text("Add file")
         }
     }
+}
+
+/**
+ * Maps the poster's greyscale onto two colours: luminance 1 (white) becomes [paper], 0 (black) becomes [ink],
+ * and everything in between blends linearly. Alpha is left as it is.
+ */
+internal fun posterDuotone(paper: Color, ink: Color): ColorFilter =
+    ColorFilter.colorMatrix(posterDuotoneMatrix(paper, ink))
+
+internal fun posterDuotoneMatrix(paper: Color, ink: Color): ColorMatrix {
+    fun row(inkC: Float, paperC: Float): FloatArray {
+        val k = paperC - inkC
+        return floatArrayOf(k * 0.299f, k * 0.587f, k * 0.114f, 0f, inkC * 255f)
+    }
+    return ColorMatrix(
+        row(ink.red, paper.red) + row(ink.green, paper.green) + row(ink.blue, paper.blue) +
+            floatArrayOf(0f, 0f, 0f, 1f, 0f)
+    )
 }

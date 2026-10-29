@@ -41,6 +41,7 @@ import app.pagedrop.converter.BookConverter
 import app.pagedrop.data.BookRepository
 import app.pagedrop.data.DefaultBookRepository
 import app.pagedrop.data.KindleSettings
+import app.pagedrop.data.SendFormatDecision
 import app.pagedrop.data.local.database.Book
 import app.pagedrop.metadata.BookMetadataCandidate
 import app.pagedrop.metadata.BookMetadataLookup
@@ -75,7 +76,11 @@ class BookViewModel @Inject constructor(
     private val kindleSettings: KindleSettings,
     private val pageDropApiClient: PageDropApiClient? = null,
     private val pendingSharedFile: PendingSharedFile = PendingSharedFile(),
+    sendFormatSettings: app.pagedrop.data.SendFormatSettings,
 ) : ViewModel() {
+
+    /** The Send format setting: what a convertible format (EPUB, PDF, TXT) does unless the Add book sheet overrides it. */
+    val sendFormatSetting: StateFlow<app.pagedrop.data.SendFormatSetting> = sendFormatSettings.format
 
     /** A single file shared to PageDrop, waiting for the Add book sheet. */
     val pendingSharedUri: StateFlow<Uri?> = pendingSharedFile.uri
@@ -361,17 +366,59 @@ class BookViewModel @Inject constructor(
         val sendAfterAdd: Boolean = false,
         /** Set when this is a converted copy of a library book, so the UI can offer to remove it. */
         val originalBookId: Int? = null,
+        /**
+         * Whether to write title/author/cover into the file (and rename it). False keeps the file byte for byte and
+         * stores the details in the library entry only.
+         */
+        val embedMetadata: Boolean = true,
     )
 
     fun addBook(context: Context, uri: Uri, options: AddOptions = AddOptions()) {
         viewModelScope.launch {
             try {
                 val cover = resolveCover(options.coverUri, options.coverUrl)
-                val book = bookRepository.addBookWithMetadata(context, uri, options.title, options.author, cover)
+                val book = bookRepository.addBookWithMetadata(context, uri, options.title, options.author, cover, options.embedMetadata)
                 completeAdd(book, options)
             } catch (e: Exception) {
                 _conversionError.value = e.localizedMessage ?: "Could not add this book"
             }
+        }
+    }
+
+    /**
+     * Carries out what the Add book sheet decided. Keeping the file as is ([AddDecision.convert] false)
+     * never converts and never reaches the server or its consent prompt.
+     */
+    internal fun confirmAdd(
+        context: Context,
+        pending: PendingAdd,
+        decision: AddDecision,
+        coverUri: Uri?,
+    ) {
+        val options = AddOptions(
+            title = decision.title,
+            author = decision.author,
+            coverUri = coverUri,
+            coverUrl = decision.coverUrl,
+            sendAfterAdd = decision.sendToKindle,
+            originalBookId = pending.originalBookId,
+            // Kept as is: only the user's own edits may touch the file. Kindle-native files keep embedding.
+            embedMetadata = decision.userEdited || SendFormatDecision.isKindleNative(pending.format),
+        )
+        when {
+            !decision.convert -> addBook(context, pending.uri, options)
+            isServerConversionAvailable -> addBookWithServerConversion(
+                context = context,
+                uri = pending.uri,
+                outputTitle = decision.title ?: pending.initialTitle,
+                outputAuthor = decision.author ?: pending.initialAuthor.ifBlank { "Unknown Author" },
+                targetFormat = decision.serverFormat.lowercase(),
+                coverUri = coverUri,
+                coverUrl = decision.coverUrl,
+                sendAfterAdd = decision.sendToKindle,
+                originalBookId = pending.originalBookId,
+            )
+            else -> addBookWithConversion(context, pending.uri, decision.title, options)
         }
     }
 

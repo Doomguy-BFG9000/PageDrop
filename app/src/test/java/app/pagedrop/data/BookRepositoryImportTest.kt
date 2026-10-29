@@ -50,6 +50,30 @@ class BookRepositoryImportTest {
         assertEquals(book.title, dao.inserted.single().title)
     }
 
+    private fun pdfBytes(): ByteArray {
+        val out = java.io.ByteArrayOutputStream()
+        com.tom_roush.pdfbox.pdmodel.PDDocument().use { doc ->
+            doc.addPage(com.tom_roush.pdfbox.pdmodel.PDPage())
+            doc.save(out)
+        }
+        return out.toByteArray()
+    }
+
+    @Test
+    fun importedPdfIsStoredByteForByteWithItsOriginalName() = runBlocking {
+        val root = java.nio.file.Files.createTempDirectory("import-pdf").toFile()
+        val bytes = pdfBytes()
+        val download = File(root, "dl/Paper.pdf").apply { parentFile.mkdirs(); writeBytes(bytes) }
+        val repo = DefaultBookRepository(RecordingDao().dao, null, context(File(root, "files")))
+        val cover = ByteArray(3_000) { 7 }.let { byteArrayOf(0xFF.toByte(), 0xD8.toByte(), 0xFF.toByte(), 0xE0.toByte()) + it }
+
+        val book = repo.importDownloaded(download, "Catalog Title", "Catalog Author", null, coverBytes = cover)
+
+        assertEquals("Catalog Title", book.title)
+        assertEquals("Paper.pdf", File(book.filePath).name)
+        assertTrue(bytes.contentEquals(File(book.filePath).readBytes()))
+    }
+
     @Test
     fun importUsesFallbacksAndAvoidsNameCollisions() = runBlocking {
         val root = java.nio.file.Files.createTempDirectory("import2").toFile()
